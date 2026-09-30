@@ -1,0 +1,12 @@
+<article class="card{% if post.pinned %} card-pinned{% endif %}">
+    <a class="card-link" href="{{ post.url }}">
+        <h2 class="card-title">{% if post.pinned %}<span class="pin-mark" aria-label="置顶">★</span>{% endif %}{{ post.title }}</h2>
+        {% if post.description %}<p class="card-excerpt">{{ post.description }}</p>{% endif %}
+    </a>
+    <div class="card-meta">
+        <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
+        <span class="dot">·</span>
+        <span>{{ post.readingTime }} 分钟</span>
+        {% for tag in post.tagLinks %}<a class="tag" href="{{ tag.url }}">#{{ tag.name }}</a>{% endfor %}
+    </div>
+</article>

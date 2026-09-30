@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    {{{ headMeta }}}
+</head>
+<body class="layout-about">
+    {% include "header" %}
+    <main class="site-main">
+        <h1 class="page-title">关于</h1>
+        <div class="prose">{{{ content }}}</div>
+    </main>
+    {% include "footer" %}
+</body>
+</html>

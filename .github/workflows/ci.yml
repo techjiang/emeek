@@ -1,0 +1,40 @@
+# 代码质量与性能回归门禁。
+# 与 build.yml 分开：构建负责发布，CI 负责「不让回归溜进 main」。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装依赖
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: 单元测试与覆盖率
+        run: node --experimental-test-coverage --test "packages/core/tests/*.test.js"
+
+      - name: 构建示例站点
+        run: node packages/cli/bin/emeeek.js build --cwd examples/minimal
+
+      - name: 校验产物完整性
+        run: |
+          set -e
+          for f in index.html 404.html archive.html tags.html about.html sitemap.xml rss.xml robots.txt search-index.json; do
+            test -f "examples/minimal/dist/$f" || { echo "缺失产物：$f"; exit 1; }
+          done
+          echo "全部关键产物就绪"

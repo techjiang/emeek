@@ -1,0 +1,9 @@
+{
+  "name": "minimal",
+  "version": "0.1.0",
+  "author": "Emeek Team",
+  "description": "极简黑白，排版为王。默认主题，零依赖，无外部字体请求。",
+  "entryLayout": "index",
+  "layouts": ["index", "post", "archive", "tags", "about", "404"],
+  "features": ["dark-mode", "syntax-highlight", "toc", "search"]
+}

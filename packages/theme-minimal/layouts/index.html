@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    {{{ headMeta }}}
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
+</head>
+<body class="layout-index">
+    {% include "header" %}
+    <main class="site-main">
+        {% if pinned.length %}
+        <section class="pinned-section">
+            <h2 class="section-label">置顶</h2>
+            <div class="post-grid">
+                {% for post in pinned %}{% include "card" %}{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        <section class="post-list">
+            {% if posts.length %}
+            {% for post in posts %}{% include "card" %}{% endfor %}
+            {% else %}
+            <p class="empty">还没有文章。在 <code>posts/</code> 下新建一个 <code>.md</code> 文件就能开始写作。</p>
+            {% endif %}
+        </section>
+        {% include "pagination" %}
+    </main>
+    {% include "footer" %}
+</body>
+</html>

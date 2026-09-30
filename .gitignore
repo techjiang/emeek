@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.emeeek/
+*.log
+.DS_Store
