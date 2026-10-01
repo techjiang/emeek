@@ -115,8 +115,40 @@ examples/
 docs/              配置、主题、插件、性能文档
 ```
 
+## AI 能力（可选）
+
+**不配 API Key 也能用。** 摘要、标签、可读性、SEO 检查都有本地算法兜底，
+配了 Key 则自动切换到 LLM 并获得更高品质结果。
+
+```bash
+# 不配任何 key，AI 功能仍然可用（走本地算法）
+node packages/cli/bin/emeeek.js build --cwd examples/minimal
+
+# 配上 key 就自动升级
+export OPENAI_API_KEY=sk-...
+```
+
+| 功能 | 有 Key | 无 Key |
+| --- | --- | --- |
+| 摘要 | AI 摘要 ✨ | 快速摘要（抽取式，不下 50ms） |
+| 标签 | AI 标签 ✨ | 关键词提取（TF-IDF + 中文分词） |
+| 可读性 | 可读性分析 | 可读性分析（本地算，本来就够准） |
+| SEO | AI SEO 建议 ✨ | SEO 检查（20 项规则，建议具体到字符串） |
+| 续写 / 改写 / 翻译 | ✅ | ❌ 明确报错，不假装成功 |
+
+本地模块零外部依赖，实测（15KB 文档）：
+
+```
+摘要 summarize(100)  10.1ms   目标 < 50ms
+可读性分析            2.6ms   目标 < 30ms
+SEO 分析             13.0ms   目标 < 30ms
+```
+
+`pnpm benchmark` 可复现。详见 [AI 能力文档](docs/ai.md)。
+
 ## 文档
 
+- [AI 能力](docs/ai.md)
 - [配置参考](docs/configuration.md)
 - [主题开发](docs/themes.md)
 - [插件开发](docs/plugins.md)
@@ -129,8 +161,9 @@ docs/              配置、主题、插件、性能文档
 ```bash
 pnpm install
 
-pnpm test          # 120 个测试
+pnpm test          # 293 个测试
 pnpm coverage      # 测试 + 覆盖率报告
+pnpm benchmark     # 本地 AI 模块基准
 pnpm build         # 构建 examples/minimal
 pnpm dev           # 本地预览示例站
 pnpm lighthouse    # 性能基线（需本机有 Chromium）
@@ -143,15 +176,20 @@ pnpm doctor        # 诊断示例站配置
 node packages/cli/bin/emeeek.js build --cwd <项目目录>
 ```
 
-当前状态：121 个测试全绿，行覆盖率 90%，Lighthouse 四类全 100（8 种页面）。
+当前状态：293 个测试全绿，行覆盖率 93%，Lighthouse 四类全 100（8 种页面）。
 
 ## Phase 现状
 
 这是 **Phase 1（核心基础）** 的交付：monorepo、内容管线、默认主题、
 CLI、Actions 工作流、SEO 产物、测试与性能基线。
 
-编辑器（Emeek Studio）、AI 模块、主题市场、知识图谱、分析面板
-按路线图属于 Phase 2–4，尚未实现 —— 本仓库不对未完成的能力做描述。
+**Phase 2 Step 1（AI 内容引擎）** 已完成：Provider 抽象层、OpenAI / Anthropic /
+本地 / Mock 四个 Provider、降级链、离线可用的摘要与可读性与 SEO 分析、
+提示词模板文件化。
+
+编辑器（Emeek Studio）、图片管理、主题市场、知识图谱、分析面板
+按路线图属于 Phase 2 Step 2 之后的阶段，尚未实现 ——
+本仓库不对未完成的能力做描述。
 
 ## License
 

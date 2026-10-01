@@ -21,12 +21,19 @@ jobs:
         with:
           node-version: '20'
 
+      # 必须用 pnpm：仓库是 workspace，packages/cli 依赖 packages/core。
+      # 用 npm install 不会建立 packages/cli/node_modules/@emeeek/core 软链，
+      # CLI 会在 import 阶段直接 ERR_MODULE_NOT_FOUND —— 测试全绿但 CLI 挂掉。
+      - uses: pnpm/action-setup@v4
+
       - name: 安装依赖
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+        run: pnpm install --frozen-lockfile
 
       - name: 单元测试与覆盖率
-        run: node --experimental-test-coverage --test "packages/core/tests/*.test.js"
+        run: pnpm coverage
+
+      - name: 本地 AI 模块基准
+        run: pnpm benchmark
 
       - name: 构建示例站点
         run: node packages/cli/bin/emeeek.js build --cwd examples/minimal

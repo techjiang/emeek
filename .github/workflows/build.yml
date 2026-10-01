@@ -39,9 +39,12 @@ jobs:
         with:
           node-version: '20'
 
+      # 必须用 pnpm：monorepo 里 packages/cli 依赖 packages/core，
+      # npm install 不会建 workspace 软链，CLI 会在 import 阶段直接失败。
+      - uses: pnpm/action-setup@v4
+
       - name: 安装依赖
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+        run: pnpm install --frozen-lockfile
 
       - name: 诊断配置
         run: node packages/cli/bin/emeeek.js doctor --cwd .
@@ -49,7 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 单元测试
-        run: node --test "packages/core/tests/*.test.js"
+        run: pnpm test
 
       - name: 构建站点
         run: node packages/cli/bin/emeeek.js build --cwd .

@@ -1,0 +1,32 @@
+@task: seo
+@output: JSON 对象，字段见下
+@language: 跟随原文语言
+
+请为以下文章提供 SEO 优化建议，输出严格符合下列结构的 JSON：
+
+{
+  "meta_description": "50~160 字符的元描述，含核心关键词，以句号结尾",
+  "keywords": ["关键词1", "关键词2"],
+  "internal_links": [{"anchor": "锚文本", "suggestion": "建议链接到哪类文章"}],
+  "improvements": ["具体可操作的改进建议"],
+  "readability_score": 0,
+  "word_count": 0
+}
+
+要求：
+1. `meta_description` 必须让人看了想点，不是把标题重复一遍
+2. `keywords` 给 3~6 个，按重要性排序
+3. `improvements` 每条都要指出**具体位置和具体改法**。
+   反例（不要这样写）："建议优化标题"
+   正例："标题缺少核心关键词「Emeek」，建议改为「Emeek 博客引擎 — 零成本个人站点方案」"
+4. `readability_score` 给 0~100 的整数
+5. 只输出 JSON，不要 markdown 代码围栏，不要解释文字
+
+文章标题：{{title}}
+
+元描述（如有）：{{description}}
+
+文章标签：{{tags}}
+
+文章内容：
+{{content}}

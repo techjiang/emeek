@@ -11,3 +11,6 @@ export { makeExcerpt, readingTime, countWords } from './pipeline/transform/excer
 export { loadTheme } from './pipeline/render/theme.js';
 export { writeOutput, finalizeHtml } from './pipeline/render/output.js';
 export { logger } from './util/logger.js';
+export { AIService, createProvider, resolveProviders } from './ai/registry.js';
+export { AITask, AIQuality, AISource, AIError, AIErrorCode, TASK_CAPABILITIES } from './ai/types.js';
+export { LocalSummarizer, ReadabilityAnalyzer, LocalSEOAnalyzer, LocalProvider } from './ai/index.js';

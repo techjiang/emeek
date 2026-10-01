@@ -10,10 +10,11 @@
   "scripts": {
     "build": "node packages/cli/bin/emeeek.js build --cwd examples/minimal",
     "dev": "node packages/cli/bin/emeeek.js dev --cwd examples/minimal",
-    "test": "node --test \"packages/core/tests/*.test.js\" \"packages/cli/tests/*.test.js\"",
-    "coverage": "node --experimental-test-coverage --test \"packages/core/tests/*.test.js\" \"packages/cli/tests/*.test.js\"",
+    "test": "node --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\"",
+    "coverage": "node --experimental-test-coverage --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\"",
     "lighthouse": "node scripts/lighthouse.mjs",
-    "doctor": "node packages/cli/bin/emeeek.js doctor --cwd examples/minimal"
+    "doctor": "node packages/cli/bin/emeeek.js doctor --cwd examples/minimal",
+    "benchmark": "node scripts/ai-benchmark.mjs"
   },
   "engines": {
     "node": ">=18"
