@@ -17,7 +17,10 @@
     "benchmark": "node scripts/ai-benchmark.mjs && node packages/editor/tests/bench/preview-bench.mjs",
     "benchmark:preview": "node packages/editor/tests/bench/preview-bench.mjs",
     "studio": "node packages/cli/bin/emeeek.js studio --cwd examples/minimal",
-    "check:studio-bundle": "node scripts/check-studio-bundle.mjs"
+    "check:studio-bundle": "node scripts/check-studio-bundle.mjs",
+    "test:e2e": "node scripts/e2e/xss.mjs && node scripts/e2e/draft-mobile.mjs",
+    "test:negative": "bash scripts/e2e/negative-check.sh",
+    "check:shortcuts": "node scripts/check-shortcuts.mjs"
   },
   "engines": {
     "node": ">=18"

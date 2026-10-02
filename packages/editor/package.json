@@ -9,7 +9,8 @@
     "./editor": "./src/editor/index.js",
     "./preview": "./src/preview/index.js",
     "./studio": "./src/studio/server.js",
-    "./languages": "./src/editor/languages.js"
+    "./languages": "./src/editor/languages.js",
+    "./shortcuts": "./src/studio/shortcuts.js"
   },
   "engines": {
     "node": ">=18"

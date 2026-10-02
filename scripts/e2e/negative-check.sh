@@ -74,5 +74,29 @@ weaken "AI 状态接口不回 Key" \
   's|return { configured: true, provider: server.provider, model: server.model, from: server.from };|return { configured: true, provider: server.provider, model: server.model, from: server.from, apiKey: server.apiKey };|' \
   'node --test packages/editor/tests/keyring.test.js'
 
+# 7. 落盘时机：摘掉 visibilitychange/pagehide 的绑定（回到「只靠定时器」）
+weaken "隐藏/关闭时立即落盘（摘掉事件绑定）" \
+  packages/editor/src/studio/drafts.js \
+  's|const unbind = events ? bindLifecycle(events) : () => {};|const unbind = () => {}; // weakened|' \
+  'node --test packages/editor/tests/drafts.test.js'
+
+# 8. 移动端兜底间隔：改回与桌面一致
+weaken "移动端兜底间隔更短" \
+  packages/editor/src/studio/drafts.js \
+  's|const effectiveInterval = mobile ? DRAFT_LIMITS.mobileIntervalMs : intervalMs;|const effectiveInterval = intervalMs; // weakened|' \
+  'node --test packages/editor/tests/drafts.test.js'
+
+# 9. 快捷键声明审计：把一条 handler 的名字改错
+weaken "快捷键声明审计（handler 名改错）" \
+  packages/editor/src/studio/client.js \
+  "s|    'toggle-theme': () => toggleTheme(),|    'toggle-theme-typo': () => toggleTheme(),|" \
+  'node scripts/check-shortcuts.mjs'
+
+# 10. 快捷键声明审计：往声明表里加一条没有实现的条目
+weaken "快捷键声明审计（表里有实现没有）" \
+  packages/editor/src/studio/shortcuts.js \
+  "s|  { id: 'save', label: '保存草稿'|  { id: 'ghost', label: '幽灵条目', keys: 'Ctrl+Alt+Z', group: '编辑', handler: 'global', match: { key: 'z', alt: true }, touch: null },\n  { id: 'save', label: '保存草稿'|" \
+  'node scripts/check-shortcuts.mjs'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

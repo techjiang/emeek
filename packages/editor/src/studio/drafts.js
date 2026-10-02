@@ -30,7 +30,33 @@ export const DRAFT_LIMITS = Object.freeze({
   idleMs: 5000,
   /** 兜底：每 30 秒无条件保存一次（防止用户一直在敲键盘、从不停下来）。 */
   intervalMs: 30000,
+  /**
+   * 移动端的兜底间隔（决策 D3）。
+   *
+   * 比桌面端短，理由不是「移动端性能差所以要勤存」，而是**「后台」在移动端
+   * 更常见也更突然**：接个电话、切到微信回一句、锁屏 —— 每一次都可能
+   * 让页面被冻结甚至丢弃。桌面端的 30 秒在本机上是「无所谓」，
+   * 在手机上就是「丢三句话」。
+   *
+   * 10 秒而不是 5 秒：写一次 localStorage 是同步的，间隔太短会在
+   * 低端机的连续输入里造成可感知的卡顿。10 秒是「丢得少」与「不卡」的折中。
+   */
+  mobileIntervalMs: 10000,
+  /** 触屏设备上认为「移动端」的判据（宽度阈值，px）。 */
+  mobileWidth: 900,
 });
+
+/**
+ * 判断当前环境是否该按移动端策略跑。
+ *
+ * 用「有没有触摸能力」+「视口宽度」两个信号，而不是只嗅探 UA：
+ * UA 嗅探会把 iPad 上的 Safari 当成桌面（它在 iPadOS 上自称 Macintosh），
+ * 而 iPad 正是后台冻结最凶的设备之一。
+ */
+export function isMobileLike({ width = 0, maxTouchPoints = 0, coarsePointer = false } = {}) {
+  if (maxTouchPoints > 0 && coarsePointer) return true;
+  return width > 0 && width <= DRAFT_LIMITS.mobileWidth;
+}
 
 const PREFIX = 'emeeek:draft:';
 const INDEX_KEY = 'emeeek:drafts:index';
@@ -437,17 +463,54 @@ export function formatBytes(bytes) {
 /**
  * 自动保存调度器。
  *
- * 两条触发线，缺一不可：
- *   停止输入 5 秒  → 覆盖绝大多数「写一段、想一想」的节奏
- *   每 30 秒兜底   → 覆盖「一直没停过」的情况（连续打字 10 分钟一次都没存）
+ * ## 三条触发线，各自堵一种丢法
  *
- * Ctrl+S 是第三条线：立即保存，并重置计时器。
+ * ```
+ * 停止输入 5 秒   → 「写一段、停一停」的绝大多数节奏
+ * 每 N 秒兜底     → 「一直没停过」的情况（连续打字十分钟一次都没停）
+ * visibility/pagehide → 切后台 / 关页面，**不等定时器**
+ * Ctrl+S         → 立即保存
+ * ```
+ *
+ * ## 第三条线为什么必须有（决策 D3）
+ *
+ * 前两条都建立在「定时器会按时跑」这个前提上，而移动端浏览器**不保证**它：
+ *
+ * · 页面切到后台 → `setTimeout`/`setInterval` 被降频到分钟级，甚至完全停止
+ * · 页面被系统冻结 → 定时器不跑，页面还在内存里
+ * · 页面被整个丢弃（bfcache / 杀进程）→ 定时器不存在了，`beforeunload` 也不触发
+ *
+ * 于是有一条完整的丢稿通道：**用户切出去接个电话，回来发现稿子退回到 5 秒前** ——
+ * 中间每一次「自动保存」都没跑。它不是概率问题，只要用户切走就会发生。
+ *
+ * 对策不是「把间隔调小」（间隔再小也是定时器），而是**换一个一定会跑的时机**：
+ * `visibilitychange → hidden` 与 `pagehide` 在浏览器冻结/销毁页面**之前**
+ * 同步执行，这是浏览器给的保证，不是我们赌的运气。
+ *
+ * 顺带一个真实的陷阱：`flush` 之后 `dirty` 要清干净，否则 pagehide 会重复写；
+ * 但 `markDirty` 之后 `dirty` 必须立刻为 true —— 从敲下第一个字到落盘之间，
+ * 就是有东西没存。两者都不能省。
  */
-export function createAutoSaver({ store, filename, save, idleMs = DRAFT_LIMITS.idleMs, intervalMs = DRAFT_LIMITS.intervalMs, timers = globalThis } = {}) {
+export function createAutoSaver({
+  store,
+  filename,
+  save,
+  idleMs = DRAFT_LIMITS.idleMs,
+  intervalMs = DRAFT_LIMITS.intervalMs,
+  /** 移动端用更短的兜底间隔（决策 D3 理由见 DRAFT_LIMITS.mobileIntervalMs）。 */
+  mobile = false,
+  timers = globalThis,
+  /** 事件目标（真浏览器里是 document / window）。留给测试注入假对象。 */
+  events = null,
+} = {}) {
+  const effectiveInterval = mobile ? DRAFT_LIMITS.mobileIntervalMs : intervalMs;
   let idleTimer = null;
   let intervalTimer = null;
   let dirty = false;
   let lastResult = null;
+  let stopped = false;
+  /** 每次落盘的记录，用于「隐藏瞬间是否真的存了」这类断言。 */
+  const history = [];
 
   function clearIdle() {
     if (idleTimer) { timers.clearTimeout(idleTimer); idleTimer = null; }
@@ -455,14 +518,44 @@ export function createAutoSaver({ store, filename, save, idleMs = DRAFT_LIMITS.i
 
   function flush(reason = 'manual') {
     clearIdle();
+    // 不脏的时候只处理手动保存 —— 每次都写一遍会让「保存中」闪烁，也会白耗 I/O
     if (!dirty && reason !== 'manual') return lastResult;
     dirty = false;
     lastResult = save(reason);
+    history.push({ reason, timestamp: Date.now(), result: lastResult });
     return lastResult;
   }
 
+  /**
+   * 注册「一定会跑」的落盘时机。
+   *
+   * 顺序上先 `visibilitychange` 再 `pagehide`：移动端上两者可能都触发，
+   * 第一次 flush 之后 dirty 已经是 false，第二次就是空操作，不会重复写。
+   */
+  function bindLifecycle(targets) {
+    const bindings = [];
+    const on = (target, event, handler) => {
+      if (!target?.addEventListener) return;
+      target.addEventListener(event, handler);
+      bindings.push(() => target.removeEventListener?.(event, handler));
+    };
+
+    on(targets.document, 'visibilitychange', () => {
+      if (targets.document.visibilityState === 'hidden') flush('hidden');
+    });
+    // pagehide 覆盖 beforeunload 覆盖不到的场景（移动端经常不触发 beforeunload）
+    on(targets.window, 'pagehide', () => flush('pagehide'));
+    on(targets.window, 'beforeunload', () => flush('unload'));
+    // 页面被冻结（Chrome 的 Page Lifecycle）—— 能加就加，但不承担兜底责任
+    on(targets.document, 'freeze', () => flush('freeze'));
+
+    return () => bindings.forEach((off) => off());
+  }
+
+  const unbind = events ? bindLifecycle(events) : () => {};
+
   return {
-    /** 内容变化时调用：重置 5 秒空闲计时。 */
+    /** 内容变化时调用：重置空闲计时，并标记有东西没存。 */
     markDirty() {
       dirty = true;
       clearIdle();
@@ -473,16 +566,23 @@ export function createAutoSaver({ store, filename, save, idleMs = DRAFT_LIMITS.i
     /** 切换文件时把上一个文件写完，避免「切走了最后 3 秒的输入」。 */
     rename(next) { filename = next; },
     start() {
-      if (intervalTimer) return;
-      intervalTimer = timers.setInterval(() => flush('interval'), intervalMs);
+      if (intervalTimer || stopped) return;
+      intervalTimer = timers.setInterval(() => flush('interval'), effectiveInterval);
       intervalTimer?.unref?.();
     },
     stop() {
       clearIdle();
+      stopped = true;
       if (intervalTimer) { timers.clearInterval(intervalTimer); intervalTimer = null; }
+      unbind();
     },
     get dirty() { return dirty; },
     get lastResult() { return lastResult; },
     get filename() { return filename; },
+    /** 兜底间隔（移动端/桌面端不同），状态文案与测试都要能读到真实值。 */
+    get intervalMs() { return effectiveInterval; },
+    get mobile() { return mobile; },
+    /** 落盘历史。「隐藏瞬间已落盘」的断言看它。 */
+    get history() { return history; },
   };
 }

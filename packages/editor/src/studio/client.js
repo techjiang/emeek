@@ -15,8 +15,9 @@ import { fetchDictionaryBytes } from '../editor/dict.js';
 import { createLocalAIService } from '../ai/bridge.js';
 import { editorStats } from '../editor/stats.js';
 import { byteLength, statusState, formatBytes } from '../editor/statusbar.js';
-import { DraftStore, createAutoSaver } from './drafts.js';
+import { DraftStore, createAutoSaver, isMobileLike, DRAFT_LIMITS } from './drafts.js';
 import { WELCOME } from './welcome.js';
+import { SHORTCUTS, TOUCH_ALTERNATIVES, groupShortcuts, findShortcut, matchesShortcut } from './shortcuts.js';
 
 /** 当前编辑器实例。目录点击等回调需要它，而实例在 boot() 里才创建。 */
 let editorRef = null;
@@ -55,6 +56,8 @@ const state = {
   /** 服务端提供的可编辑文件索引（emeeek dev 集成时非空）。 */
   available: [],
   autoSave: null,
+  /** 是否按移动端策略跑（更短的兜底间隔、触屏替代入口）。 */
+  mobile: false,
 };
 
 /**
@@ -215,25 +218,79 @@ async function boot() {
   }
 
   /**
-   * 自动保存调度。
+   * 自动保存调度（决策 D3）。
    *
-   * 两条触发线缺一不可：停止输入 5 秒覆盖「写一段停一停」的绝大多数节奏，
-   * 每 30 秒兜底覆盖「连续打字十分钟一次都没停」的情况。
-   * Ctrl+S 是第三条线：立即落盘。
+   * 三条触发线的分工写在 drafts.js 的注释里，这里只说**为什么之前是错的**：
+   *
+   * 上一版只有「5 秒空闲 + 30 秒兜底 + beforeunload」，三条全押在定时器与
+   * beforeunload 上。而移动端切后台会冻结定时器，beforeunload 又经常不触发 ——
+   * 结果就是「切出去接个电话，回来稿子退回 5 秒前」，中间每一次自动保存都没跑。
+   *
+   * 现在把 `visibilitychange` / `pagehide` 交给 createAutoSaver 统一绑定：
+   * 落盘时机只在一处实现，测试可以注入假事件验证，生产用真的 document/window。
    */
   function startAutoSave() {
     if (state.autoSave) return;
+    state.mobile = detectMobile();
     state.autoSave = createAutoSaver({
       store,
       filename: state.filename,
       save: (reason) => persist(reason),
+      mobile: state.mobile,
+      events: { document, window },
     });
     state.autoSave.start();
-    // 关页/切到后台也可能丢内容，能写就写一次 —— 成本就是一次同步写。
-    window.addEventListener('beforeunload', () => { if (state.autoSave.dirty) state.autoSave.flush('unload'); });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && state.autoSave.dirty) state.autoSave.flush('hidden');
+    applyMobileLayout();
+  }
+
+  /** 移动端判定：视口宽度 + 触摸能力（UA 嗅探会把 iPad 当成桌面）。 */
+  function detectMobile() {
+    return isMobileLike({
+      width: window.innerWidth ?? 0,
+      maxTouchPoints: navigator.maxTouchPoints ?? 0,
+      coarsePointer: window.matchMedia?.('(pointer: coarse)')?.matches ?? false,
     });
+  }
+
+  /**
+   * 移动端布局补偿。
+   *
+   * 三件事，都是「不做就会出问题」：
+   *   1. 把 `--vvh` 设成 visualViewport 的高度 —— 软键盘弹出时布局视口不变，
+   *      不这么做光标会被键盘挡住
+   *   2. 转屏后重算高度 —— 否则编辑区还停在转屏前的尺寸
+   *   3. 聚焦时把光标所在位置滚进可视区 —— 浏览器只保证「不离谱」，
+   *      不保证「光标可见」
+   */
+  function applyMobileLayout() {
+    const syncViewport = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--vvh', `${Math.round(height)}px`);
+    };
+    syncViewport();
+    window.visualViewport?.addEventListener?.('resize', syncViewport);
+    window.visualViewport?.addEventListener?.('scroll', ensureCursorVisible);
+    window.addEventListener('orientationchange', () => {
+      // 转屏后有两帧的中间态，等一拍再算 —— 立刻算会拿到旧尺寸
+      setTimeout(syncViewport, 120);
+      setTimeout(() => editorRef?.focus?.(), 160);
+    });
+    window.addEventListener('resize', () => {
+      state.mobile = detectMobile();
+      syncViewport();
+      ensureCursorVisible();
+    });
+  }
+
+  /** 把编辑器的光标行滚进可视区。软键盘遮挡时这一步是唯一能让用户看见光标的手段。 */
+  function ensureCursorVisible() {
+    const cursor = document.querySelector('.cm-cursor') ?? document.querySelector('.cm-content');
+    if (!cursor?.scrollIntoView) return;
+    const rect = cursor.getBoundingClientRect?.();
+    if (!rect) return;
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    // 只在真的越界时滚，否则每次按键都会重排一次
+    if (rect.bottom > height - 24 || rect.top < 0) cursor.scrollIntoView({ block: 'nearest' });
   }
 
   /**
@@ -588,32 +645,116 @@ async function boot() {
     });
   }
 
+  /**
+   * 全局快捷键（决策 D5）。
+   *
+   * 绑定的依据不是一份硬编码的 if 链，而是 shortcuts.js 的**声明表** ——
+   * 表里每一条都有 handler，handler 表里每一条也都在表里。
+   * 审计脚本（scripts/check-shortcuts.mjs）核对的正是这份表与这里的关系。
+   *
+   * 编辑器内的键位（CodeMirror keymap）不在这里 —— 那些跟着焦点走，
+   * 表里以 handler:'editor' 标注，审计时去 editor/commands.js 核对。
+   */
   function bindKeyboardShortcuts() {
-    // 全局（非编辑器内）快捷键：在输入框里打字不该触发 Ctrl+S
     document.addEventListener('keydown', (event) => {
-      const inField = /input|textarea/i.test(event.target.tagName);
-      if (inField) return;
+      // 在输入框里打字不该触发 Ctrl+S，但功能键（F1）例外 ——
+      // 用户在任何地方按 F1 都是想要帮助
+      const inField = /input|textarea/i.test(event.target?.tagName ?? '');
+      if (inField && event.key !== 'F1') return;
+
       if (event.key === 'Escape') {
         $('#ai-panel')?.classList.remove('open');
         document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
         return;
       }
-      // F1 打开快捷键表。这是「忘了键位」时唯一的入口，必须一直在。
-      if (event.key === 'F1' || (event.key === '/' && (event.ctrlKey || event.metaKey))) {
-        event.preventDefault();
-        $('#shortcut-dialog')?.showModal();
+
+      const declared = findShortcut(event);
+      if (!declared) return;
+      const handler = GLOBAL_HANDLERS[declared.id];
+      if (!handler) {
+        // 声明了却没有 handler：这是缺陷，不是「静默无事发生」。
+        // 审计脚本会把它变红，运行时这里也留一条能定位的告警。
+        console.warn(`[studio] 快捷键 ${declared.keys}（${declared.id}）声明了但没有 handler`);
         return;
       }
-      // Ctrl+Shift+A 开 AI 面板：这是面板唯一的键盘入口，
-      // 没有它的话触屏以外就只能用鼠标点右上角
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod && event.shiftKey && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        $('#ai-panel')?.classList.toggle('open');
-        $('#ai-close')?.focus();
-      }
+      event.preventDefault();
+      handler(event);
     });
     on('#shortcut-dialog .close', 'click', () => $('#shortcut-dialog').close());
+    on('#btn-shortcuts', 'click', () => openShortcutDialog());
+    on('#btn-mobile-help', 'click', () => openShortcutDialog());
+    renderShortcutDialog();
+  }
+
+  /**
+   * 全局快捷键的 handler 表。
+   *
+   * 键 = shortcuts.js 里声明条的 id。审计脚本会双向核对：
+   *   表里有 id、这里没有 → 红（这是 Ctrl+G 那一类）
+   *   这里有 id、表里没有 → 红（用户永远不知道有这个键位）
+   */
+  const GLOBAL_HANDLERS = {
+    save: () => saveDraft(),
+    'goto-line': () => {
+      const answer = globalThis.prompt?.('跳转到行号', '1');
+      if (answer) editor.jumpToLine(Number(answer));
+    },
+    'toggle-preview': () => cycleMode(),
+    'toggle-theme': () => toggleTheme(),
+    'ai-panel': () => {
+      $('#ai-panel')?.classList.toggle('open');
+      $('#ai-close')?.focus();
+    },
+    help: () => openShortcutDialog(),
+  };
+
+  function openShortcutDialog() {
+    const dialog = $('#shortcut-dialog');
+    if (!dialog?.showModal) return;
+    renderShortcutDialog();
+    dialog.showModal();
+  }
+
+  /**
+   * F1 表由声明表渲染。
+   *
+   * 手写一份 HTML 就会与实现分叉 —— 那份 HTML 正是 Ctrl+G 出现的地方。
+   * 现在唯一的数据源是 shortcuts.js，渲染只是它的一个消费者。
+   */
+  function renderShortcutDialog() {
+    const grid = $('#shortcut-grid');
+    if (!grid || grid.dataset.rendered === '1') return;
+    grid.dataset.rendered = '1';
+    grid.innerHTML = groupShortcuts().map((group) => `
+      <div>
+        <h3>${escapeHtml(group.name)}</h3>
+        ${group.items.map((item) => `
+          <p data-shortcut="${escapeHtml(item.id)}">
+            ${item.keys.split('+').map((part) => `<kbd>${escapeHtml(part)}</kbd>`).join('+')}
+            <span>${escapeHtml(item.label)}</span>
+          </p>`).join('')}
+      </div>`).join('');
+
+    const touch = $('#shortcut-touch');
+    if (touch) {
+      touch.innerHTML = `
+        <h3>触屏替代</h3>
+        <p class="dialog-note">触屏没有功能键。下面是同一件事在触屏上怎么做 —— 做不到的如实写「没有等价入口」，不假装可用。</p>
+        <ul class="touch-list">
+          ${TOUCH_ALTERNATIVES.map((item) => `<li><strong>${escapeHtml(item.action)}</strong>：${escapeHtml(item.via)}${item.note ? `<span class="hint">（${escapeHtml(item.note)}）</span>` : ''}</li>`).join('')}
+        </ul>`;
+    }
+
+    // 草稿那一栏是动态的：间隔按当前是桌面还是移动端显示，不写死
+    grid.insertAdjacentHTML('beforeend', `
+      <div>
+        <h3>草稿</h3>
+        <p><span>停止输入 ${Math.round(DRAFT_LIMITS.idleMs / 1000)} 秒自动保存</span></p>
+        <p><span>每 ${Math.round((state.autoSave?.intervalMs ?? DRAFT_LIMITS.intervalMs) / 1000)} 秒兜底保存一次${state.mobile ? '（移动端）' : ''}</span></p>
+        <p><span>切后台 / 关页面时立即落盘，不等定时器</span></p>
+        <p><span>本地保留最近 ${DRAFT_LIMITS.versions} 个版本，可回退</span></p>
+        <p><span>单篇上限 ${Math.round(DRAFT_LIMITS.singleBytes / 1024 / 1024)}MB，总计 ${Math.round(DRAFT_LIMITS.totalBytes / 1024 / 1024)}MB</span></p>
+      </div>`);
   }
 
   /** AI 面板：本期只有框架 + 只读的本地分析。 */

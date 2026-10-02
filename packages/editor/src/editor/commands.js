@@ -9,7 +9,7 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { keymap } from '@codemirror/view';
 import { undo, redo, selectLine, indentMore, indentLess, insertTab } from '@codemirror/commands';
-import { openSearchPanel, searchKeymap, openSearchPanel as openFind } from '@codemirror/search';
+import { openSearchPanel, searchKeymap, openSearchPanel as openFind, selectNextOccurrence } from '@codemirror/search';
 import { toggleLineComment } from '@codemirror/commands';
 
 /**
@@ -240,7 +240,26 @@ export function editorKeymap({ onSave, onTogglePreviewMode, onToggleTheme } = {}
     { key: 'Mod-Shift-f', run: insertFootnote, preventDefault: true },
     { key: 'Mod-Shift-e', run: insertInlineFormula, preventDefault: true },
     { key: 'Mod-Shift-h', run: insertHr, preventDefault: true },
+    { key: 'Mod-Shift-q', run: insertQuote, preventDefault: true },
     { key: 'Mod-/', run: toggleLineComment, preventDefault: true },
+    /**
+     * Ctrl+D 选中下一个相同词。
+     *
+     * 这一条曾经只存在于 F1 表里 —— 表上写着、按下去没反应。
+     * 现在它在这里有实现，并且声明审计会双向核对，两边少一个都报红。
+     * 用 CodeMirror 搜素包里的 selectNextOccurrence：它处理了
+     * 「选区为空时先选中当前词」这个细节，自己写容易在边界上翻车。
+     */
+    { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
+    /**
+     * Ctrl+Home / Ctrl+End：文档开头 / 结尾。
+     *
+     * @codemirror/commands 的 defaultKeymap 已经提供了它们，但「隐式提供」
+     * 在声明审计面前不算数 —— 审计读的是这份显式 keymap。
+     * 显式写出来还有个好处：哪天上游改了默认键位，这里不会悄悄失效。
+     */
+    { key: 'Mod-Home', run: cursorDocStart, preventDefault: true },
+    { key: 'Mod-End', run: cursorDocEnd, preventDefault: true },
     { key: 'Mod-s', run: () => { onSave?.(); return true; }, preventDefault: true },
     { key: 'Mod-Shift-p', run: () => { onTogglePreviewMode?.(); return true; }, preventDefault: true },
     { key: 'Mod-Shift-b', run: () => { onToggleTheme?.(); return true; }, preventDefault: true },
@@ -264,6 +283,18 @@ export function editorKeymap({ onSave, onTogglePreviewMode, onToggleTheme } = {}
     { key: 'Mod-Shift-z', run: redo, preventDefault: true },
     ...searchKeymap,
   ]);
+}
+
+/** 光标到文档开头 / 结尾（Ctrl+Home / Ctrl+End 的显式实现）。 */
+function cursorDocStart(view) {
+  view.dispatch({ selection: EditorSelection.cursor(0), scrollIntoView: true, userEvent: 'select' });
+  view.focus();
+  return true;
+}
+function cursorDocEnd(view) {
+  view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length), scrollIntoView: true, userEvent: 'select' });
+  view.focus();
+  return true;
 }
 
 // 「跳转到行」的处理器由外部注入（editor/index.js 里接的是 prompt 输入框）

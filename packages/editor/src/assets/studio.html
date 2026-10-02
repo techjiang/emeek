@@ -66,6 +66,8 @@
       <button id="btn-history" class="icon-button" title="草稿版本历史" aria-label="草稿版本历史">🕘</button>
       <button id="btn-copy-markdown" class="icon-button" title="复制整篇 Markdown">⧉</button>
       <button id="btn-ai" class="ai-button" title="AI 面板 Ctrl+Shift+A">✨ AI</button>
+      <!-- 触屏按不出 F1，帮助入口必须有能点的东西（决策 D5：声明面在移动端也要成立） -->
+      <button id="btn-mobile-help" class="mobile-help icon-button" title="快捷键与触屏替代" aria-label="快捷键帮助">?</button>
       <button id="btn-publish" class="publish" disabled title="发布需要连接 GitHub 仓库（Step 3）">发布</button>
     </div>
   </header>
@@ -117,7 +119,7 @@
     <span class="grow"></span>
     <span class="muted">预览与构建同源 · @emeeek/core</span>
     <span class="sep">·</span>
-    <button class="link-button" onclick="document.getElementById('shortcut-dialog').showModal()">快捷键 F1</button>
+    <button class="link-button" id="btn-shortcuts">快捷键 F1</button>
   </footer>
 
   <aside id="ai-panel" class="ai-panel" aria-label="AI 面板">
@@ -187,50 +189,10 @@
 
   <dialog id="shortcut-dialog" class="dialog">
     <h2>快捷键</h2>
-    <div class="shortcut-grid">
-      <div><h3>编辑</h3>
-        <p><kbd>Ctrl</kbd>+<kbd>B</kbd><span>加粗</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>I</kbd><span>斜体</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>U</kbd><span>下划线</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>K</kbd><span>插入链接</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd><span>插入图片</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd><span>插入代码块</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd><span>插入公式</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd><span>插入表格</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1/2/3</kbd><span>标题 H1/H2/H3</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd><span>无序列表</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd><span>有序列表</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd><span>任务列表</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd><span>脚注</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd><span>行内公式</span></p>
-        <p><kbd>Alt</kbd>+<kbd>↑/↓</kbd><span>上下移动段落</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>S</kbd><span>保存草稿</span></p>
-      </div>
-      <div><h3>导航与视图</h3>
-        <p><kbd>Ctrl</kbd>+<kbd>F</kbd><span>查找</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>H</kbd><span>替换</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>G</kbd><span>跳转到行</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Home/End</kbd><span>文档开头 / 结尾</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd><span>切换预览模式</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd><span>切换暗色 / 亮色</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>D</kbd><span>选中下一个相同词</span></p>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd><span>AI 面板</span></p>
-        <p><kbd>F1</kbd><span>打开本快捷键表</span></p>
-        <p><kbd>Alt</kbd>+<kbd>Click</kbd><span>多光标</span></p>
-      </div>
-      <div><h3>自动补全</h3>
-        <p><kbd>[[</kbd><span>文章链接候选</span></p>
-        <p><kbd>```</kbd><span>代码块语言</span></p>
-        <p><kbd>![</kbd><span>图片插入</span></p>
-        <p><kbd>h2</kbd> <kbd>table</kbd><span>行首展开模板</span></p>
-      </div>
-      <div><h3>草稿</h3>
-        <p><span>停止输入 5 秒自动保存</span></p>
-        <p><span>每 30 秒兜底保存一次</span></p>
-        <p><span>本地保留最近 5 个版本，可回退</span></p>
-        <p><span>单篇上限 2MB，总计 10MB</span></p>
-      </div>
-    </div>
+    <p class="dialog-note">表里每一条都有真实 handler，且按下真的触发 —— 这条由 <code>pnpm check:shortcuts</code> 在 CI 里盯着。触屏设备下方单独列出替代入口。</p>
+    <!-- 内容由 shortcuts.js 的数据渲染：手写一份 HTML 就会与实现分叉（D5） -->
+    <div id="shortcut-grid" class="shortcut-grid"></div>
+    <div id="shortcut-touch"></div>
     <button class="close primary" type="button">知道了</button>
   </dialog>
 </div>

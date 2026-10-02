@@ -328,7 +328,17 @@ kbd {
 }
 .history-empty { color: var(--fg-dim); font-size: 13px; }
 
-/* ── 移动端：能用就行，不追求完美 ────────────────────── */
+/* ── 移动端适配 ────────────────────────────────────────
+ *
+ * 这一段的每一条都对着一个真实的移动端痛点，不是「顺手加个响应式」：
+ *
+ *   触控目标尺寸   手指比鼠标指针粗得多，28px 的按钮点不准
+ *   软键盘遮挡     键盘弹出后视口只剩一半，光标所在的输入区必须还在视野里
+ *   横竖屏切换     转一下屏就丢焦点，用户以为编辑器崩了
+ *   F1 的替代      触屏按不出 F1，帮助入口必须有个能点的东西
+ *
+ * 判据是 viewport 宽度，不是 UA —— iPad 在 iPadOS 上自称 Macintosh。
+ * ────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   #studio {
     grid-template-columns: 0 0 1fr 0 0;
@@ -349,4 +359,84 @@ kbd {
   #studio { grid-template-rows: auto 1fr var(--status-h); }
   .statusbar .muted { display: none; }
   .ai-panel { top: 0; bottom: 0; width: 88vw; }
+}
+
+/**
+ * 触控目标尺寸（WCAG 2.5.8 要求最低 24×24，这里给到 40×40）。
+ *
+ * 只在粗指针设备上放大 —— 触屏笔记本用鼠标时不该被这些大按钮挤掉内容。
+ */
+@media (pointer: coarse) {
+  .toolbar button, .icon-button, .link-button,
+  .toolbar-format button, .file-item, .outline-item {
+    min-height: 40px;
+    min-width: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .outline-item { justify-content: flex-start; }
+  /* 分隔线在触屏上拖不准，直接隐藏 —— 留着一个拖不动的东西更糟 */
+  .splitter, #splitter-left, #splitter-right { display: none; }
+}
+
+/**
+ * 软键盘遮挡。
+ *
+ * 现代浏览器在键盘弹出时会缩 `visualViewport`，但布局视口不变 ——
+ * 于是「光标在输入区，输入区在视野外」。做法是把编辑区的最小可视高度
+ * 抬到 visualViewport 的高度（由 JS 写入 `--vvh`），并让状态栏吸在
+ * 可视区底部而不是文档底部。
+ */
+:root { --vvh: 100vh; }
+@media (max-width: 900px) {
+  #studio { min-height: calc(var(--vvh, 100vh) - var(--toolbar-h, 48px)); }
+  .statusbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    /* 小屏上状态栏本身就是「保存状态」的呈现面，必须能看清 */
+    background: var(--bg-elevated, #1b1f27);
+  }
+  /* 小屏只留最要紧的三个：保存状态、字数、性能提示 */
+  .statusbar .sep, #stat-cursor, #stat-selected, #stat-reading, #stat-language { display: none; }
+  #stat-save { font-weight: 600; }
+}
+
+/**
+ * 保存状态在小屏要能一眼看出（决策 D3：移动端的保存状态呈现）。
+ * 用一个色点 + 文案，不依赖颜色单独区分（色盲用户也要看得出来）。
+ */
+@media (max-width: 900px) {
+  #stat-save::before {
+    content: attr(data-dot);
+    margin-right: 4px;
+  }
+  #stat-save[data-state="dirty"]::before { content: "●"; }
+  #stat-save[data-state="saving"]::before { content: "◌"; }
+  #stat-save[data-state="saved"]::before { content: "✓"; }
+  #stat-save[data-state="failed"]::before,
+  #stat-save[data-state="too-large"]::before { content: "✕"; }
+  #stat-save[data-state="foreign-tab"]::before { content: "⧉"; }
+}
+
+/**
+ * 横竖屏切换：转屏后编辑器不该「看起来崩了」。
+ *
+ * 转屏会重建布局并丢掉一部分测量结果，所以这里显式把编辑区高度
+ * 从视口重算一遍（配合 JS 里的 resize/orientationchange 处理）。
+ */
+@media (max-width: 900px) and (orientation: landscape) {
+  #studio {
+    grid-template-rows: var(--toolbar-h) 1fr var(--status-h);
+  }
+  .toolbar { flex-wrap: nowrap; }
+}
+
+/* 帮助入口：触屏上按不出 F1，所以必须有一个能点的按钮。 */
+.mobile-help {
+  display: none;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  .mobile-help { display: inline-flex; }
 }
