@@ -202,6 +202,9 @@ describe('服务端 Key 代理', () => {
     assert.doesNotMatch(describeServerKey(server), /sk-proj-serverside/);
     assert.doesNotMatch(JSON.stringify(serverKeyStatus(server)), /sk-proj-serverside/);
     assert.equal(serverKeyStatus(null).configured, false);
+    // 不回环境变量名：那是运维信息，不是界面信息
+    assert.equal(serverKeyStatus(server).from, undefined);
+    assert.doesNotMatch(JSON.stringify(serverKeyStatus(server)), /EMEEEK_/);
   });
 
   test('GET /__studio/ai/status 只说有没有，一个字都不漏', async () => {
@@ -292,5 +295,72 @@ describe('服务端 Key 代理', () => {
     safeLog(logger, 'info', 'headers=', JSON.stringify({ authorization: `Bearer ${SERVER_KEY}` }));
     assert.equal(lines.length, 1);
     assert.doesNotMatch(lines[0], /sk-proj-serverside/);
+  });
+});
+
+/**
+ * 会话级 Key 也必须经服务端转发（决策 D1）。
+ *
+ * 这条容易被忽略：用户没配服务端托管时，直觉是「那就浏览器直连吧」。
+ * 直连会把 Key 暴露在 DevTools 网络面板、每个浏览器扩展、
+ * 以及「把请求复制成 curl 贴进 Issue」的风险里 —— 三条都不是
+ * 「密钥管理做得好不好」的问题，是它根本不该到那一侧。
+ */
+describe('会话级 Key 走服务端转发', () => {
+  test('请求体里的会话 Key 被用来转发，而不是直接拒绝', async () => {
+    const { createStudioServer } = await import('../src/studio/server.js');
+    const calls = [];
+    const instance = await createStudioServer({
+      port: 0, host: '127.0.0.1',
+      serverKey: null,   // 服务端没有托管
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${instance.port}/__studio/ai/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          input: '一段足够长的正文内容。',
+          task: 'summarize',
+          options: { apiKey: 'sk-proj-session0123456789abcdefghij', provider: 'openai' },
+        }),
+      });
+      const body = await response.json();
+      // 关键区别：不是 not_configured（被提前拒掉），而是真的去请求了上游
+      assert.notEqual(body.error?.code, 'not_configured', '会话级 Key 不该被「没有服务端 Key」这条挡掉');
+      assert.equal(body.ok, false);
+      // 回给浏览器的错误里不能带 Key
+      assert.doesNotMatch(JSON.stringify(body), /sk-proj-session/);
+      assert.ok(calls.length === 0);
+    } finally { await instance.close(); }
+  });
+
+  test('Key 走请求体而不是 URL（URL 会进访问日志、历史、Referer）', async () => {
+    const { createStudioServer } = await import('../src/studio/server.js');
+    const instance = await createStudioServer({
+      port: 0, host: '127.0.0.1', serverKey: null,
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    try {
+      // URL 里带 Key 的写法应当在状态端点上找不到任何痕迹
+      const status = await (await fetch(`http://127.0.0.1:${instance.port}/__studio/ai/status`)).text();
+      assert.doesNotMatch(status, /apiKey|api_key|sk-/i, '状态接口里不该有任何 Key 字段名');
+    } finally { await instance.close(); }
+  });
+
+  test('会话 Key 的 provider 缺省为 openai', async () => {
+    const { runProxiedTask } = await import('../src/studio/ai-proxy.js');
+    let seenUrl = null;
+    const outcome = await runProxiedTask({
+      input: '正文够长够长。',
+      task: 'summarize',
+      server: { provider: 'openai', apiKey: 'sk-proj-session0123456789abcdef', model: null, from: 'session' },
+      fetchImpl: async (url) => {
+        seenUrl = String(url);
+        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"short":"s","long":"l"}' } }] }) };
+      },
+    });
+    assert.equal(outcome.ok, true, JSON.stringify(outcome));
+    assert.match(seenUrl, /api\.openai\.com/);
   });
 });

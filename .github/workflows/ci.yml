@@ -78,6 +78,23 @@ jobs:
       - name: 消毒核查（静态 + 真浏览器）
         run: node scripts/e2e/xss.mjs
 
+      # 草稿安全 e2e（决策 D3）：真浏览器，Node 绿不算数。
+      # 定时器被冻结、进程被杀、多标签页接手、软键盘 —— 这四件事
+      # 只在真浏览器里成立，jsdom 没有渲染、没有冻结、没有进程。
+      - name: 草稿安全 e2e（真浏览器）
+        run: node scripts/e2e/draft-mobile.mjs
+
+      # dev 集成 e2e（决策 D4）：真 dev server + 真浏览器。
+      # 验「磁盘改动会不会悄悄覆盖本地未保存的内容」—— 这是丢稿的另一条路。
+      - name: dev 集成 e2e（真浏览器）
+        run: node scripts/e2e/dev-integration.mjs
+
+      # AI 面板 e2e（决策 D1）：三种 Key 模式。
+      # 重点是「Key 到底有没有到达浏览器」—— 靠页面里搜一遍来证明，
+      # 而不是靠代码里写了什么。
+      - name: AI 面板 e2e（真浏览器）
+        run: node scripts/e2e/ai-panel.mjs
+
       # 负向验证：「削弱防线 → 测试必须红」。
       # 一条防线如果削弱了测试还是绿的，它就没被测试守住，
       # 只是恰好写在那儿。这一步把每条防线的守护关系证明一遍。

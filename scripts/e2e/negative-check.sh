@@ -71,7 +71,7 @@ weaken "Key 输出面消毒（redact 恒等）" \
 # 6. 服务端状态接口漏 Key
 weaken "AI 状态接口不回 Key" \
   packages/editor/src/studio/ai-proxy.js \
-  's|return { configured: true, provider: server.provider, model: server.model, from: server.from };|return { configured: true, provider: server.provider, model: server.model, from: server.from, apiKey: server.apiKey };|' \
+  's|  return { configured: true, provider: server.provider, model: server.model };|  return { configured: true, provider: server.provider, model: server.model, apiKey: server.apiKey };|' \
   'node --test packages/editor/tests/keyring.test.js'
 
 # 7. 落盘时机：摘掉 visibilitychange/pagehide 的绑定（回到「只靠定时器」）
@@ -121,6 +121,24 @@ weaken "本地脏时不自动合并" \
   packages/editor/src/studio/sync.js \
   "s|  if (!localDirty) {|  if (true) {|" \
   'node --test packages/editor/tests/sync.test.js'
+
+# 15. Key 状态机：把「服务端已配置」与「已记住」混成同一句话
+weaken "Key 状态四档文案不合并" \
+  packages/editor/src/studio/keyring.js \
+  "s|  persisted: '已记住',|  persisted: '服务端已配置',|" \
+  'node --test packages/editor/tests/ai-panel.test.js'
+
+# 16. 服务端状态接口：把环境变量名也吐出去
+weaken "服务端状态不吐内部配置信息" \
+  packages/editor/src/studio/ai-proxy.js \
+  "s|  return { configured: true, provider: server.provider, model: server.model };|  return { configured: true, provider: server.provider, model: server.model, from: server.from };|" \
+  'node --test packages/editor/tests/keyring.test.js'
+
+# 17. 会话级 Key 也走服务端转发（改成直连会暴露在浏览器网络面板）
+weaken "会话级 Key 仍走服务端转发" \
+  packages/editor/src/studio/server.js \
+  "s|      if (!effective?.apiKey) {|      if (true) {|" \
+  'node --test packages/editor/tests/keyring.test.js'
 
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

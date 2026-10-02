@@ -159,15 +159,59 @@
       </section>
 
       <section class="ai-section">
-        <h3>设置</h3>
-        <div class="ai-buttons">
-          <button disabled title="Step 3">API Key / Provider</button>
+        <h3>AI 设置</h3>
+        <!--
+          Key 状态机（决策 D1）。四种状态各有各的文案，且都来自 keyring.js ——
+          UI 不自己拼字符串，否则「服务端已配置」和「已记住」迟早会被写成
+          同一句话，而它们对用户的含义完全不同（一个不用管，一个要记得它在哪）。
+        -->
+        <div class="key-state" id="ai-key-state" data-state="none">
+          <span class="key-dot" aria-hidden="true"></span>
+          <span id="ai-key-label">未配置</span>
+          <span id="ai-key-detail" class="muted"></span>
         </div>
+        <div class="ai-buttons">
+          <button id="btn-ai-key" type="button">配置 Key</button>
+        </div>
+        <p class="ai-hint" id="ai-key-hint">
+          服务端托管时 Key 不会进浏览器；无服务端时默认只作用于本次会话。
+        </p>
       </section>
 
       <div id="ai-output" class="ai-output"></div>
     </div>
   </aside>
+
+  <dialog id="ai-key-dialog" class="dialog small">
+    <h2>配置 AI API Key</h2>
+    <p class="dialog-note" id="ai-key-dialog-hint">
+      无服务端托管时，Key 默认只作用于本次会话（关掉标签页就没了）。
+      想让它留在这台机器上，勾选下面的「记住」—— 这是一个需要你主动做的决定。
+    </p>
+    <div class="field">
+      <label for="ai-key-provider">Provider</label>
+      <select id="ai-key-provider">
+        <option value="openai">OpenAI 兼容（含 DeepSeek / Moonshot / 本地 vLLM）</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="ai-key-model">模型</label>
+      <input id="ai-key-model" type="text" placeholder="留空用默认" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="ai-key-value">API Key</label>
+      <input id="ai-key-value" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+    </div>
+    <label class="toggle">
+      <input id="ai-key-remember" type="checkbox"> 记住这个 Key（存到本机，下次打开自动带上）
+    </label>
+    <div class="dialog-actions">
+      <button id="btn-ai-key-save" class="primary">保存</button>
+      <button id="btn-ai-key-clear">清除</button>
+      <button id="btn-ai-key-cancel">取消</button>
+    </div>
+  </dialog>
 
   <dialog id="recover-dialog" class="dialog small">
     <h2 id="recover-title">发现未保存的草稿</h2>

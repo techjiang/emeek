@@ -19,6 +19,7 @@ import { DraftStore, createAutoSaver, isMobileLike, DRAFT_LIMITS } from './draft
 import { WELCOME } from './welcome.js';
 import { SHORTCUTS, TOUCH_ALTERNATIVES, groupShortcuts, findShortcut, matchesShortcut } from './shortcuts.js';
 import { decideSync, SYNC_DECISION, connectReloadStream } from './sync.js';
+import { KeyStore, KEY_STORAGE, KEY_STORAGE_LABEL } from './keyring.js';
 
 /** 当前编辑器实例。目录点击等回调需要它，而实例在 boot() 里才创建。 */
 let editorRef = null;
@@ -61,6 +62,10 @@ const state = {
   mobile: false,
   /** 磁盘变更通道（只在文件模式下存在）。 */
   sync: null,
+  /** API Key 仓库（决策 D1）。 */
+  keys: null,
+  /** 当前 Key 状态（四档之一）。 */
+  keyStatus: null,
 };
 
 /**
@@ -163,8 +168,10 @@ async function boot() {
   bindLayout();
   bindKeyboardShortcuts();
   bindAiPanel();
+  state.keys = createKeyStore();
   bindRecoveryDialog();
   bindHistoryDialog();
+  renderKeyState();
   startDiskSync();
   applyTheme(state.theme);
   cycleMode(state.mode);
@@ -838,33 +845,155 @@ async function boot() {
       </div>`);
   }
 
-  /** AI 面板：本期只有框架 + 只读的本地分析。 */
+  /**
+   * AI 设置（决策 D1）。
+   *
+   * Key 状态机四档：未配置 / 服务端已配置 / 本次会话 / 已记住。
+   * 四档文案全部来自 keyring.js，UI 不自己拼 —— 否则「服务端已配置」和
+   * 「已记住」迟早被写成同一句话，而它们对用户的含义完全不同
+   * （一个什么都不用做，一个要知道它留在哪台机器上）。
+   */
+  function createKeyStore() {
+    return new KeyStore({
+      server: async () => {
+        try {
+          const response = await fetch('/__studio/ai/status');
+          if (!response.ok) return { configured: false };
+          return await response.json();
+        } catch { return { configured: false }; }
+      },
+    });
+  }
+
+  async function renderKeyState() {
+    const status = await state.keys.status();
+    const host = $('#ai-key-state');
+    if (host) host.dataset.state = status.kind;
+    setText('#ai-key-label', status.label ?? KEY_STORAGE_LABEL.none);
+    const detail = $('#ai-key-detail');
+    if (detail) {
+      detail.textContent = status.kind === KEY_STORAGE.SERVER
+        ? `${status.provider ?? ''} ${status.model ?? ''}`.trim()
+        : status.kind === KEY_STORAGE.NONE ? '' : `${status.provider ?? '未指定 provider'}`;
+    }
+    const button = $('#btn-ai-key');
+    if (button) {
+      button.textContent = status.kind === KEY_STORAGE.SERVER ? '查看配置' : status.kind === KEY_STORAGE.NONE ? '配置 Key' : '修改 Key';
+      // 服务端托管时用户不需要输入任何东西 —— 但保留入口，让他知道为什么不用输
+      button.title = status.kind === KEY_STORAGE.SERVER ? 'Key 由服务端托管，不会进入浏览器' : '';
+    }
+    const hint = $('#ai-key-hint');
+    if (hint) {
+      hint.textContent = status.kind === KEY_STORAGE.SERVER
+        ? 'Key 由服务端托管：它只存在于 dev server 进程内，不会到达浏览器。你不需要在这里输入任何东西。'
+        : '无服务端托管时，Key 默认只作用于本次会话。勾选「记住」才会留在这台机器上。';
+    }
+    state.keyStatus = status;
+    return status;
+  }
+
   function bindAiPanel() {
     on('#btn-ai', 'click', () => $('#ai-panel').classList.toggle('open'));
     on('#ai-close', 'click', () => $('#ai-panel').classList.remove('open'));
     onAll('[data-ai-action]', 'click', (event) => runAiAction(event.currentTarget.dataset.aiAction, event.currentTarget));
+
+    on('#btn-ai-key', 'click', () => openKeyDialog());
+    on('#btn-ai-key-save', 'click', () => {
+      const value = $('#ai-key-value')?.value ?? '';
+      if (!value.trim()) { flash($('#btn-ai-key-save'), '请填入 Key'); return; }
+      const remember = Boolean($('#ai-key-remember')?.checked);
+      state.keys.set(value, {
+        remember,
+        provider: $('#ai-key-provider')?.value ?? null,
+        model: $('#ai-key-model')?.value?.trim() || null,
+      });
+      const input = $('#ai-key-value');
+      if (input) input.value = '';   // 存完就把输入框清掉，别让明文留在 DOM 里
+      $('#ai-key-dialog')?.close();
+      renderKeyState();
+      flash($('#btn-ai-key'), remember ? '已记住' : '本次会话有效');
+    });
+    on('#btn-ai-key-clear', 'click', () => {
+      state.keys.clear();
+      const input = $('#ai-key-value');
+      if (input) input.value = '';
+      $('#ai-key-dialog')?.close();
+      renderKeyState();
+      flash($('#btn-ai-key'), '已清除');
+    });
+    on('#btn-ai-key-cancel', 'click', () => $('#ai-key-dialog')?.close());
+  }
+
+  function openKeyDialog() {
+    const dialog = $('#ai-key-dialog');
+    if (!dialog?.showModal) return;
+    // 服务端托管时把输入区说清楚：用户不需要填，但可以覆盖成自己的
+    if (state.keyStatus?.kind === KEY_STORAGE.SERVER) {
+      setText('#ai-key-dialog-hint', `当前由服务端托管（${state.keyStatus.provider ?? ''}）。在这里填入 Key 会覆盖成你自己的、只作用于浏览器的这一份。`);
+    }
+    const provider = $('#ai-key-provider');
+    if (provider && state.keyStatus?.provider) provider.value = state.keyStatus.provider;
+    const model = $('#ai-key-model');
+    if (model && state.keyStatus?.model) model.value = state.keyStatus.model;
+    dialog.showModal();
   }
 
   async function runAiAction(action, button) {
     if (state.aiBusy) return;
     const output = $('#ai-output');
     const text = editor.getText();
+    const status = state.keyStatus ?? await state.keys.status();
 
+    /**
+     * 生成类任务（续写 / 改写 / 扩写 / 精简 / 翻译 / 标题）。
+     *
+     * 两条路，按 D1 分层走：
+     *   · 服务端托管 → 请求打到 /__studio/ai/run，**Key 不进浏览器**
+     *   · 会话级 Key → 也只能走服务端代理（浏览器直连会把 Key 暴露在
+     *     网络面板与扩展面前），所以同样打到那个端点，只是带上会话 Key
+     *   · 都没有 → 诚实报错，不返回任何「猜的续写」
+     */
     if (GENERATIVE_ACTIONS.has(action)) {
-      // 生成类任务没有本地替代。诚实报错，不返回任何「猜的续写」。
-      output.innerHTML = `<div class="ai-error"><strong>AI 写作辅助需要配置 API Key</strong>
-        <p>当前仅支持本地分析功能（摘要 / 关键词 / 可读性 / SEO）。</p>
-        <p class="hint">在设置里填入 Provider 与 API Key 后，续写 / 改写 / 扩写 / 精简才会可用。</p></div>`;
+      if (status.kind === KEY_STORAGE.NONE) {
+        output.innerHTML = `<div class="ai-error"><strong>AI 写作辅助需要配置 API Key</strong>
+          <p>当前仅支持本地分析功能（摘要 / 关键词 / 可读性 / SEO），这些离线也能用。</p>
+          <p class="hint">在「AI 设置」里填入 Key，或用 <code>EMEEEK_OPENAI_API_KEY</code> 启动 <code>emeeek studio</code> 由服务端托管 —— 后者不会让 Key 进入浏览器。</p></div>`;
+        output.classList.add('visible');
+        return;
+      }
+      state.aiBusy = true;
+      button.classList.add('busy');
+      output.innerHTML = '<p class="ai-loading">正在请求 AI…</p>';
       output.classList.add('visible');
+      try {
+        const started = performance.now();
+        const result = await requestGenerative(action, text);
+        const elapsed = Math.round(performance.now() - started);
+        output.innerHTML = renderAiResult(action, result, elapsed);
+      } catch (error) {
+        // 「不确定就说不确定」：不编一个看起来像答案的东西
+        output.innerHTML = `<div class="ai-error"><strong>AI 没能完成这次请求</strong>
+          <p>${escapeHtml(error.message)}</p>
+          <p class="hint">没有返回任何「猜的」内容 —— 不确定的事就该说不确定。</p></div>`;
+      } finally {
+        state.aiBusy = false;
+        button.classList.remove('busy');
+      }
       return;
     }
 
     state.aiBusy = true;
     button.classList.add('busy');
-    output.innerHTML = '<p class="ai-loading">正在加载本地算法…</p>';
+    // 词表加载进度：408KB 第一次取要一点时间，不提示会像卡住
+    output.innerHTML = renderDictProgress(0);
     output.classList.add('visible');
     try {
-      const service = await createLocalAIService({ loadDictionary: fetchDictionaryBytes });
+      const service = await createLocalAIService({
+        loadDictionary: (url) => fetchDictionaryBytes(url, (loaded, total) => {
+          output.innerHTML = renderDictProgress(total ? loaded / total : 0);
+        }),
+      });
+      output.innerHTML = '<p class="ai-loading">正在计算…</p>';
       const started = performance.now();
       const result = await service.run(text, action);
       const elapsed = Math.round(performance.now() - started);
@@ -876,6 +1005,33 @@ async function boot() {
       state.aiBusy = false;
       button.classList.remove('busy');
     }
+  }
+
+  /** 生成类任务统一走服务端代理 —— 即便 Key 在会话里，也不直连 provider。 */
+  async function requestGenerative(action, text) {
+    const apiKey = state.keys.get();
+    const response = await fetch('/__studio/ai/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        input: text,
+        task: action,
+        // 会话级 Key 通过请求体传给**服务端**，由服务端转发。
+        // 它没有出现在任何 URL 上（URL 会进访问日志与浏览器历史）。
+        options: apiKey ? { apiKey, provider: state.keyStatus?.provider, model: state.keyStatus?.model } : {},
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!payload) throw new Error(`服务端没有返回可解析的结果（HTTP ${response.status}）`);
+    if (!payload.ok) throw new Error(payload.error?.message ?? '未知错误');
+    return payload.result;
+  }
+
+  /** 词表加载进度条。用文字而不是只转圈 —— 用户要知道还要等多久。 */
+  function renderDictProgress(ratio) {
+    const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+    return `<p class="ai-loading">正在加载中文词表 408KB… ${percent}%
+      <span class="hint">只在第一次「关键词提取」时需要，之后走浏览器缓存。</span></p>`;
   }
 
   function renderAiResult(action, result, elapsed) {

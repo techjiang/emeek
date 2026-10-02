@@ -349,12 +349,10 @@ export async function createStudioServer({
      *   2. 回给浏览器的错误信息先消毒（上游 401 的响应体里常带回 Key）
      */
     if (pathname === '/__studio/ai/run' && request.method === 'POST') {
-      if (!aiKey) {
-        return send(response, 200, MIME['.json'], JSON.stringify({
-          ok: false,
-          error: { code: 'not_configured', message: '服务端没有配置 AI Key。设置里填入会话级 Key，或用环境变量启动 emeeek studio。' },
-        }));
-      }
+      // 服务端没托管 Key 时不能直接拒 —— 会话级 Key 也在请求体里，
+      // 要等解析完请求体才知道有没有（第一版在这里提前 return，把会话级
+      // Key 这条路整个堵死了）
+
       const raw = await readBody(request);
       if (Buffer.byteLength(raw) > 2 * 1024 * 1024) {
         return send(response, 413, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'too_large', message: '输入超过 2MB' } }));
@@ -363,11 +361,36 @@ export async function createStudioServer({
       try { payload = JSON.parse(raw || '{}'); } catch {
         return send(response, 400, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'bad_request', message: '请求体不是合法 JSON' } }));
       }
+      /**
+       * 会话级 Key（决策 D1 第二层）。
+       *
+       * 用户没有服务端托管时，Key 存在浏览器会话里；但**仍然不直连 provider** ——
+       * 直连会把 Key 暴露在 DevTools 网络面板、每个浏览器扩展、
+       * 以及「把请求复制成 curl 贴进 Issue」的风险里。
+       * 所以它通过请求体交给服务端，由服务端转发。
+       *
+       * 为什么走请求体而不是 URL 参数：URL 会进访问日志、浏览器历史、
+       * Referer 头。凭证不该出现在这三个地方。
+       */
+      const sessionOptions = payload.options ?? {};
+      const sessionKey = typeof sessionOptions.apiKey === 'string' && sessionOptions.apiKey.trim() ? sessionOptions.apiKey.trim() : null;
+      const { apiKey: _drop, provider: sessionProvider, model: sessionModel, ...passthrough } = sessionOptions;
+      const effective = sessionKey
+        ? { provider: sessionProvider ?? 'openai', apiKey: sessionKey, model: sessionModel ?? null, from: 'session' }
+        : aiKey;
+
+      if (!effective?.apiKey) {
+        return send(response, 200, MIME['.json'], JSON.stringify({
+          ok: false,
+          error: { code: 'not_configured', message: '没有可用的 AI Key。在「AI 设置」里填入会话级 Key，或用环境变量启动 emeeek studio 由服务端托管。' },
+        }));
+      }
+
       const outcome = await runProxiedTask({
         input: String(payload.input ?? ''),
         task: String(payload.task ?? 'summarize'),
-        options: payload.options ?? {},
-        server: aiKey,
+        options: passthrough,
+        server: effective,
       });
       if (!outcome.ok) safeLog(logger, 'warn', `AI 代理失败（${outcome.error.code}）：${outcome.error.message}`);
       return send(response, 200, MIME['.json'], JSON.stringify(outcome));
