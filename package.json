@@ -10,11 +10,14 @@
   "scripts": {
     "build": "node packages/cli/bin/emeeek.js build --cwd examples/minimal",
     "dev": "node packages/cli/bin/emeeek.js dev --cwd examples/minimal",
-    "test": "node --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\"",
-    "coverage": "node --experimental-test-coverage --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\"",
+    "test": "node --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\" \"packages/editor/tests/*.test.js\"",
+    "coverage": "node --experimental-test-coverage --test \"packages/core/tests/**/*.test.js\" \"packages/cli/tests/*.test.js\" \"packages/editor/tests/*.test.js\"",
     "lighthouse": "node scripts/lighthouse.mjs",
     "doctor": "node packages/cli/bin/emeeek.js doctor --cwd examples/minimal",
-    "benchmark": "node scripts/ai-benchmark.mjs"
+    "benchmark": "node scripts/ai-benchmark.mjs && node packages/editor/tests/bench/preview-bench.mjs",
+    "benchmark:preview": "node packages/editor/tests/bench/preview-bench.mjs",
+    "studio": "node packages/cli/bin/emeeek.js studio --cwd examples/minimal",
+    "check:studio-bundle": "node scripts/check-studio-bundle.mjs"
   },
   "engines": {
     "node": ">=18"

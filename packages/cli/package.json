@@ -3,12 +3,22 @@
   "version": "0.1.0",
   "description": "Emeek CLI —— 用 GitHub Issues 或本地 Markdown 构建零成本个人知识站",
   "type": "module",
-  "bin": { "emeeek": "./bin/emeeek.js" },
+  "bin": {
+    "emeeek": "./bin/emeeek.js"
+  },
   "main": "./src/index.js",
-  "files": ["bin", "src", "../core/src", "../theme-minimal"],
-  "engines": { "node": ">=18" },
+  "files": [
+    "bin",
+    "src",
+    "../core/src",
+    "../theme-minimal"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "@emeeek/core": "workspace:*"
+    "@emeeek/core": "workspace:*",
+    "@emeeek/editor": "workspace:*"
   },
   "license": "MIT"
 }

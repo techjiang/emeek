@@ -12,9 +12,26 @@ import { highlight } from './code-block.js';
 
 export function renderMarkdown(src, options = {}) {
   const { allowHtml = false, resolveImage = (url) => url, resolveLink = (url) => url, headingIds = new Map(), wikiLink } = options;
-  const ctx = { allowHtml, resolveImage, resolveLink, headingIds, wikiLink, headingSeq: new Map(), footnotes: new Map(), footnoteOrder: [], docId: `fn${Math.random().toString(36).slice(2, 8)}` };
-
   const text = String(src).replace(/\r\n?/g, '\n');
+  const ctx = {
+    allowHtml, resolveImage, resolveLink, headingIds, wikiLink,
+    headingSeq: new Map(), footnotes: new Map(), footnoteOrder: [],
+    // 脚注 id 前缀取内容指纹而不是随机数。
+    // 随机数让同一个输入两次渲染产出不同 HTML —— 构建、预览、增量渲染、
+    // 缓存全部依赖于「同一输入 → 同一输出」，随机 id 会直接毁掉一致性。
+    docId: options.docId ?? `fn${contentHash(text)}`,
+  };
+
+  // 词表切片（A3）：只渲染正文的一小段。
+  // 用途是编辑器把大文件切块增量渲染 —— 全文一次渲染会吃掉几百毫秒。
+  // 切在「行」边界上，保证块内 Markdown 语法完整（表格/列表/代码块不会被拦腰截断），
+  // 跨块的语法由调用方自己处理，本函数不做跨块拼接。
+  if (options.slice) {
+    const lines = text.split('\n');
+    const from = Math.max(0, options.slice.from ?? 0);
+    const to = Math.min(lines.length, options.slice.to ?? lines.length);
+    return renderBlocks(lines.slice(from, to).join('\n'), ctx).body;
+  }
   const { body, footnotesHtml } = renderBlocks(text, ctx);
   const refs = renderFootnoteList(ctx);
   return footnotesHtml || refs ? `${body}\n${footnotesHtml}${refs}` : body;
@@ -223,15 +240,37 @@ function renderInline(text, ctx) {
   return out.replace(/\u0000(\d+)\u0000/g, (_, idx) => stash[Number(idx)]);
 }
 
-/** 标题锚点：中文标题直接保留，空白转连字符，重复标题加序号保证唯一。 */
-export function slugify(text, ctx = {}) {
-  const base = String(text)
+/**
+ * 标题 → 锚点 id 的基名（不含去重序号）。
+ *
+ * 这份规则同时被三处使用：渲染器、目录导航（编辑器）、脚注。多写一份就是
+ * 定时炸弹 —— 上一轮的「句末标点漏判」就是这么来的。编辑器通过
+ * `emeeek studio --dump-spec` 从 core 取这份定义，不允许自己实现。
+ */
+export function slugifyBase(text) {
+  return String(text)
     .toLowerCase()
     .trim()
     .replace(/[\s\u3000]+/g, '-')
     .replace(/[^\p{L}\p{N}-]/gu, '')
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '') || 'section';
+}
+
+/** 内容指纹：FNV-1a 32 位，十六进制。用于生成稳定且几乎不会碰撞的前缀。 */
+export function contentHash(text) {
+  let hash = 0x811c9dc5;
+  const value = String(text);
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36).padStart(7, '0').slice(0, 7);
+}
+
+/** 标题锚点：中文标题直接保留，空白转连字符，重复标题加序号保证唯一。 */
+export function slugify(text, ctx = {}) {
+  const base = slugifyBase(text);
 
   const map = ctx.headingSeq ?? new Map();
   const count = map.get(base) ?? 0;

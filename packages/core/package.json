@@ -8,8 +8,15 @@
     ".": "./src/index.js",
     "./pipeline": "./src/pipeline/index.js",
     "./config": "./src/config/loader.js",
-    "./markdown": "./src/pipeline/parse/markdown.js"
+    "./markdown": "./src/pipeline/parse/markdown.js",
+    "./render": "./src/pipeline/render/index.js",
+    "./ai/browser": "./src/ai/browser.js"
   },
-  "engines": { "node": ">=18" },
-  "license": "MIT"
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "files": [
+    "src"
+  ]
 }

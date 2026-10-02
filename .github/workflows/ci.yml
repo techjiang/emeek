@@ -21,8 +21,8 @@ jobs:
         with:
           node-version: '20'
 
-      # 必须用 pnpm：仓库是 workspace，packages/cli 依赖 packages/core。
-      # 用 npm install 不会建立 packages/cli/node_modules/@emeeek/core 软链，
+      # 必须用 pnpm：仓库是 workspace，packages/cli 依赖 packages/core 与 packages/editor。
+      # 用 npm install 不会建立 workspace 软链，
       # CLI 会在 import 阶段直接 ERR_MODULE_NOT_FOUND —— 测试全绿但 CLI 挂掉。
       - uses: pnpm/action-setup@v4
 
@@ -32,8 +32,20 @@ jobs:
       - name: 单元测试与覆盖率
         run: pnpm coverage
 
-      - name: 本地 AI 模块基准
+      - name: 基准（本地 AI + 预览渲染）
         run: pnpm benchmark
+
+      # 编辑器（Emeek Studio）的两个硬指标在这里守住：
+      #   1. 客户端入口必须能打包出来
+      #   2. 入口体积必须小（语言语法留在按需 chunk 里，不进首屏）
+      - name: 校验 Studio 客户端打包与入口体积
+        run: pnpm check:studio-bundle
+
+      # 预览一致性是 Step 2 的生命线：预览 HTML 必须与构建渲染等价。
+      # 它包含在 pnpm test 里，但单独再跑一次并显式打印结果，
+      # 是因为这条一旦坏了整个编辑器就失去意义。
+      - name: 预览一致性
+        run: node --test packages/editor/tests/consistency.test.js
 
       - name: 构建示例站点
         run: node packages/cli/bin/emeeek.js build --cwd examples/minimal

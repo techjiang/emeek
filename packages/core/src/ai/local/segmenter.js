@@ -1,8 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import zlib from 'node:zlib';
-import { fileURLToPath } from 'node:url';
-
 /**
  * 基于词典的中文分词（Viterbi 最大概率路径）。
  *
@@ -17,11 +12,11 @@ import { fileURLToPath } from 'node:url';
  * 分词不可用时 return null，调用方退回单字 —— 质量下降但不中断。
  */
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DICT_FILE = path.join(HERE, 'dict', 'zh-words.txt.gz');
-// 项目补充词表：上游通用词典缺技术新词（「首屏」「内联」），补在这里而不是
-// 去改那份 12.9 万条的主词典 —— 主词典是生成物，不该手工编辑。
-const EXTRA_FILE = path.join(HERE, 'dict', 'extra-words.txt');
+// 词典路径：用 import.meta.url 拼，不依赖 node:path。
+// 拼接逻辑只有这两行，用 URL 比 polyfill 一个 path 模块便宜得多。
+const DICT_DIR = new URL('./dict/', import.meta.url);
+const DICT_FILE = new URL('zh-words.txt.gz', DICT_DIR);
+const EXTRA_FILE = new URL('extra-words.txt', DICT_DIR);
 const MAX_WORD_LENGTH = 4;
 
 // Set 而不是 Map：切分只需要「是不是词」，不需要词频。
@@ -48,7 +43,7 @@ export async function loadDictionary({ file = DICT_FILE, decompress, force = fal
   loadPromise = (async () => {
     try {
       const gz = await readFile(file);
-      const text = decompress ? await decompress(gz) : zlib.gunzipSync(gz).toString('utf8');
+      const text = decompress ? await decompress(gz) : await gunzip(gz);
       dictionary = decodeFrontCoded(text);
       dictionary = mergeExtraWords(dictionary, file);
       return true;
@@ -64,12 +59,20 @@ export async function loadDictionary({ file = DICT_FILE, decompress, force = fal
   return loadPromise;
 }
 
-/** 同步加载，供 CLI / 构建期使用（Node 环境下没有事件循环顾虑）。 */
+/**
+ * 同步加载，供 CLI / 构建期 / Node 测试使用。
+ *
+ * 浏览器里调用会抛错（拿不到同步的文件读取手段）—— 这是刻意的：
+ * 浏览器端必须显式传 bytes，走异步路径。偷偷降级成「先返回没词典、
+ * 稍后再补上」会让分词结果依赖调用时机，那是最难查的一类 bug。
+ */
 export function loadDictionarySync({ file = DICT_FILE, force = false } = {}) {
   if (dictionary && !force) return true;
   if (loadFailed && !force) return false;
   try {
-    const text = zlib.gunzipSync(fs.readFileSync(file)).toString('utf8');
+    const nodeFs = requireNode('node:fs');
+    const nodeZlib = requireNode('node:zlib');
+    const text = decodeBytes(nodeZlib.gunzipSync(nodeFs.readFileSync(file)));
     dictionary = decodeFrontCoded(text);
     dictionary = mergeExtraWords(dictionary, file);
     return true;
@@ -213,9 +216,9 @@ export function segmentWords(text, { minLength = 2 } = {}) {
  */
 function mergeExtraWords(words, mainFile) {
   // 只有用默认主词典时才合并默认补充表；自定义词典视为调用方自备全套
-  if (mainFile !== DICT_FILE) return words;
+  if (String(mainFile) !== String(DICT_FILE)) return words;
   try {
-    const text = fs.readFileSync(EXTRA_FILE, 'utf8');
+    const text = requireNode('node:fs').readFileSync(EXTRA_FILE, 'utf8');
     for (const line of text.split('\n')) {
       const word = line.trim();
       if (!word || word.startsWith('#')) continue;
@@ -228,6 +231,11 @@ function mergeExtraWords(words, mainFile) {
 }
 
 /** 测试用：重置模块级状态。 */
+/** Node 侧初始化同步 require（CLI 入口调用一次）。 */
+export function enableSyncLoading(requireFn) {
+  globalThis.__emeeekRequire = requireFn;
+}
+
 export function resetDictionary() {
   dictionary = null;
   loadPromise = null;
@@ -235,11 +243,67 @@ export function resetDictionary() {
 }
 
 async function readFile(file) {
-  if (typeof file === 'string') return fs.promises.readFile(file);
-  // 浏览器端可以传 ArrayBuffer / Response
+  // 浏览器端可以传 ArrayBuffer / Response / Uint8Array，直接拿字节
   if (file instanceof ArrayBuffer) return new Uint8Array(file);
+  if (file instanceof Uint8Array) return file;
   if (typeof Response !== 'undefined' && file instanceof Response) return new Uint8Array(await file.arrayBuffer());
+  if (typeof file === 'string' || file instanceof URL) {
+    const response = await fetch(file);
+    if (!response.ok) throw new Error(`词表请求失败：${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
   return file;
 }
 
-export { DICT_FILE, MAX_WORD_LENGTH };
+/** Node 侧解压（浏览器端会传 decompress，走不到这里）。 */
+async function gunzip(bytes) {
+  const nodeZlib = await import('node:zlib');
+  const { gunzipSync } = nodeZlib.default ?? nodeZlib;
+  return decodeBytes(gunzipSync(toBuffer(bytes)));
+}
+
+const toBuffer = (bytes) => (typeof Buffer !== 'undefined' ? Buffer.from(bytes) : bytes);
+const decodeBytes = (bytes) => new TextDecoder('utf-8').decode(bytes);
+
+/**
+ * 同步 require node 内置模块。
+ *
+ * 为什么不用顶层 import：浏览器打包器会把 `node:fs` 当成无法解析的依赖，
+ * 直接让编辑器的 bundle 失败。同步加载用 createRequire（只在 Node 下存在），
+ * 浏览器里调用它会抛错 —— 而浏览器本来就不该走同步路径（它传 decompress）。
+ */
+function requireNode(specifier) {
+  const req = globalThis.__emeeekRequire ?? null;
+  if (req) return req(specifier);
+  throw new Error('同步词表加载只在 Node 环境可用，浏览器端请用 loadDictionary() 并传入字节');
+}
+
+/**
+ * 自动获取 Node 的 require。
+ *
+ * 为什么不在模块顶层直接 `createRequire(import.meta.url)`：
+ * 那是一个顶层 node: 依赖，浏览器打包会炸。但「浏览器打包会炸」和
+ * 「Node 里默认不可用」是两回事 —— 后者会让每个调用方都得手动初始化一次，
+ * 少写一行就在运行时抛错。所以这里在第一次真正需要时再去拿，
+ * 拿不到就是真的在浏览器里。
+ */
+let cachedRequire = null;
+
+/**
+ * 顶部 await 拿一次 require（Node 里同步完成，浏览器里 try 失败即跳过）。
+ *
+ * ESM 的顶层 await 是标准语法，不会让浏览器打包失败 —— 打包器只看到
+ * `import('node:module')`，把它标成 external 即可。真正会炸的是顶层
+ * 静态 import，这里刻意避开了。
+ */
+try {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    const { createRequire } = await import('node:module');
+    cachedRequire = createRequire(import.meta.url);
+    globalThis.__emeeekRequire = cachedRequire;
+  }
+} catch {
+  // 浏览器：没有同步文件读取手段，走异步路径（调用方传 bytes）
+}
+
+export { DICT_FILE, EXTRA_FILE, MAX_WORD_LENGTH };

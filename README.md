@@ -98,9 +98,52 @@ slug: custom-url # 自定义 URL
 | `emeeek init [dir]` | 初始化项目 |
 | `emeeek build` | 构建到 `dist/` |
 | `emeeek dev [--port 3000]` | 本地预览 + 文件监听 |
+| `emeeek studio [--port 3000]` | 写作编辑器（Emeek Studio） |
 | `emeeek new "标题"` | 新建文章 |
 | `emeeek doctor` | 诊断环境、配置、主题、连通性 |
 | `emeeek clean` | 清理产物 |
+
+## Emeek Studio 编辑器
+
+`emeeek studio` 打开写文章用的编辑器。**你在编辑器里看到的效果 = 最终发布的效果** ——
+两边调的是同一个渲染函数，一致性测试逐节点盯着这件事。
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ [B][I]…  [编辑|双栏|预览] 主题  保存  AI          │
+├──────────┬────────────────────┬──────────────────────────┤
+│ 目录      │  编辑区             │  预览区                  │
+│ ▸ 标题1   │  # 标题             │  标题（渲染后）           │
+│   ▸ 1.1  │  正文 **加粗**      │  正文「加粗」             │
+│ ▸ 标题2   │  ```python          │  ┌────────────┐          │
+│          │  print(1)           │  │print(1)    │          │
+│          │  ```                │  └────────────┘          │
+├──────────┴────────────────────┴──────────────────────────┤
+│ 1,234 字 · 约 3 分钟 · 行 12, 列 4 · 已保存 ✓            │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **CodeMirror 6** 内核，可编程扩展，主题热切换不丢光标
+- **37 种语言**代码块高亮，语法包按需加载（入口 276KB，语言全在 chunk 里）
+- **目录导航**：从语法树抽标题（代码块里的 `#` 不算），点击跳转，光标联动
+- **自动补全**：`[[` 文章链接 / <code>```</code> 语言 / `![` 图片 / 行首模板
+- **图片拖拽粘贴**：没上传接口时用本地预览，并**明确标记未上传**
+- **AI 面板**：本地分析（摘要/关键词/可读性/SEO）离线可用；
+  续写/改写需要 API Key，没配就**诚实报错**，不塞猜测的内容
+
+实测（`pnpm benchmark:preview`）：
+
+| 场景 | p50 | 目标 |
+| --- | --- | --- |
+| 打开 10KB 文档 | 2.9ms | < 500ms |
+| 打字后重渲染（10KB） | 2.7ms | < 200ms |
+| 大文件整篇渲染（100KB） | 30.6ms | < 500ms |
+| 内容未变（命中缓存） | 0.2ms | < 1ms |
+
+一句话说明「预览一致」的分量：编辑器里**不存在**第二份 Markdown 渲染器，
+测试里有一条专门扫源码，出现自建渲染器的特征就报错。
+
+详见 [编辑器文档](docs/studio.md)。
 
 ## 项目结构
 
@@ -108,11 +151,12 @@ slug: custom-url # 自定义 URL
 packages/
   core/            引擎：内容管线 / 渲染 / 主题 / 插件
   cli/             命令行
+  editor/          Emeek Studio：CodeMirror 6 编辑器 + 预览 + 服务端
   theme-minimal/   默认主题
 examples/
   minimal/         最小示例（本地 Markdown）
   full-featured/   全功能示例（hybrid 源 + 插件）
-docs/              配置、主题、插件、性能文档
+docs/              配置、主题、插件、性能、编辑器文档
 ```
 
 ## AI 能力（可选）
@@ -153,6 +197,7 @@ SEO 分析             13.0ms   目标 < 30ms
 - [主题开发](docs/themes.md)
 - [插件开发](docs/plugins.md)
 - [性能基线](docs/performance.md)
+- [编辑器（Emeek Studio）](docs/studio.md)
 
 ## 开发
 
@@ -161,11 +206,13 @@ SEO 分析             13.0ms   目标 < 30ms
 ```bash
 pnpm install
 
-pnpm test          # 293 个测试
-pnpm coverage      # 测试 + 覆盖率报告
-pnpm benchmark     # 本地 AI 模块基准
+pnpm test          # 470 个测试
+pnpm coverage      # 测试 + 覆盖率报告（行覆盖 93.76%）
+pnpm benchmark     # 本地 AI + 预览渲染基准
+pnpm check:studio-bundle   # 编辑器入口体积门禁
 pnpm build         # 构建 examples/minimal
 pnpm dev           # 本地预览示例站
+pnpm studio        # 打开编辑器（examples/minimal）
 pnpm lighthouse    # 性能基线（需本机有 Chromium）
 pnpm doctor        # 诊断示例站配置
 ```
@@ -176,7 +223,7 @@ pnpm doctor        # 诊断示例站配置
 node packages/cli/bin/emeeek.js build --cwd <项目目录>
 ```
 
-当前状态：293 个测试全绿，行覆盖率 93%，Lighthouse 四类全 100（8 种页面）。
+当前状态：470 个测试全绿，行覆盖率 93.76%，Lighthouse 四类全 100（8 种页面）。
 
 ## Phase 现状
 
@@ -187,9 +234,14 @@ CLI、Actions 工作流、SEO 产物、测试与性能基线。
 本地 / Mock 四个 Provider、降级链、离线可用的摘要与可读性与 SEO 分析、
 提示词模板文件化。
 
-编辑器（Emeek Studio）、图片管理、主题市场、知识图谱、分析面板
-按路线图属于 Phase 2 Step 2 之后的阶段，尚未实现 ——
-本仓库不对未完成的能力做描述。
+**Phase 2 Step 2 Step 1（S2-1：编辑器核心 + 预览）** 已完成：
+CodeMirror 6 集成、双栏实时预览、代码块高亮（37 种语言，按需加载）、
+预览一致性测试（预览与构建渲染等价）。
+
+尚未实现、且本仓库不做描述的能力：AI 面板的生成类功能（续写/改写，
+需要 API Key）、图片管理、主题市场、知识图谱、分析面板。
+AI 面板本期的定位是「框架 + 只读的本地分析」——
+点生成类按钮会明确报错，不会返回降级结果。
 
 ## License
 

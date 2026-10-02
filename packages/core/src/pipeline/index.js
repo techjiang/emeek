@@ -258,6 +258,28 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   await hooks.run('onBuildComplete', context);
   await hooks.run('onAfterRender', context);
 
+  /**
+   * 站点索引：编辑器（Emeek Studio）用它做 [[ 补全与双向链接解析。
+   *
+   * 为什么要从这里给，而不是编辑器自己扫一遍帖子目录：
+   * 编辑器眼里的「有哪些文章」必须与构建期一致，否则补全出来的标题
+   * 在构建时会变成「未找到文章」。索引只能由构建方产出。
+   */
+  const siteIndex = {
+    posts: sorted.map((post) => ({
+      title: post.title,
+      slug: post.slug,
+      url: post.url,
+      date: post.date,
+      tags: post.tags,
+      categories: post.categories,
+      description: post.description,
+      draft: false,
+    })),
+    drafts: drafts.map((post) => ({ title: post.title, slug: post.slug, draft: true })),
+    titles: sorted.map((post) => post.title),
+  };
+
   const stats = {
     elapsed: Date.now() - started,
     posts: sorted.length,
@@ -266,6 +288,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     tags: tags.length,
     outDir,
     manifest,
+    siteIndex,
   };
   return stats;
 }
@@ -374,4 +397,32 @@ async function renderAbout(cwd, config) {
     } catch { /* 继续找下一个 */ }
   }
   return `<p>还没有写关于页。在项目根目录放一个 <code>ABOUT.md</code> 即可自动出现在这里。</p>`;
+}
+
+
+// 渲染管线的构件对外导出。
+// 编辑器（@emeeek/editor）要复现「构建输出」就必须逐步复用这些函数，
+// 而不是自己写一套 Markdown 解析 —— 导出的正是这条路径本身。
+export { renderMarkdown } from './parse/markdown.js';
+export { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
+export { decorateImages, createImageResolver } from './transform/images.js';
+export { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
+export { buildWikiLinkIndex, resolveWikiLink } from './transform/links.js';
+
+/** 构建期对单篇 Markdown 做的全部变换（渲染 → 图片 → 锚点）。 */
+export function renderArticle(raw, {
+  allowHtml = false,
+  lazyImages = true,
+  headingIds = new Map(),
+  wikiLink,
+  resolveImage = (url) => url,
+} = {}) {
+  const html = renderMarkdown(raw, {
+    allowHtml,
+    resolveImage,
+    resolveLink: (url) => url,
+    headingIds,
+    wikiLink,
+  });
+  return addAnchorLinks(decorateImages(html, { lazy: lazyImages }));
 }
