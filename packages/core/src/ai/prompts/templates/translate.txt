@@ -1,0 +1,15 @@
+@task: translate
+@output: 纯文本，直接是译文
+@language: 目标语言 {{targetLanguage}}
+
+请把下面的内容翻译成{{targetLanguageName}}。
+
+要求：
+1. 术语保持一致：同一个原文术语在全文中只对应一个译文
+2. 保留 Markdown 结构（标题层级、列表、代码块、链接）
+3. 代码块内的内容不要翻译，包括注释
+4. 专业术语若业界常用原文不译（如 GitHub、Markdown），保留原文
+5. 只输出译文，不要标注、不要解释
+
+待翻译内容：
+{{text}}

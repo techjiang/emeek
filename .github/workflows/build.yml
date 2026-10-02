@@ -1,0 +1,78 @@
+# Emeek 构建与部署
+#
+# 这是继承自 Gmeek 的第二根支柱：内容变更 → Actions 构建 → Pages 发布。
+# 触发条件覆盖「在 GitHub 上写文章」的完整生命周期。
+name: Build & Deploy
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, closed, reopened]
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'dist/**'
+      - 'docs/**'
+  schedule:
+    # 每天 UTC 02:00 重建一次：捕获 Issue 评论更新、外部内容变化等非事件型改动。
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 必须用 pnpm：monorepo 里 packages/cli 依赖 packages/core，
+      # npm install 不会建 workspace 软链，CLI 会在 import 阶段直接失败。
+      - uses: pnpm/action-setup@v4
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 诊断配置
+        run: node packages/cli/bin/emeeek.js doctor --cwd .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 单元测试
+        run: pnpm test
+
+      - name: 构建站点
+        run: node packages/cli/bin/emeeek.js build --cwd .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # AI 功能是可选的：没有这个 secret 时构建照常完成，只是不做摘要与标签生成。
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: 上传 Pages 产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

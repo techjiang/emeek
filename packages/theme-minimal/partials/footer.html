@@ -1,0 +1,11 @@
+<footer class="site-footer">
+    <div class="footer-inner">
+        <p>© {{ year }} {{ site.author }} · {{ site.title }}</p>
+        <p class="footer-meta">
+            Powered by <a href="https://github.com/Meekdai/Gmeek" rel="noopener">Gmeek</a> 理念 · Emeek
+            {% if config.feed.enabled != false %}<span class="dot">·</span><a href="/rss.xml">RSS</a>{% endif %}
+            {% if config.seo.sitemap != false %}<span class="dot">·</span><a href="/sitemap.xml">Sitemap</a>{% endif %}
+        </p>
+    </div>
+</footer>
+{% if themeJS %}<script>{{{ themeJS }}}</script>{% endif %}

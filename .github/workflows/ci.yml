@@ -1,0 +1,59 @@
+# 代码质量与性能回归门禁。
+# 与 build.yml 分开：构建负责发布，CI 负责「不让回归溜进 main」。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 必须用 pnpm：仓库是 workspace，packages/cli 依赖 packages/core 与 packages/editor。
+      # 用 npm install 不会建立 workspace 软链，
+      # CLI 会在 import 阶段直接 ERR_MODULE_NOT_FOUND —— 测试全绿但 CLI 挂掉。
+      - uses: pnpm/action-setup@v4
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 单元测试与覆盖率
+        run: pnpm coverage
+
+      - name: 基准（本地 AI + 预览渲染）
+        run: pnpm benchmark
+
+      # 编辑器（Emeek Studio）的两个硬指标在这里守住：
+      #   1. 客户端入口必须能打包出来
+      #   2. 入口体积必须小（语言语法留在按需 chunk 里，不进首屏）
+      - name: 校验 Studio 客户端打包与入口体积
+        run: pnpm check:studio-bundle
+
+      # 预览一致性是 Step 2 的生命线：预览 HTML 必须与构建渲染等价。
+      # 它包含在 pnpm test 里，但单独再跑一次并显式打印结果，
+      # 是因为这条一旦坏了整个编辑器就失去意义。
+      - name: 预览一致性
+        run: node --test packages/editor/tests/consistency.test.js
+
+      - name: 构建示例站点
+        run: node packages/cli/bin/emeeek.js build --cwd examples/minimal
+
+      - name: 校验产物完整性
+        run: |
+          set -e
+          for f in index.html 404.html archive.html tags.html about.html sitemap.xml rss.xml robots.txt search-index.json; do
+            test -f "examples/minimal/dist/$f" || { echo "缺失产物：$f"; exit 1; }
+          done
+          echo "全部关键产物就绪"

@@ -1,0 +1,8 @@
+packages:
+  - 'packages/*'
+
+# esbuild 需要执行安装脚本才能落地原生二进制。
+# 它只在 Studio 打包客户端时用到，运行时不依赖 —— 但少了它就必须走
+# esbuild-wasm（慢十倍）。这里显式允许，而不是让用户自己去 approve-builds。
+allowBuilds:
+  esbuild: true

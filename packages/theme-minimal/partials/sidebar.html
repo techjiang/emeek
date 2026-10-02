@@ -1,0 +1,20 @@
+<aside class="sidebar">
+    {% if post.toc.length %}
+    <nav class="sidebar-block" aria-label="文章目录">
+        <h3 class="sidebar-title">本文目录</h3>
+        <ul class="sidebar-toc">
+            {% for item in post.toc %}
+            <li class="toc-level-{{ item.level }}"><a href="#{{ item.id }}">{{ item.text }}</a></li>
+            {% endfor %}
+        </ul>
+    </nav>
+    {% endif %}
+    {% if allTags.length %}
+    <div class="sidebar-block">
+        <h3 class="sidebar-title">标签</h3>
+        <div class="tag-cloud compact">
+            {% for tag in allTags %}<a class="tag" href="{{ tag.url }}">#{{ tag.name }}</a>{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</aside>

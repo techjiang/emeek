@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN" data-studio-theme="one-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emeek Studio</title>
+<!--
+  编辑器首屏刻意不引用词表、不加载 AI 模块。
+  AI 能力在用户点击面板按钮时才动态 import（见 src/studio/client.js）。
+-->
+<link rel="stylesheet" href="/__studio/studio.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='24' font-size='24'>✍️</text></svg>">
+</head>
+<body>
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-mark">Emeek Studio</div>
+    <p>正在装配编辑器…</p>
+  </div>
+</div>
+
+<div id="studio" hidden data-mode="split" data-theme="one-dark">
+
+  <header class="toolbar" role="toolbar" aria-label="编辑器工具栏">
+    <div class="toolbar-left">
+      <button id="btn-outline-toggle" class="icon-button" title="折叠目录" aria-label="折叠目录">☰</button>
+      <button id="file-name" class="file-name" title="点击重命名">untitled.md</button>
+      <span id="save-state" class="save-state" data-state="local">本地草稿（未连接仓库）</span>
+    </div>
+
+    <div class="toolbar-format" role="group" aria-label="格式">
+      <button data-command="bold" title="加粗 Ctrl+B"><b>B</b></button>
+      <button data-command="italic" title="斜体 Ctrl+I"><i>I</i></button>
+      <button data-command="underline" title="下划线 Ctrl+U"><u>U</u></button>
+      <button data-command="link" title="链接 Ctrl+K">🔗</button>
+      <button data-command="image" title="图片 Ctrl+Shift+I">🖼</button>
+      <button data-command="code-block" title="代码块 Ctrl+Shift+C">&lt;/&gt;</button>
+      <button data-command="table" title="表格 Ctrl+Shift+T">▦</button>
+      <button data-command="formula" title="公式 Ctrl+Shift+M">∑</button>
+      <button data-command="quote" title="引用">❝</button>
+      <button data-command="list" title="无序列表 Ctrl+Shift+U">•</button>
+      <button data-command="ordered-list" title="有序列表 Ctrl+Shift+O">1.</button>
+      <button data-command="task" title="任务列表 Ctrl+Shift+K">☑</button>
+      <button data-command="hr" title="分隔线 Ctrl+Shift+H">―</button>
+      <span class="divider" aria-hidden="true"></span>
+      <button data-command="h1" title="一级标题 Ctrl+Shift+1">H1</button>
+      <button data-command="h2" title="二级标题 Ctrl+Shift+2">H2</button>
+      <button data-command="h3" title="三级标题 Ctrl+Shift+3">H3</button>
+    </div>
+
+    <div class="toolbar-right">
+      <div class="segmented" role="group" aria-label="预览模式">
+        <button data-mode-option="edit" title="仅编辑 Ctrl+Shift+P">编辑</button>
+        <button data-mode-option="split" class="active" title="双栏 Ctrl+Shift+P">双栏</button>
+        <button data-mode-option="preview" title="仅预览 Ctrl+Shift+P">预览</button>
+      </div>
+      <select id="select-theme" aria-label="主题" title="编辑器主题">
+        <option value="one-dark">One Dark</option>
+        <option value="github-light">GitHub Light</option>
+        <option value="dracula">Dracula</option>
+        <option value="one-light">One Light</option>
+      </select>
+      <label class="toggle" title="软换行"><input id="select-wrap" type="checkbox" checked> 换行</label>
+      <button id="btn-toggle-preview" class="icon-button" title="切换预览模式 Ctrl+Shift+P">◫</button>
+      <button id="btn-save" class="primary" title="保存草稿 Ctrl+S" data-save-state="local"><span class="save-dot" aria-hidden="true"></span><span id="btn-save-label">保存</span></button>
+      <button id="btn-history" class="icon-button" title="草稿版本历史" aria-label="草稿版本历史">🕘</button>
+      <button id="btn-copy-markdown" class="icon-button" title="复制整篇 Markdown">⧉</button>
+      <button id="btn-ai" class="ai-button" title="AI 面板 Ctrl+Shift+A">✨ AI</button>
+      <button id="btn-publish" class="publish" disabled title="发布需要连接 GitHub 仓库（Step 3）">发布</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="outline" aria-label="目录导航">
+      <div class="panel-head">
+        <span>文件</span>
+      </div>
+      <nav id="file-list" class="file-list"></nav>
+      <div class="panel-head">
+        <span>目录</span>
+        <span id="outline-count" class="badge">0</span>
+      </div>
+      <nav id="outline-list" class="outline-list"></nav>
+      <div class="outline-foot">
+        <button id="btn-delete-draft" class="link-button">清空本地草稿</button>
+      </div>
+    </aside>
+
+    <div id="splitter-left" class="splitter" role="separator" aria-orientation="vertical" title="拖动调整目录宽度"></div>
+
+    <section class="editor-pane" aria-label="编辑区">
+      <div id="editor-host" class="editor-host"></div>
+    </section>
+
+    <div id="splitter-right" class="splitter" role="separator" aria-orientation="vertical" title="拖动调整编辑区宽度"></div>
+
+    <section class="preview-pane" aria-label="预览区">
+      <div class="pane-head">
+        <span>预览</span>
+        <span id="preview-meta" class="preview-meta" title="渲染耗时 · 复用的块数（增量渲染）"></span>
+      </div>
+      <iframe id="preview-frame" class="preview-frame" title="Markdown 预览" sandbox="allow-same-origin"></iframe>
+    </section>
+  </main>
+
+  <footer class="statusbar" role="status">
+    <span id="stat-words">0 字</span>
+    <span class="sep">·</span>
+    <span id="stat-reading">约 1 分钟</span>
+    <span class="sep">·</span>
+    <span id="stat-language" class="muted">—</span>
+    <span class="sep">·</span>
+    <span id="stat-cursor">行 1, 列 1</span>
+    <span id="stat-selected" class="muted"></span>
+    <span id="stat-save" class="save-state" data-state="local">本地草稿</span>
+    <span id="stat-perf" class="perf-notice" hidden></span>
+    <span class="grow"></span>
+    <span class="muted">预览与构建同源 · @emeeek/core</span>
+    <span class="sep">·</span>
+    <button class="link-button" onclick="document.getElementById('shortcut-dialog').showModal()">快捷键 F1</button>
+  </footer>
+
+  <aside id="ai-panel" class="ai-panel" aria-label="AI 面板">
+    <div class="panel-head">
+      <span>AI 助手</span>
+      <button id="ai-close" class="icon-button" aria-label="关闭">×</button>
+    </div>
+    <div class="ai-body">
+      <section class="ai-section">
+        <h3>写作辅助 <span class="requires">需要 API Key</span></h3>
+        <div class="ai-buttons">
+          <button data-ai-action="continue">✨ 续写</button>
+          <button data-ai-action="rewrite">✨ 改写</button>
+          <button data-ai-action="expand">✨ 扩写</button>
+          <button data-ai-action="condense">✨ 精简</button>
+        </div>
+        <p class="ai-hint">不配置 Key 时点下去会明确告诉你缺什么，不会塞一段猜的内容进来。</p>
+      </section>
+
+      <section class="ai-section">
+        <h3>内容分析 <span class="local">本地可用</span></h3>
+        <div class="ai-buttons">
+          <button data-ai-action="summarize">快速摘要</button>
+          <button data-ai-action="tags">关键词提取</button>
+          <button data-ai-action="readability">可读性</button>
+          <button data-ai-action="seo">SEO 检查</button>
+        </div>
+        <p class="ai-hint">纯本地算法，离线可用。首次点击会取一次中文词表（408KB，之后走缓存）。</p>
+      </section>
+
+      <section class="ai-section">
+        <h3>智能链接</h3>
+        <div class="ai-buttons">
+          <button disabled title="Step 3">相关文章</button>
+          <button disabled title="Step 3">补双向链接</button>
+        </div>
+      </section>
+
+      <section class="ai-section">
+        <h3>设置</h3>
+        <div class="ai-buttons">
+          <button disabled title="Step 3">API Key / Provider</button>
+        </div>
+      </section>
+
+      <div id="ai-output" class="ai-output"></div>
+    </div>
+  </aside>
+
+  <dialog id="recover-dialog" class="dialog small">
+    <h2 id="recover-title">发现未保存的草稿</h2>
+    <p id="recover-meta" class="dialog-note"></p>
+    <div id="recover-preview" class="recover-preview"></div>
+    <div class="dialog-actions">
+      <button id="btn-recover" class="primary">恢复草稿</button>
+      <button id="btn-recover-discard">丢弃草稿，重新开始</button>
+      <button id="btn-recover-cancel">先看看（暂不恢复）</button>
+    </div>
+  </dialog>
+
+  <dialog id="history-dialog" class="dialog">
+    <h2>草稿版本历史</h2>
+    <p class="dialog-note">本地保留最近 5 个版本。回退本身也是一次保存，所以回退之后还能再回退回来。</p>
+    <div id="history-list" class="history-list"></div>
+    <button class="close primary" type="button">关闭</button>
+  </dialog>
+
+  <dialog id="shortcut-dialog" class="dialog">
+    <h2>快捷键</h2>
+    <div class="shortcut-grid">
+      <div><h3>编辑</h3>
+        <p><kbd>Ctrl</kbd>+<kbd>B</kbd><span>加粗</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>I</kbd><span>斜体</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>U</kbd><span>下划线</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>K</kbd><span>插入链接</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd><span>插入图片</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd><span>插入代码块</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd><span>插入公式</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd><span>插入表格</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1/2/3</kbd><span>标题 H1/H2/H3</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd><span>无序列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd><span>有序列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd><span>任务列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd><span>脚注</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd><span>行内公式</span></p>
+        <p><kbd>Alt</kbd>+<kbd>↑/↓</kbd><span>上下移动段落</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>S</kbd><span>保存草稿</span></p>
+      </div>
+      <div><h3>导航与视图</h3>
+        <p><kbd>Ctrl</kbd>+<kbd>F</kbd><span>查找</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>H</kbd><span>替换</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>G</kbd><span>跳转到行</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Home/End</kbd><span>文档开头 / 结尾</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd><span>切换预览模式</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd><span>切换暗色 / 亮色</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>D</kbd><span>选中下一个相同词</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd><span>AI 面板</span></p>
+        <p><kbd>F1</kbd><span>打开本快捷键表</span></p>
+        <p><kbd>Alt</kbd>+<kbd>Click</kbd><span>多光标</span></p>
+      </div>
+      <div><h3>自动补全</h3>
+        <p><kbd>[[</kbd><span>文章链接候选</span></p>
+        <p><kbd>```</kbd><span>代码块语言</span></p>
+        <p><kbd>![</kbd><span>图片插入</span></p>
+        <p><kbd>h2</kbd> <kbd>table</kbd><span>行首展开模板</span></p>
+      </div>
+      <div><h3>草稿</h3>
+        <p><span>停止输入 5 秒自动保存</span></p>
+        <p><span>每 30 秒兜底保存一次</span></p>
+        <p><span>本地保留最近 5 个版本，可回退</span></p>
+        <p><span>单篇上限 2MB，总计 10MB</span></p>
+      </div>
+    </div>
+    <button class="close primary" type="button">知道了</button>
+  </dialog>
+</div>
+
+<script type="module" src="/__studio/client.js"></script>
+</body>
+</html>
