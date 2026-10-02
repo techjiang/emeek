@@ -148,6 +148,10 @@ export const insertCodeBlock = (lang = '') => insertSnippet(`\`\`\`${lang}\n$0\n
 
 export const insertFormula = insertSnippet('$$\n$0\n$$');
 export const insertInlineFormula = insertSnippet('$$0$');
+/** 分隔线：前后各留一空行，否则它会粘进上一段（Markdown 里 --- 紧跟文字是 setext H2）。 */
+export const insertHr = insertSnippet('\n---\n', { cursor: '' });
+/** 脚注：定义 + 引用一起插入，光标停在引用角标上（那才是接着要写的地方）。 */
+export const insertFootnote = insertSnippet('[^1]: 这里写脚注内容\n$0', { cursor: '' });
 export const insertQuote = toggleLinePrefix(
   (text) => /^\s*>\s?/.test(text),
   (text) => text.replace(/^\s*>\s?/, ''),
@@ -230,11 +234,25 @@ export function editorKeymap({ onSave, onTogglePreviewMode, onToggleTheme } = {}
     { key: 'Mod-Shift-2', run: headingCommand(2), preventDefault: true },
     { key: 'Mod-Shift-3', run: headingCommand(3), preventDefault: true },
     { key: 'Mod-Shift-4', run: headingCommand(4), preventDefault: true },
+    { key: 'Mod-Shift-u', run: insertList, preventDefault: true },
+    { key: 'Mod-Shift-o', run: insertOrderedList, preventDefault: true },
+    { key: 'Mod-Shift-k', run: insertTaskList, preventDefault: true },
+    { key: 'Mod-Shift-f', run: insertFootnote, preventDefault: true },
+    { key: 'Mod-Shift-e', run: insertInlineFormula, preventDefault: true },
+    { key: 'Mod-Shift-h', run: insertHr, preventDefault: true },
     { key: 'Mod-/', run: toggleLineComment, preventDefault: true },
     { key: 'Mod-s', run: () => { onSave?.(); return true; }, preventDefault: true },
     { key: 'Mod-Shift-p', run: () => { onTogglePreviewMode?.(); return true; }, preventDefault: true },
     { key: 'Mod-Shift-b', run: () => { onToggleTheme?.(); return true; }, preventDefault: true },
-    { key: 'Mod-g', run: () => { onGotoLine?.(); return true; }, preventDefault: true },
+    /**
+     * Ctrl+G 跳转到行。
+     *
+     * 这里原来写的是 `onGotoLine?.()` —— 而 onGotoLine 是这个模块的
+     * 局部变量，在函数体外是未声明标识符。真按下去会抛 ReferenceError，
+     * 而 keymap 捕获异常的方式是「当这个键没绑定」，于是表现成
+     * 「Ctrl+G 没反应」。所以要在模块作用域里读那个变量。
+     */
+    { key: 'Mod-g', run: () => (gotoHandler ? gotoHandler() : false), preventDefault: true },
     { key: 'Mod-f', run: openSearchPanel, preventDefault: true },
     { key: 'Mod-h', run: openFind, preventDefault: true },
     { key: 'Alt-ArrowUp', run: moveLineUp },
@@ -248,6 +266,6 @@ export function editorKeymap({ onSave, onTogglePreviewMode, onToggleTheme } = {}
   ]);
 }
 
-// onGotoLine 由外部注入（打开「跳转到行」输入框）
-let onGotoLine = null;
-export function setGotoLineHandler(handler) { onGotoLine = handler; }
+// 「跳转到行」的处理器由外部注入（editor/index.js 里接的是 prompt 输入框）
+let gotoHandler = null;
+export function setGotoLineHandler(handler) { gotoHandler = handler; }

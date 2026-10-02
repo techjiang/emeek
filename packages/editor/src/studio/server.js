@@ -12,6 +12,7 @@
  */
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleClient, bundleFailureNotice, readAsset } from './bundle.js';
@@ -45,6 +46,8 @@ const MIME = {
  *   /__studio/dict/*      中文词表（惰性，只有点了 AI 分析才会请求）
  *   /__studio/render      服务端渲染预览（可选，用于「预览=构建」的兜底校验）
  *   /__studio/upload      图片上传
+ *   /__studio/files       可编辑文件索引（emeeek dev 集成时才非空）
+ *   /__studio/file        读写内容目录内的 Markdown（GET / PUT）
  */
 export async function createStudioServer({
   port = 3000,
@@ -52,6 +55,13 @@ export async function createStudioServer({
   build,
   contentDir = null,
   uploadDir = null,
+  /**
+   * 项目根目录。给了它才开启「读写本地 Markdown 文件」（emeeek dev 集成）。
+   *
+   * 刻意做成可选：只跑 `emeeek studio` 时编辑器是纯草稿模式，
+   * 那时它没有任何理由去碰用户的磁盘。
+   */
+  projectRoot = null,
   logger = console,
 } = {}) {
   const state = {
@@ -183,6 +193,69 @@ export async function createStudioServer({
       return send(response, 200, MIME['.json'], JSON.stringify({ url: `/uploads/${safe}`, bytes: buffer.length }));
     }
 
+    /**
+     * 可编辑文件列表。
+     *
+     * 只列 contentDir 下的 .md，且只列文件名与标题 —— 编辑器侧栏要的是
+     * 「有哪些稿子」，不是完整的目录树。
+     */
+    if (pathname === '/__studio/files' && request.method === 'GET') {
+      const root = projectRoot;
+      if (!root || !contentDir) return send(response, 200, MIME['.json'], JSON.stringify({ mode: 'draft', files: [] }));
+      try {
+        const files = await listMarkdownFiles(root, contentDir);
+        return send(response, 200, MIME['.json'], JSON.stringify({ mode: 'file', root: path.basename(root), dir: path.relative(root, contentDir), files }));
+      } catch (error) {
+        return send(response, 500, MIME['.json'], JSON.stringify({ mode: 'file', files: [], error: error.message }));
+      }
+    }
+
+    /**
+     * 读一个 Markdown 文件。
+     *
+     * 路径校验是这里唯一重要的事：客户端传来的 path 绝不能读到项目目录之外。
+     * 见 resolveProjectFile —— 它做的是「解析后必须仍在 contentDir 之内」，
+     * 而不是「字符串里没有 ..」（后者挡不住符号链接和绝对路径）。
+     */
+    if (pathname === '/__studio/file' && request.method === 'GET') {
+      const target = resolveProjectFile(projectRoot, contentDir, url.searchParams.get('path'));
+      if (!target) return send(response, 400, MIME['.json'], JSON.stringify({ error: '路径不合法：只能读写内容目录内的 Markdown 文件' }));
+      try {
+        const content = await fs.readFile(target.absolute, 'utf8');
+        return send(response, 200, MIME['.json'], JSON.stringify({
+          path: target.relative,
+          content,
+          fingerprint: fingerprint(content),
+          bytes: Buffer.byteLength(content),
+        }));
+      } catch {
+        return send(response, 404, MIME['.json'], JSON.stringify({ error: `文件不存在：${target.relative}` }));
+      }
+    }
+
+    /** 写回 Markdown 文件（编辑器里 Ctrl+S 的落点）。 */
+    if (pathname === '/__studio/file' && (request.method === 'PUT' || request.method === 'POST')) {
+      const requested = request.headers['x-file-path'] ? decodeURIComponent(request.headers['x-file-path']) : url.searchParams.get('path');
+      const target = resolveProjectFile(projectRoot, contentDir, requested);
+      if (!target) return send(response, 400, MIME['.json'], JSON.stringify({ error: '路径不合法：只能读写内容目录内的 Markdown 文件' }));
+      const content = await readBody(request);
+      try {
+        await fs.mkdir(path.dirname(target.absolute), { recursive: true });
+        // 先写临时文件再 rename：中途断电/被杀不会留下一个被截断的稿件。
+        // 「草稿不丢」在这里的等价物是「文件不会写坏」。
+        const temporary = `${target.absolute}.emeeek-tmp`;
+        await fs.writeFile(temporary, content, 'utf8');
+        await fs.rename(temporary, target.absolute);
+        return send(response, 200, MIME['.json'], JSON.stringify({
+          path: target.relative,
+          bytes: Buffer.byteLength(content),
+          fingerprint: fingerprint(content),
+        }));
+      } catch (error) {
+        return send(response, 500, MIME['.json'], JSON.stringify({ error: `写入失败：${error.message}` }));
+      }
+    }
+
     if (pathname === '/__studio/status') {
       return send(response, 200, MIME['.json'], JSON.stringify({
         bundle: state.files.size ? 'ready' : state.bundleError ? 'failed' : 'pending',
@@ -197,6 +270,7 @@ export async function createStudioServer({
   }
 
   await new Promise((resolve) => server.listen(port, host, resolve));
+  // 端口传 0（测试）时真正监听到的端口才是答案 —— 用传入的 port 会拼出 :0
   const address = server.address();
   return {
     server,
@@ -230,6 +304,109 @@ function readRaw(request) {
     request.on('end', () => resolve(Buffer.concat(chunks)));
     request.on('error', reject);
   });
+}
+
+/**
+ * 列出内容目录下的 Markdown 文件。
+ *
+ * 只扫一层 + 递归但设深度上限：个人博客的 posts/ 就该是平的，
+ * 而「递归整个目录树」在用户误把 projectRoot 指到家目录时会变成灾难。
+ */
+async function listMarkdownFiles(root, contentDir, maxDepth = 3) {
+  const base = path.resolve(contentDir);
+  const out = [];
+  async function walk(dir, depth) {
+    if (depth > maxDepth) return;
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(dir, entry.name);
+      if (!path.resolve(full).startsWith(base)) continue;
+      if (entry.isDirectory()) { await walk(full, depth + 1); continue; }
+      if (!/\.(md|markdown)$/i.test(entry.name)) continue;
+      const stat = await fs.stat(full);
+      const head = await fs.readFile(full, 'utf8');
+      out.push({
+        path: path.relative(root, full).split(path.sep).join('/'),
+        name: entry.name,
+        title: firstHeading(head) || entry.name.replace(/\.md$/i, ''),
+        bytes: stat.size,
+        mtime: stat.mtimeMs,
+      });
+    }
+  }
+  await walk(base, 0);
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function firstHeading(markdown) {
+  const front = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(markdown);
+  const body = front ? markdown.slice(front[0].length) : markdown;
+  const title = /^title:\s*(.+)$/m.exec(front?.[0] ?? '');
+  if (title) return title[1].trim().replace(/^["']|["']$/g, '');
+  const heading = /^#{1,6}\s+(.+)$/m.exec(body);
+  return heading ? heading[1].trim() : '';
+}
+
+function fingerprint(text) {
+  let hash = 0x811c9dc5;
+  const value = String(text ?? '');
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${value.length.toString(36)}-${hash.toString(36)}`;
+}
+
+/**
+ * 把客户端给的路径解析成内容目录内的绝对路径。
+ *
+ * 三条防线，缺一不可：
+ *   1. 拒绝 NUL 字节（会把底层 fs 调用的路径截断）
+ *   2. 解析后必须是绝对路径，且仍在 contentDir 之内（挡 ../ 与绝对路径）
+ *   3. 真实路径（realpath）也要在之内 —— 挡符号链接指到外面
+ *
+ * @returns {null | {absolute: string, relative: string}}
+ */
+export function resolveProjectFile(projectRoot, contentDir, requested) {
+  if (!projectRoot || !contentDir || !requested || typeof requested !== 'string') return null;
+  if (requested.includes('\0')) return null;
+  const base = path.resolve(contentDir);
+  const absolute = path.resolve(projectRoot, requested);
+  if (!isInside(base, absolute)) return null;
+
+  /**
+   * 符号链接检查。
+   *
+   * 必须看**目标本身**，不能只看它的父目录 —— `posts/escape.md` 的父目录
+   * 老老实实待在 posts/ 里，而文件本身是指向 /etc/passwd 的软链。
+   * 只看 dirname 的写法放过去过一次（就是被这一组测试抓到的），
+   * 所以这里对「文件存在」与「文件不存在」两条路分别求真实路径。
+   */
+  const realBase = realpathOf(base);
+  if (!realBase) return null;
+  const realTarget = realpathOf(absolute);
+  if (realTarget) {
+    if (!isInside(realBase, realTarget)) return null;
+  } else {
+    // 文件还不存在（新建）：只要父目录的真实路径在内容目录内即可。
+    // 父目录是软链指到外面时也一并挡住。
+    const realParent = realpathOf(path.dirname(absolute));
+    if (!realParent || !isInside(realBase, realParent)) return null;
+  }
+  return { absolute, relative: path.relative(projectRoot, absolute).split(path.sep).join('/') };
+}
+
+/** realpath，失败返回 null（不存在、权限不足、路径太长都算失败）。 */
+function realpathOf(target) {
+  try { return fsSync.realpathSync.native(target); } catch { return null; }
+}
+
+function isInside(base, target) {
+  const normalized = path.resolve(base);
+  const candidate = path.resolve(target);
+  return candidate === normalized || candidate.startsWith(normalized + path.sep);
 }
 
 /**

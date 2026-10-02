@@ -109,7 +109,21 @@ body {
 .file-name { font-weight: 600; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-state { font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
 .save-state[data-state="dirty"] { color: #d29922; }
+.save-state[data-state="saving"] { color: var(--accent); }
 .save-state[data-state="saved"] { color: #3fb950; }
+.save-state[data-state="failed"], .save-state[data-state="too-large"], .save-state[data-state="quota"] { color: var(--danger); }
+.save-state[data-state="foreign-tab"] { color: #d29922; }
+
+/* 保存按钮自带状态点：不用移到状态栏也能看出存没存住 */
+#btn-save { display: inline-flex; align-items: center; gap: 6px; }
+#btn-save .save-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .5; }
+#btn-save[data-save-state="saved"] .save-dot { opacity: 1; background: #3fb950; }
+#btn-save[data-save-state="dirty"] .save-dot { opacity: 1; background: #d29922; }
+#btn-save[data-save-state="saving"] .save-dot { opacity: 1; animation: pulse 1s ease-in-out infinite; }
+#btn-save[data-save-state="failed"] .save-dot,
+#btn-save[data-save-state="too-large"] .save-dot,
+#btn-save[data-save-state="quota"] .save-dot { opacity: 1; background: var(--danger); }
+@keyframes pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 
 .segmented { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .segmented button { border: 0; border-radius: 0; padding: 4px 10px; }
@@ -187,6 +201,17 @@ body.resizing { cursor: col-resize; user-select: none; }
 #studio[data-mode="preview"] .editor-pane, #studio[data-mode="preview"] #splitter-right { display: none; }
 #studio[data-mode="preview"] { grid-template-columns: var(--nav-width, 208px) 4px 0 0 1fr; }
 
+/* ── 文件列表（emeeek dev 集成时才非空） ─────────────── */
+.file-list { padding: 6px 0; max-height: 32vh; overflow: auto; border-bottom: 1px solid var(--border); }
+.file-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 0; color: var(--fg-dim);
+  font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-item:hover { color: var(--fg); background: var(--bg-input); }
+.file-item.active { color: var(--accent); background: var(--bg-input); }
+
 /* ── 状态栏 ─────────────────────────────────────────── */
 .statusbar {
   grid-area: status;
@@ -198,6 +223,19 @@ body.resizing { cursor: col-resize; user-select: none; }
 .statusbar .sep { opacity: .4; }
 .statusbar .grow { flex: 1; }
 .statusbar .muted { opacity: .75; }
+
+/*
+ * 大文档提示。
+ *
+ * 颜色按严重度递进：notice 是提醒（黄），large/slow 是「可能有点卡」（橙）。
+ * 用文字色而不是背景块 —— 状态栏只有 26px 高，背景块会挤得看不清字。
+ */
+.perf-notice { font-size: 12px; white-space: nowrap; }
+.perf-notice[hidden] { display: none; }
+.perf-notice::before { content: "⚠ "; opacity: .7; }
+.perf-notice[data-level="notice"] { color: #d29922; }
+.perf-notice[data-level="large"] { color: #e08c3a; }
+.perf-notice[data-level="slow"] { color: #e06c75; }
 
 /* ── AI 面板 ─────────────────────────────────────────── */
 .ai-panel {
@@ -265,6 +303,30 @@ kbd {
   border-radius: 4px; padding: 0 5px; color: var(--fg);
 }
 .dialog .close { margin-top: 18px; }
+
+/* ── 草稿恢复 / 版本历史 ─────────────────────────────── */
+.dialog.small { max-width: 560px; }
+.dialog-note { color: var(--fg-dim); font-size: 12px; line-height: 1.7; margin: 0 0 12px; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.dialog-actions button {
+  font: inherit; padding: 7px 14px; cursor: pointer; border-radius: var(--radius);
+  background: var(--bg-input); color: var(--fg); border: 1px solid var(--border);
+}
+.dialog-actions button.primary { background: var(--accent); color: var(--accent-fg); font-weight: 600; border-color: transparent; }
+.recover-preview {
+  font: 12px/1.7 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; max-height: 240px; overflow: auto; color: var(--fg-dim);
+}
+.history-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow: auto; }
+.history-item { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.history-item.current { border-color: var(--accent); }
+.history-head { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; margin-bottom: 6px; }
+.history-item pre {
+  font: 12px/1.6 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+  margin: 0 0 6px; color: var(--fg-dim); max-height: 120px; overflow: hidden;
+}
+.history-empty { color: var(--fg-dim); font-size: 13px; }
 
 /* ── 移动端：能用就行，不追求完美 ────────────────────── */
 @media (max-width: 900px) {

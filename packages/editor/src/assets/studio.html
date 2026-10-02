@@ -38,8 +38,10 @@
       <button data-command="table" title="表格 Ctrl+Shift+T">▦</button>
       <button data-command="formula" title="公式 Ctrl+Shift+M">∑</button>
       <button data-command="quote" title="引用">❝</button>
-      <button data-command="list" title="无序列表">•</button>
-      <button data-command="task" title="任务列表">☑</button>
+      <button data-command="list" title="无序列表 Ctrl+Shift+U">•</button>
+      <button data-command="ordered-list" title="有序列表 Ctrl+Shift+O">1.</button>
+      <button data-command="task" title="任务列表 Ctrl+Shift+K">☑</button>
+      <button data-command="hr" title="分隔线 Ctrl+Shift+H">―</button>
       <span class="divider" aria-hidden="true"></span>
       <button data-command="h1" title="一级标题 Ctrl+Shift+1">H1</button>
       <button data-command="h2" title="二级标题 Ctrl+Shift+2">H2</button>
@@ -60,15 +62,20 @@
       </select>
       <label class="toggle" title="软换行"><input id="select-wrap" type="checkbox" checked> 换行</label>
       <button id="btn-toggle-preview" class="icon-button" title="切换预览模式 Ctrl+Shift+P">◫</button>
-      <button id="btn-save" class="primary" title="保存草稿 Ctrl+S">保存</button>
+      <button id="btn-save" class="primary" title="保存草稿 Ctrl+S" data-save-state="local"><span class="save-dot" aria-hidden="true"></span><span id="btn-save-label">保存</span></button>
+      <button id="btn-history" class="icon-button" title="草稿版本历史" aria-label="草稿版本历史">🕘</button>
       <button id="btn-copy-markdown" class="icon-button" title="复制整篇 Markdown">⧉</button>
-      <button id="btn-ai" class="ai-button" title="AI 面板">✨ AI</button>
-      <button id="btn-publish" class="publish" disabled title="发布需要连接 GitHub 仓库">发布</button>
+      <button id="btn-ai" class="ai-button" title="AI 面板 Ctrl+Shift+A">✨ AI</button>
+      <button id="btn-publish" class="publish" disabled title="发布需要连接 GitHub 仓库（Step 3）">发布</button>
     </div>
   </header>
 
   <main class="workspace">
     <aside class="outline" aria-label="目录导航">
+      <div class="panel-head">
+        <span>文件</span>
+      </div>
+      <nav id="file-list" class="file-list"></nav>
       <div class="panel-head">
         <span>目录</span>
         <span id="outline-count" class="badge">0</span>
@@ -101,8 +108,12 @@
     <span class="sep">·</span>
     <span id="stat-reading">约 1 分钟</span>
     <span class="sep">·</span>
+    <span id="stat-language" class="muted">—</span>
+    <span class="sep">·</span>
     <span id="stat-cursor">行 1, 列 1</span>
     <span id="stat-selected" class="muted"></span>
+    <span id="stat-save" class="save-state" data-state="local">本地草稿</span>
+    <span id="stat-perf" class="perf-notice" hidden></span>
     <span class="grow"></span>
     <span class="muted">预览与构建同源 · @emeeek/core</span>
     <span class="sep">·</span>
@@ -156,6 +167,24 @@
     </div>
   </aside>
 
+  <dialog id="recover-dialog" class="dialog small">
+    <h2 id="recover-title">发现未保存的草稿</h2>
+    <p id="recover-meta" class="dialog-note"></p>
+    <div id="recover-preview" class="recover-preview"></div>
+    <div class="dialog-actions">
+      <button id="btn-recover" class="primary">恢复草稿</button>
+      <button id="btn-recover-discard">丢弃草稿，重新开始</button>
+      <button id="btn-recover-cancel">先看看（暂不恢复）</button>
+    </div>
+  </dialog>
+
+  <dialog id="history-dialog" class="dialog">
+    <h2>草稿版本历史</h2>
+    <p class="dialog-note">本地保留最近 5 个版本。回退本身也是一次保存，所以回退之后还能再回退回来。</p>
+    <div id="history-list" class="history-list"></div>
+    <button class="close primary" type="button">关闭</button>
+  </dialog>
+
   <dialog id="shortcut-dialog" class="dialog">
     <h2>快捷键</h2>
     <div class="shortcut-grid">
@@ -169,6 +198,11 @@
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd><span>插入公式</span></p>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd><span>插入表格</span></p>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1/2/3</kbd><span>标题 H1/H2/H3</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd><span>无序列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd><span>有序列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd><span>任务列表</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd><span>脚注</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd><span>行内公式</span></p>
         <p><kbd>Alt</kbd>+<kbd>↑/↓</kbd><span>上下移动段落</span></p>
         <p><kbd>Ctrl</kbd>+<kbd>S</kbd><span>保存草稿</span></p>
       </div>
@@ -180,6 +214,8 @@
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd><span>切换预览模式</span></p>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd><span>切换暗色 / 亮色</span></p>
         <p><kbd>Ctrl</kbd>+<kbd>D</kbd><span>选中下一个相同词</span></p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd><span>AI 面板</span></p>
+        <p><kbd>F1</kbd><span>打开本快捷键表</span></p>
         <p><kbd>Alt</kbd>+<kbd>Click</kbd><span>多光标</span></p>
       </div>
       <div><h3>自动补全</h3>
@@ -187,6 +223,12 @@
         <p><kbd>```</kbd><span>代码块语言</span></p>
         <p><kbd>![</kbd><span>图片插入</span></p>
         <p><kbd>h2</kbd> <kbd>table</kbd><span>行首展开模板</span></p>
+      </div>
+      <div><h3>草稿</h3>
+        <p><span>停止输入 5 秒自动保存</span></p>
+        <p><span>每 30 秒兜底保存一次</span></p>
+        <p><span>本地保留最近 5 个版本，可回退</span></p>
+        <p><span>单篇上限 2MB，总计 10MB</span></p>
       </div>
     </div>
     <button class="close primary" type="button">知道了</button>

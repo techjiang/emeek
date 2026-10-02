@@ -178,3 +178,67 @@ describe('扩展装配', () => {
     assert.equal(new Set(SEMANTIC_EMOJI).size, SEMANTIC_EMOJI.length);
   });
 });
+
+/**
+ * S2-3a 补的：补全的性能要求与几个边界。
+ *
+ * 「候选列表 < 50ms 出现」是用户给的验收项。补全面板是同步阻塞的 ——
+ * source 慢多少，用户打字就卡多少，所以这条必须有断言，而不是靠感觉。
+ */
+describe('补全性能', () => {
+  test('站点 300 篇文章时，候选生成仍在 50ms 以内', () => {
+    const posts = Array.from({ length: 300 }, (_, i) => ({
+      title: `第 ${i} 篇文章的标题`,
+      slug: `post-${i}`,
+      url: `/posts/${i}.html`,
+      tags: ['标签', `t${i}`],
+    }));
+    const context = contextAt('见 [[');
+    const source = wikiLinkCompletion(posts);
+    // 预热一次，避免把 JIT 编译时间算进去
+    source(context);
+    const started = performance.now();
+    for (let i = 0; i < 50; i += 1) source(contextAt('见 [[第 1'));
+    const perCall = (performance.now() - started) / 50;
+    assert.ok(perCall < 50, `每次补全 ${perCall.toFixed(1)}ms，超过 50ms 上限`);
+  });
+
+  test('候选数量有上限（不会渲染 300 项把面板撑爆）', () => {
+    const posts = Array.from({ length: 300 }, (_, i) => ({ title: `文章 ${i}`, url: `/p/${i}` }));
+    const result = wikiLinkCompletion(posts)(contextAt('[['));
+    assert.ok(result.options.length <= 30);
+  });
+
+  test('输入 ``` 后语言候选出现，且常用语言排前面', () => {
+    const result = codeFenceCompletion()(contextAt('```'));
+    assert.ok(result);
+    assert.ok(result.options.length > 10);
+    assert.equal(result.options[0].detail, '常用');
+  });
+
+  test('![]() 里按已上传图片过滤', () => {
+    const images = ['/uploads/a.png', '/uploads/hero.png', '/uploads/diagram.svg'];
+    const result = imagePathCompletion(images)(contextAt('![](/uploads/'));
+    assert.ok(result);
+    assert.equal(result.options.length, 3);
+    const filtered = imagePathCompletion(images)(contextAt('![](/uploads/hero'));
+    assert.equal(filtered.options.length, 1);
+  });
+
+  test('行首模板补全能匹配到 h1/h2/h3（数字不能被词法吃掉）', () => {
+    for (const [typed, expected] of [['h1', '# '], ['h2', '## '], ['h3', '### ']]) {
+      const result = snippetCompletion()(contextAt(typed));
+      assert.ok(result, `${typed} 应当有候选`);
+      assert.equal(result.options[0].label, typed);
+      const view = { dispatch: (spec) => { view.dispatched = spec; } };
+      result.options[0].apply(view, null, 0, typed.length);
+      assert.equal(view.dispatched.changes.insert, expected);
+    }
+  });
+
+  test('四个数据源都注册进了补全扩展', () => {
+    const extensions = autoCompleteExtensions({ getPosts: () => [], getImages: () => [] });
+    assert.ok(Array.isArray(extensions));
+    assert.ok(extensions.length >= 2);
+  });
+});

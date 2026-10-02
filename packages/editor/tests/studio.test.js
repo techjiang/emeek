@@ -174,3 +174,134 @@ describe('Studio HTTP 服务', () => {
     }
   });
 });
+
+/**
+ * 项目文件读写（emeeek dev 集成 + 防目录穿越）。
+ *
+ * 这一组测试的重点不是「能不能读写」，而是**读不到不该读的东西**。
+ * 编辑器的 path 参数来自 URL，URL 来自用户（或用户点开的链接）。
+ * 只要它能在项目目录外读到一个文件，这就是一个任意文件读取漏洞 ——
+ * 所以「..」「绝对路径」「符号链接」三种绕法都要各有一条断言。
+ */
+describe('项目文件 API', () => {
+  let root;
+  let posts;
+  let instance;
+  let base;
+
+  before(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-files-'));
+    posts = path.join(root, 'posts');
+    fs.mkdirSync(posts, { recursive: true });
+    fs.writeFileSync(path.join(posts, '2024-01-01-hello.md'), '---\ntitle: 你好世界\n---\n\n# 你好\n\n正文一。\n');
+    fs.writeFileSync(path.join(posts, 'draft-note.md'), '# 草稿笔记\n\n还没写完。\n');
+    fs.mkdirSync(path.join(posts, 'nested'));
+    fs.writeFileSync(path.join(posts, 'nested', 'deep.md'), '# 深层文章\n');
+    // 项目目录外的秘密文件 —— 任何情况下都不该被读到
+    fs.writeFileSync(path.join(root, 'secret.txt'), 'TOP-SECRET');
+
+    instance = await createStudioServer({
+      port: 0,
+      host: '127.0.0.1',
+      projectRoot: root,
+      contentDir: posts,
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    base = `http://127.0.0.1:${instance.port}`;
+  });
+
+  after(async () => {
+    await instance?.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  test('GET /__studio/files 列出内容目录里的 Markdown', async () => {
+    const res = await fetch(`${base}/__studio/files`);
+    assert.equal(res.status, 200);
+    const payload = await res.json();
+    const paths = payload.files.map((f) => f.path);
+    assert.ok(paths.includes('posts/2024-01-01-hello.md'));
+    assert.ok(paths.includes('posts/nested/deep.md'), '子目录里的也要列出来');
+    assert.ok(paths.every((p) => p.endsWith('.md')));
+  });
+
+  test('列表里的标题从 front-matter 或首个标题取，不用文件名凑数', async () => {
+    const { files } = await (await fetch(`${base}/__studio/files`)).json();
+    const hello = files.find((f) => f.path.endsWith('2024-01-01-hello.md'));
+    assert.equal(hello.title, '你好世界');
+    const note = files.find((f) => f.path.endsWith('draft-note.md'));
+    assert.equal(note.title, '草稿笔记');
+  });
+
+  test('GET /__studio/file 读文件，带指纹', async () => {
+    const res = await fetch(`${base}/__studio/file?path=${encodeURIComponent('posts/draft-note.md')}`);
+    assert.equal(res.status, 200);
+    const file = await res.json();
+    assert.match(file.content, /还没写完/);
+    assert.ok(file.fingerprint);
+  });
+
+  test('PUT /__studio/file 写回文件（原子替换）', async () => {
+    const res = await fetch(`${base}/__studio/file`, {
+      method: 'PUT',
+      headers: { 'content-type': 'text/markdown', 'x-file-path': encodeURIComponent('posts/draft-note.md') },
+      body: '# 写完了\n\n新正文。\n',
+    });
+    assert.equal(res.status, 200);
+    const result = await res.json();
+    assert.equal(fs.readFileSync(path.join(posts, 'draft-note.md'), 'utf8'), '# 写完了\n\n新正文。\n');
+    assert.ok(result.fingerprint);
+    // 临时文件不能留下 —— 否则用户目录里会攒一地 .emeeek-tmp
+    assert.ok(!fs.readdirSync(posts).some((name) => name.includes('emeeek-tmp')));
+  });
+
+  test('拒绝目录穿越：../ 读不到项目外', async () => {
+    for (const attempt of ['../secret.txt', 'posts/../../secret.txt', '..%2Fsecret.txt', '/etc/passwd']) {
+      const res = await fetch(`${base}/__studio/file?path=${encodeURIComponent(attempt)}`);
+      assert.ok(res.status === 400 || res.status === 404, `${attempt} 应当被拒绝，实际 ${res.status}`);
+      if (res.status === 200) assert.fail(`${attempt} 读到了文件内容`);
+    }
+  });
+
+  test('拒绝通过符号链接绕出去', async () => {
+    const link = path.join(posts, 'escape.md');
+    try {
+      fs.symlinkSync(path.join(root, 'secret.txt'), link);
+    } catch { return; } // 平台不支持符号链接（Windows 无权限）时跳过
+    const res = await fetch(`${base}/__studio/file?path=${encodeURIComponent('posts/escape.md')}`);
+    assert.notEqual(res.status, 200, '符号链接指向项目外时必须拒绝');
+    fs.unlinkSync(link);
+  });
+
+  test('NUL 字节被拒绝（它会在 fs 层截断路径）', async () => {
+    const res = await fetch(`${base}/__studio/file?path=${encodeURIComponent('posts/a.md\u0000.txt')}`);
+    assert.equal(res.status, 400);
+  });
+
+  test('没有 projectRoot 时退回草稿模式，不暴露任何磁盘接口', async () => {
+    const draftOnly = await createStudioServer({
+      port: 0, host: '127.0.0.1',
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    try {
+      const list = await (await fetch(`http://127.0.0.1:${draftOnly.port}/__studio/files`)).json();
+      assert.equal(list.mode, 'draft');
+      assert.deepEqual(list.files, []);
+      const read = await fetch(`http://127.0.0.1:${draftOnly.port}/__studio/file?path=posts/x.md`);
+      assert.equal(read.status, 400, '纯 studio 模式下不该有任何文件可读');
+    } finally {
+      await draftOnly.close();
+    }
+  });
+
+  test('resolveProjectFile 是纯函数式的守门人，可单独断言', async () => {
+    const { resolveProjectFile } = await import('../src/studio/server.js');
+    const inside = resolveProjectFile(root, posts, 'posts/a.md');
+    assert.ok(inside);
+    assert.equal(inside.relative, 'posts/a.md');
+    assert.equal(resolveProjectFile(root, posts, '../secret.txt'), null);
+    assert.equal(resolveProjectFile(root, posts, ''), null);
+    assert.equal(resolveProjectFile(root, posts, null), null);
+    assert.equal(resolveProjectFile(null, posts, 'posts/a.md'), null, '没有 projectRoot 时一律拒绝');
+  });
+});
