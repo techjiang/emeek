@@ -144,6 +144,18 @@ try:
             }""",
             marker,
         )
+        # 「落盘」的**目的地取决于模式**，这一点必须问页面自己，不能由测试假定。
+        #
+        # 打开着磁盘文件时，落盘 = 写回文件，且**刻意不**再往 localStorage 抄一份
+        # （client.js persist()：文件模式信任文件，草稿模式信任草稿，两者不重叠）；
+        # 只有草稿模式才写 localStorage。
+        #
+        # 这条断言原来只看 localStorage，是 PR #4 时期写的 —— 那时 studio 还没有
+        # projectRoot，一律草稿模式，所以它碰巧成立。PR #5 给 studio 开了
+        # projectRoot，默认就打开磁盘文件，于是同一个「隐藏瞬间落盘」的正确行为
+        # 变成了断言失败：**行为没坏，是断言绑错了地方**。
+        # 正确写法是先取当前模式，再去看那个模式该写的那一侧。
+        mode = page.evaluate("() => ({ filePath: window.__studio.state.filePath })")
         # 立刻隐藏 —— 不等 5 秒空闲，也不等 30 秒兜底（两者都"没到时间"）
         page.evaluate(
             """() => {
@@ -151,13 +163,62 @@ try:
                 document.dispatchEvent(new Event('visibilitychange'));
             }"""
         )
-        stored = page.evaluate(
+        # 给写回文件留出时间（写文件是异步的，localStorage 是同步的）
+        page.wait_for_timeout(1500)
+        if mode["filePath"]:
+            # 文件模式：内容必须已写回那个文件
+            on_disk = ""
+            candidate = os.path.join(work, mode["filePath"])
+            if os.path.exists(candidate):
+                with open(candidate, encoding="utf-8") as fh:
+                    on_disk = fh.read()
+            check("标签页隐藏的瞬间已落盘（文件模式：写回磁盘，不等 5s/30s 定时器）",
+                  marker in on_disk,
+                  "" if marker in on_disk else f"隐藏后磁盘 {mode['filePath']} 里找不到刚敲的内容")
+        else:
+            stored = page.evaluate(
+                """() => Object.keys(localStorage)
+                    .filter((k) => k.startsWith('emeeek:draft:') && !k.includes(':v'))
+                    .map((k) => localStorage.getItem(k)).join('\\n')"""
+            )
+            check("标签页隐藏的瞬间已落盘（草稿模式：写 localStorage，不等 5s/30s 定时器）",
+                  marker in stored,
+                  "" if marker in stored else "隐藏后 localStorage 里找不到刚敲的内容")
+
+        # ── 1a. 草稿模式下走另一条落盘目的地 ────────────────────────
+        #
+        # 上面那条只覆盖了文件模式。两种模式的落盘目的地是**不同**的
+        # （文件 → 磁盘；草稿 → localStorage），只测一边就等于漏掉一半。
+        # 这里用一个读不到的文件名把页面逼进草稿模式，确认隐藏瞬间写的是
+        # localStorage 那一侧。
+        draft_page = context.new_page()
+        draft_page.goto(url + "?file=posts/__not-on-disk__.md")
+        draft_page.wait_for_selector("#studio:not([hidden])", timeout=30000)
+        draft_page.evaluate("() => document.querySelectorAll('dialog[open]').forEach(d => d.close())")
+        draft_marker = "DRAFTMODE-" + str(int(time.time()))
+        draft_page.evaluate(
+            """(text) => {
+                const view = window.__studio.editor.view;
+                view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '# ' + text + '\\n\\n正文\\n' } });
+            }""",
+            draft_marker,
+        )
+        draft_mode = draft_page.evaluate("() => window.__studio.state.filePath")
+        draft_page.evaluate(
+            """() => {
+                Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+                document.dispatchEvent(new Event('visibilitychange'));
+            }"""
+        )
+        draft_stored = draft_page.evaluate(
             """() => Object.keys(localStorage)
                 .filter((k) => k.startsWith('emeeek:draft:') && !k.includes(':v'))
                 .map((k) => localStorage.getItem(k)).join('\\n')"""
         )
-        check("标签页隐藏的瞬间已落盘（不等 5s/30s 定时器）", marker in stored,
-              "" if marker in stored else "隐藏后 localStorage 里找不到刚敲的内容")
+        check("草稿模式（无磁盘文件）隐藏瞬间写 localStorage（与文件模式目的地不同）",
+              draft_mode is None and draft_marker in draft_stored,
+              f"filePath={draft_mode!r}，命中={draft_marker in draft_stored}")
+        draft_page.close()
 
         # ── 1b. 真的用 CDP 冻结页面，看定时器是不是真的停了 ──────────
         #

@@ -140,5 +140,17 @@ weaken "会话级 Key 仍走服务端转发" \
   "s|      if (!effective?.apiKey) {|      if (true) {|" \
   'node --test packages/editor/tests/keyring.test.js'
 
+# 18. e2e 的落盘目的地断言：把「隐藏瞬间落盘」的触发摘掉。
+#
+# 这一条针对的是 e2e 自身的一个真实教训：那条断言原来只认 localStorage，
+# 而 PR #5 给 studio 开了 projectRoot 之后落盘目的地变成了磁盘 ——
+# 行为是对的，断言绑错了地方，结果 e2e 变红而负向验证却是绿的
+# （削弱代码它也不会变红，因为它根本没在看对的地方）。
+# 现在两种模式各有一条断言，这里确认削弱后确实会红。
+weaken "隐藏瞬间落盘（visibilitychange 触发）" \
+  packages/editor/src/studio/drafts.js \
+  "s|      if (targets.document.visibilityState === 'hidden') flush('hidden');|      if (false) flush('hidden');|" \
+  'node --test packages/editor/tests/drafts.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -3,3 +3,7 @@ dist/
 .emeeek/
 *.log
 .DS_Store
+
+# e2e 用的 Python 驱动会生成字节码；它是机器相关的构建产物，不该进仓库。
+__pycache__/
+*.pyc
