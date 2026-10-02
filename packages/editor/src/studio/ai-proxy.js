@@ -85,10 +85,16 @@ export async function runProxiedTask({ input, task, options = {}, server, fetchI
   }
 }
 
-/** 服务端状态：只暴露「有没有」，不暴露值。 */
+/**
+ * 服务端状态：只暴露「有没有」，不暴露值。
+ *
+ * 刻意**不回 `from`**（那个环境变量名）—— 它会把「这台机器是怎么配的」
+ * 告诉任何能打开这个页面的人，而这对使用者毫无用处。
+ * 「谁配的、从哪个变量读的」是运维信息，不是界面信息。
+ */
 export function serverKeyStatus(server) {
   if (!server) return { configured: false, provider: null, model: null };
-  return { configured: true, provider: server.provider, model: server.model, from: server.from };
+  return { configured: true, provider: server.provider, model: server.model };
 }
 
 /** 给日志用的单行描述 —— 永远不含 Key 本身。 */

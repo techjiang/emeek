@@ -100,6 +100,19 @@ export async function doctor({ cwd, flags }) {
 
     // 8. site.url 与部署目标
     check('站点地址', config.site.url !== 'https://example.com', config.site.url, '改成真实域名，否则 sitemap 与 RSS 里的链接不可用');
+
+    /**
+     * 9. 插件：加载成功与被拒的各列一行。
+     *
+     * 被拒的插件必须在这里可见 —— 它们的表现是「装了但什么都没发生」，
+     * 而那条日志埋在构建输出里通常会被几百行进度盖过去。
+     */
+    const { loadPlugins } = await import('@emeeek/core');
+    const plugins = await loadPlugins(config, root, { logger: { info: () => {}, warn: () => {}, error: () => {} } });
+    if (plugins.length) check('已加载插件', true, plugins.map((p) => `${p.name}（${[...p.capabilities ?? []].join(', ') || '无能力声明'}）`).join('、'), null);
+    for (const rejected of plugins.rejected ?? []) {
+      check(`插件 ${rejected.name}`, false, rejected.reason, '检查 manifest 的 capabilities，或把插件放到项目内');
+    }
   }
 
   logger.raw('');

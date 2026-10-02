@@ -14,6 +14,9 @@ export { makeExcerpt, readingTime, countWords } from './pipeline/transform/excer
 export { loadTheme } from './pipeline/render/theme.js';
 export { writeOutput, finalizeHtml } from './pipeline/render/output.js';
 export { logger } from './util/logger.js';
+export { loadPlugins, pluginApi } from './plugin/loader.js';
+export { createHookRunner } from './plugin/hooks.js';
+export { CAPABILITIES, HOOK_CAPABILITY, FORBIDDEN_CAPABILITIES, normalizeCapabilities, createCapabilityGuard, stripSecrets, CapabilityError } from './plugin/capabilities.js';
 export { AIService, createProvider, resolveProviders } from './ai/registry.js';
 export { AITask, AIQuality, AISource, AIError, AIErrorCode, TASK_CAPABILITIES } from './ai/types.js';
 export { LocalSummarizer, ReadabilityAnalyzer, LocalSEOAnalyzer, LocalProvider } from './ai/index.js';

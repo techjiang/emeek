@@ -26,6 +26,42 @@ const PAGES = [
   ['404 页', '/404.html'],
 ];
 
+/**
+ * 移动端模拟（决策 D3 的性能门禁）。
+ *
+ * **分开记录，不合并成一张表** —— 合并之后「桌面 100、移动 82」会被一句
+ * 「平均 91」盖过去，而移动端才是大多数读者真正打开页面的设备。
+ *
+ * 阈值比桌面低（90 vs 95），理由写在这里而不是藏进代码：
+ * 移动端模拟会施加 4G 网络 + 4 倍 CPU 降速，首屏多出 200-400ms 是设备
+ * 与网络的真实差异，不是回归。要区分「模拟环境的固有差异」与「我们变慢了」，
+ * 判据只能是基线对比 —— 所以下面记住的分数是**基线**，跌了要解释。
+ */
+const MOBILE = [
+  ['首页', '/'],
+  ['文章页', '/posts/why-emeeek.html'],
+  ['语法页', '/posts/markdown-syntax.html'],
+  ['性能页', '/posts/performance-notes.html'],
+  ['归档页', '/archive.html'],
+  ['标签页', '/tags.html'],
+  ['关于页', '/about.html'],
+  ['404 页', '/404.html'],
+];
+
+/** 已知的移动端基线（本阶段实测）。跌了要有解释，没解释就是回归。 */
+export const MOBILE_BASELINE = Object.freeze({
+  '首页': 100,
+  '文章页': 100,
+  '语法页': 100,
+  '性能页': 100,
+  '归档页': 100,
+  '标签页': 100,
+  '关于页': 100,
+  '404 页': 100,
+});
+
+export const MOBILE_THRESHOLD = 90;
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
 
 async function main() {
@@ -38,9 +74,10 @@ async function main() {
   console.log(`▸ 静态服务器 http://localhost:${PORT}\n`);
 
   const rows = [];
+  const mobileRows = [];
   try {
     for (const [label, url] of PAGES) {
-      process.stdout.write(`▸ ${label}…`);
+      process.stdout.write(`▸ 桌面 ${label}…`);
       const report = await lighthouse(`http://localhost:${PORT}${url}`);
       const c = report.categories;
       const a = report.audits;
@@ -57,6 +94,22 @@ async function main() {
       ]);
       console.log(' 完成');
     }
+
+    for (const [label, url] of MOBILE) {
+      process.stdout.write(`▸ 移动 ${label}…`);
+      const report = await lighthouse(`http://localhost:${PORT}${url}`, { mobile: true });
+      const c = report.categories;
+      mobileRows.push([
+        label,
+        Math.round(c.performance.score * 100),
+        Math.round(c.accessibility.score * 100),
+        Math.round(c['best-practices'].score * 100),
+        Math.round(c.seo.score * 100),
+        report.audits['first-contentful-paint'].displayValue,
+        report.audits['largest-contentful-paint'].displayValue,
+      ]);
+      console.log(' 完成');
+    }
   } finally {
     server.close();
   }
@@ -65,10 +118,42 @@ async function main() {
   console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const row of rows) console.log(`| ${row.join(' | ')} |`);
 
+  console.log('\n### 移动端模拟（4G + 4x CPU 降速，单独记录）\n');
+  console.log('| 页面 | Performance | Accessibility | Best Practices | SEO | FCP | LCP |');
+  console.log('| --- | --- | --- | --- | --- | --- | --- |');
+  for (const row of mobileRows) console.log(`| ${row.join(' | ')} |`);
+
   const worst = Math.min(...rows.flatMap((r) => r.slice(1, 5)));
-  console.log(`\n最低分：${worst}`);
+  const worstMobile = Math.min(...mobileRows.flatMap((r) => r.slice(1, 5)));
+  console.log(`\n桌面最低分：${worst}（阈值 95）`);
+  console.log(`移动最低分：${worstMobile}（阈值 ${MOBILE_THRESHOLD}）`);
+
   if (worst < 95) {
-    console.error('✖ 低于 95 分阈值，性能出现倒退');
+    console.error('✖ 桌面分数低于 95，性能出现倒退');
+    process.exitCode = 1;
+  }
+  if (worstMobile < MOBILE_THRESHOLD) {
+    console.error(`✖ 移动分数低于 ${MOBILE_THRESHOLD}，性能出现倒退`);
+    process.exitCode = 1;
+  }
+
+  // 与基线逐页对比：**跌了必须解释**。没有解释的下跌就是回归。
+  console.log('\n移动端与基线对比（基线见 scripts/lighthouse.mjs 的 MOBILE_BASELINE）：');
+  let regressions = 0;
+  for (const row of mobileRows) {
+    const label = row[0];
+    const baseline = MOBILE_BASELINE[label];
+    if (baseline === undefined) continue;
+    const delta = row[1] - baseline;
+    if (delta < 0) {
+      regressions += 1;
+      console.log(`  ✘ ${label}：${baseline} → ${row[1]}（-${-delta}）`);
+    } else {
+      console.log(`  ✔ ${label}：${baseline} → ${row[1]}`);
+    }
+  }
+  if (regressions) {
+    console.error(`✖ ${regressions} 个页面低于移动端基线，需要在 PR 里解释原因`);
     process.exitCode = 1;
   }
 }
@@ -98,11 +183,15 @@ function createServer(dist) {
   });
 }
 
-function lighthouse(url) {
+function lighthouse(url, { mobile = false } = {}) {
   return new Promise((resolve, reject) => {
     const args = [
       'lighthouse', url,
       '--only-categories=performance,accessibility,best-practices,seo',
+      // 默认（不给任何 preset）就是移动端模拟；桌面要显式声明。
+      // 别写 `--preset=desktop=false` —— lighthouse 只接受
+      // perf / experimental / desktop 三个值，`desktop=false` 会直接报错退出。
+      ...(mobile ? [] : ['--preset=desktop']),
       '--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu',
       '--output=json', '--output-path=stdout', '--quiet',
     ];

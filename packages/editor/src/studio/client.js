@@ -15,8 +15,11 @@ import { fetchDictionaryBytes } from '../editor/dict.js';
 import { createLocalAIService } from '../ai/bridge.js';
 import { editorStats } from '../editor/stats.js';
 import { byteLength, statusState, formatBytes } from '../editor/statusbar.js';
-import { DraftStore, createAutoSaver } from './drafts.js';
+import { DraftStore, createAutoSaver, isMobileLike, DRAFT_LIMITS } from './drafts.js';
 import { WELCOME } from './welcome.js';
+import { SHORTCUTS, TOUCH_ALTERNATIVES, groupShortcuts, findShortcut, matchesShortcut } from './shortcuts.js';
+import { decideSync, SYNC_DECISION, connectReloadStream } from './sync.js';
+import { KeyStore, KEY_STORAGE, KEY_STORAGE_LABEL } from './keyring.js';
 
 /** 当前编辑器实例。目录点击等回调需要它，而实例在 boot() 里才创建。 */
 let editorRef = null;
@@ -55,6 +58,14 @@ const state = {
   /** 服务端提供的可编辑文件索引（emeeek dev 集成时非空）。 */
   available: [],
   autoSave: null,
+  /** 是否按移动端策略跑（更短的兜底间隔、触屏替代入口）。 */
+  mobile: false,
+  /** 磁盘变更通道（只在文件模式下存在）。 */
+  sync: null,
+  /** API Key 仓库（决策 D1）。 */
+  keys: null,
+  /** 当前 Key 状态（四档之一）。 */
+  keyStatus: null,
 };
 
 /**
@@ -157,8 +168,11 @@ async function boot() {
   bindLayout();
   bindKeyboardShortcuts();
   bindAiPanel();
+  state.keys = createKeyStore();
   bindRecoveryDialog();
   bindHistoryDialog();
+  renderKeyState();
+  startDiskSync();
   applyTheme(state.theme);
   cycleMode(state.mode);
   startAutoSave();
@@ -215,25 +229,156 @@ async function boot() {
   }
 
   /**
-   * 自动保存调度。
+   * 磁盘变更同步（决策 D4）。
    *
-   * 两条触发线缺一不可：停止输入 5 秒覆盖「写一段停一停」的绝大多数节奏，
-   * 每 30 秒兜底覆盖「连续打字十分钟一次都没停」的情况。
-   * Ctrl+S 是第三条线：立即落盘。
+   * 立场与 S2-3a 完全一致，这里只是让它对新入口生效：
+   *   本地干净 → 刷新（磁盘是唯一真相）
+   *   本地脏   → 提示、两边都留、不自动合并
+   *
+   * 判断在哪一侧做：**决策在编辑器**。服务端只推「磁盘变了」这个事实，
+   * 因为它不知道本地脏不脏。服务端替它决定就成了自动刷新 ——
+   * 那种「你的改动被静默丢弃」的体验正是这一条要避免的。
+   */
+  function startDiskSync() {
+    if (!state.filePath) return;   // 草稿模式没有磁盘可同步
+    state.sync = connectReloadStream({
+      /**
+       * 通道用 studio 自己的 `/__studio/sync`。
+       *
+       * 默认值 `/__emeeek/reload` 是 dev server 那条 —— 它只推「变了」，
+       * 不带磁盘指纹，拿它做同步决策会一路退化成 noop（sync 静默失效，
+       * 而日志里一切正常：这个坑值得写下来）。
+       */
+      url: '/__studio/sync',
+      onMessage: async (payload) => {
+        // 编辑器自己保存触发的事件会走到这里：此时内容一致，决策是 noop
+        const local = editor.getText();
+        let decision = decideSync({
+          localDirty: state.autoSave?.dirty ?? false,
+          localFingerprint: fingerprint(local),
+          remoteFingerprint: payload.fingerprint ?? null,
+          currentRemote: state.remote?.fingerprint ?? null,
+        });
+        // 服务端能拿到磁盘指纹，用它复核一次 —— 两边都算同一件事
+        try {
+          const response = await fetch('/__studio/sync/decide', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              localDirty: state.autoSave?.dirty ?? false,
+              localFingerprint: fingerprint(local),
+              remoteFingerprint: payload.fingerprint ?? null,
+              currentRemote: state.remote?.fingerprint ?? null,
+            }),
+          });
+          if (response.ok) decision = await response.json();
+        } catch { /* 服务端不可达时用本地判断，不阻断 */ }
+
+        if (decision.decision === SYNC_DECISION.NOOP) return;
+        if (decision.decision === SYNC_DECISION.CONFLICT) {
+          showSyncConflict(decision.message);
+          return;
+        }
+        // 本地干净：把磁盘内容取回来，不刷新整页（刷新会丢掉 AI 面板状态等）
+        try {
+          const file = await vault.read(state.filePath);
+          editor.setText(file.content);
+          state.remote = { id: `file:${file.path}`, kind: 'local-file', fingerprint: file.fingerprint };
+          state.bytes = byteLength(file.content);
+          setSaveState('saved');
+          renderOutline();
+        } catch (error) {
+          console.warn(`[studio] 拉取磁盘内容失败：${error.message}`);
+        }
+      },
+      onError: () => { /* EventSource 自己重连；这里不插手 */ },
+    });
+    state.sync.start();
+  }
+
+  function showSyncConflict(message) {
+    const output = $('#ai-output');
+    if (!output) return;
+    output.classList.add('visible');
+    output.innerHTML = `<div class="ai-error"><strong>磁盘上的文件变了</strong>
+      <p>${escapeHtml(message)}</p>
+      <p class="hint">没有自动合并 —— 那是把「谁的内容对」这个判断从你手里拿走。要覆盖就先「复制 Markdown」备份，再手动粘回去。</p></div>`;
+  }
+
+  /**
+   * 自动保存调度（决策 D3）。
+   *
+   * 三条触发线的分工写在 drafts.js 的注释里，这里只说**为什么之前是错的**：
+   *
+   * 上一版只有「5 秒空闲 + 30 秒兜底 + beforeunload」，三条全押在定时器与
+   * beforeunload 上。而移动端切后台会冻结定时器，beforeunload 又经常不触发 ——
+   * 结果就是「切出去接个电话，回来稿子退回 5 秒前」，中间每一次自动保存都没跑。
+   *
+   * 现在把 `visibilitychange` / `pagehide` 交给 createAutoSaver 统一绑定：
+   * 落盘时机只在一处实现，测试可以注入假事件验证，生产用真的 document/window。
    */
   function startAutoSave() {
     if (state.autoSave) return;
+    state.mobile = detectMobile();
     state.autoSave = createAutoSaver({
       store,
       filename: state.filename,
       save: (reason) => persist(reason),
+      mobile: state.mobile,
+      events: { document, window },
     });
     state.autoSave.start();
-    // 关页/切到后台也可能丢内容，能写就写一次 —— 成本就是一次同步写。
-    window.addEventListener('beforeunload', () => { if (state.autoSave.dirty) state.autoSave.flush('unload'); });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && state.autoSave.dirty) state.autoSave.flush('hidden');
+    applyMobileLayout();
+  }
+
+  /** 移动端判定：视口宽度 + 触摸能力（UA 嗅探会把 iPad 当成桌面）。 */
+  function detectMobile() {
+    return isMobileLike({
+      width: window.innerWidth ?? 0,
+      maxTouchPoints: navigator.maxTouchPoints ?? 0,
+      coarsePointer: window.matchMedia?.('(pointer: coarse)')?.matches ?? false,
     });
+  }
+
+  /**
+   * 移动端布局补偿。
+   *
+   * 三件事，都是「不做就会出问题」：
+   *   1. 把 `--vvh` 设成 visualViewport 的高度 —— 软键盘弹出时布局视口不变，
+   *      不这么做光标会被键盘挡住
+   *   2. 转屏后重算高度 —— 否则编辑区还停在转屏前的尺寸
+   *   3. 聚焦时把光标所在位置滚进可视区 —— 浏览器只保证「不离谱」，
+   *      不保证「光标可见」
+   */
+  function applyMobileLayout() {
+    const syncViewport = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--vvh', `${Math.round(height)}px`);
+    };
+    syncViewport();
+    window.visualViewport?.addEventListener?.('resize', syncViewport);
+    window.visualViewport?.addEventListener?.('scroll', ensureCursorVisible);
+    window.addEventListener('orientationchange', () => {
+      // 转屏后有两帧的中间态，等一拍再算 —— 立刻算会拿到旧尺寸
+      setTimeout(syncViewport, 120);
+      setTimeout(() => editorRef?.focus?.(), 160);
+    });
+    window.addEventListener('resize', () => {
+      state.mobile = detectMobile();
+      syncViewport();
+      ensureCursorVisible();
+    });
+  }
+
+  /** 把编辑器的光标行滚进可视区。软键盘遮挡时这一步是唯一能让用户看见光标的手段。 */
+  function ensureCursorVisible() {
+    const cursor = document.querySelector('.cm-cursor') ?? document.querySelector('.cm-content');
+    if (!cursor?.scrollIntoView) return;
+    const rect = cursor.getBoundingClientRect?.();
+    if (!rect) return;
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    // 只在真的越界时滚，否则每次按键都会重排一次
+    if (rect.bottom > height - 24 || rect.top < 0) cursor.scrollIntoView({ block: 'nearest' });
   }
 
   /**
@@ -588,61 +733,267 @@ async function boot() {
     });
   }
 
+  /**
+   * 全局快捷键（决策 D5）。
+   *
+   * 绑定的依据不是一份硬编码的 if 链，而是 shortcuts.js 的**声明表** ——
+   * 表里每一条都有 handler，handler 表里每一条也都在表里。
+   * 审计脚本（scripts/check-shortcuts.mjs）核对的正是这份表与这里的关系。
+   *
+   * 编辑器内的键位（CodeMirror keymap）不在这里 —— 那些跟着焦点走，
+   * 表里以 handler:'editor' 标注，审计时去 editor/commands.js 核对。
+   */
   function bindKeyboardShortcuts() {
-    // 全局（非编辑器内）快捷键：在输入框里打字不该触发 Ctrl+S
     document.addEventListener('keydown', (event) => {
-      const inField = /input|textarea/i.test(event.target.tagName);
-      if (inField) return;
+      // 在输入框里打字不该触发 Ctrl+S，但功能键（F1）例外 ——
+      // 用户在任何地方按 F1 都是想要帮助
+      const inField = /input|textarea/i.test(event.target?.tagName ?? '');
+      if (inField && event.key !== 'F1') return;
+
       if (event.key === 'Escape') {
         $('#ai-panel')?.classList.remove('open');
         document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
         return;
       }
-      // F1 打开快捷键表。这是「忘了键位」时唯一的入口，必须一直在。
-      if (event.key === 'F1' || (event.key === '/' && (event.ctrlKey || event.metaKey))) {
-        event.preventDefault();
-        $('#shortcut-dialog')?.showModal();
+
+      const declared = findShortcut(event);
+      if (!declared) return;
+      const handler = GLOBAL_HANDLERS[declared.id];
+      if (!handler) {
+        // 声明了却没有 handler：这是缺陷，不是「静默无事发生」。
+        // 审计脚本会把它变红，运行时这里也留一条能定位的告警。
+        console.warn(`[studio] 快捷键 ${declared.keys}（${declared.id}）声明了但没有 handler`);
         return;
       }
-      // Ctrl+Shift+A 开 AI 面板：这是面板唯一的键盘入口，
-      // 没有它的话触屏以外就只能用鼠标点右上角
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod && event.shiftKey && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        $('#ai-panel')?.classList.toggle('open');
-        $('#ai-close')?.focus();
-      }
+      event.preventDefault();
+      handler(event);
     });
     on('#shortcut-dialog .close', 'click', () => $('#shortcut-dialog').close());
+    on('#btn-shortcuts', 'click', () => openShortcutDialog());
+    on('#btn-mobile-help', 'click', () => openShortcutDialog());
+    renderShortcutDialog();
   }
 
-  /** AI 面板：本期只有框架 + 只读的本地分析。 */
+  /**
+   * 全局快捷键的 handler 表。
+   *
+   * 键 = shortcuts.js 里声明条的 id。审计脚本会双向核对：
+   *   表里有 id、这里没有 → 红（这是 Ctrl+G 那一类）
+   *   这里有 id、表里没有 → 红（用户永远不知道有这个键位）
+   */
+  const GLOBAL_HANDLERS = {
+    save: () => saveDraft(),
+    'goto-line': () => {
+      const answer = globalThis.prompt?.('跳转到行号', '1');
+      if (answer) editor.jumpToLine(Number(answer));
+    },
+    'toggle-preview': () => cycleMode(),
+    'toggle-theme': () => toggleTheme(),
+    'ai-panel': () => {
+      $('#ai-panel')?.classList.toggle('open');
+      $('#ai-close')?.focus();
+    },
+    help: () => openShortcutDialog(),
+  };
+
+  function openShortcutDialog() {
+    const dialog = $('#shortcut-dialog');
+    if (!dialog?.showModal) return;
+    renderShortcutDialog();
+    dialog.showModal();
+  }
+
+  /**
+   * F1 表由声明表渲染。
+   *
+   * 手写一份 HTML 就会与实现分叉 —— 那份 HTML 正是 Ctrl+G 出现的地方。
+   * 现在唯一的数据源是 shortcuts.js，渲染只是它的一个消费者。
+   */
+  function renderShortcutDialog() {
+    const grid = $('#shortcut-grid');
+    if (!grid || grid.dataset.rendered === '1') return;
+    grid.dataset.rendered = '1';
+    grid.innerHTML = groupShortcuts().map((group) => `
+      <div>
+        <h3>${escapeHtml(group.name)}</h3>
+        ${group.items.map((item) => `
+          <p data-shortcut="${escapeHtml(item.id)}">
+            ${item.keys.split('+').map((part) => `<kbd>${escapeHtml(part)}</kbd>`).join('+')}
+            <span>${escapeHtml(item.label)}</span>
+          </p>`).join('')}
+      </div>`).join('');
+
+    const touch = $('#shortcut-touch');
+    if (touch) {
+      touch.innerHTML = `
+        <h3>触屏替代</h3>
+        <p class="dialog-note">触屏没有功能键。下面是同一件事在触屏上怎么做 —— 做不到的如实写「没有等价入口」，不假装可用。</p>
+        <ul class="touch-list">
+          ${TOUCH_ALTERNATIVES.map((item) => `<li><strong>${escapeHtml(item.action)}</strong>：${escapeHtml(item.via)}${item.note ? `<span class="hint">（${escapeHtml(item.note)}）</span>` : ''}</li>`).join('')}
+        </ul>`;
+    }
+
+    // 草稿那一栏是动态的：间隔按当前是桌面还是移动端显示，不写死
+    grid.insertAdjacentHTML('beforeend', `
+      <div>
+        <h3>草稿</h3>
+        <p><span>停止输入 ${Math.round(DRAFT_LIMITS.idleMs / 1000)} 秒自动保存</span></p>
+        <p><span>每 ${Math.round((state.autoSave?.intervalMs ?? DRAFT_LIMITS.intervalMs) / 1000)} 秒兜底保存一次${state.mobile ? '（移动端）' : ''}</span></p>
+        <p><span>切后台 / 关页面时立即落盘，不等定时器</span></p>
+        <p><span>本地保留最近 ${DRAFT_LIMITS.versions} 个版本，可回退</span></p>
+        <p><span>单篇上限 ${Math.round(DRAFT_LIMITS.singleBytes / 1024 / 1024)}MB，总计 ${Math.round(DRAFT_LIMITS.totalBytes / 1024 / 1024)}MB</span></p>
+      </div>`);
+  }
+
+  /**
+   * AI 设置（决策 D1）。
+   *
+   * Key 状态机四档：未配置 / 服务端已配置 / 本次会话 / 已记住。
+   * 四档文案全部来自 keyring.js，UI 不自己拼 —— 否则「服务端已配置」和
+   * 「已记住」迟早被写成同一句话，而它们对用户的含义完全不同
+   * （一个什么都不用做，一个要知道它留在哪台机器上）。
+   */
+  function createKeyStore() {
+    return new KeyStore({
+      server: async () => {
+        try {
+          const response = await fetch('/__studio/ai/status');
+          if (!response.ok) return { configured: false };
+          return await response.json();
+        } catch { return { configured: false }; }
+      },
+    });
+  }
+
+  async function renderKeyState() {
+    const status = await state.keys.status();
+    const host = $('#ai-key-state');
+    if (host) host.dataset.state = status.kind;
+    setText('#ai-key-label', status.label ?? KEY_STORAGE_LABEL.none);
+    const detail = $('#ai-key-detail');
+    if (detail) {
+      detail.textContent = status.kind === KEY_STORAGE.SERVER
+        ? `${status.provider ?? ''} ${status.model ?? ''}`.trim()
+        : status.kind === KEY_STORAGE.NONE ? '' : `${status.provider ?? '未指定 provider'}`;
+    }
+    const button = $('#btn-ai-key');
+    if (button) {
+      button.textContent = status.kind === KEY_STORAGE.SERVER ? '查看配置' : status.kind === KEY_STORAGE.NONE ? '配置 Key' : '修改 Key';
+      // 服务端托管时用户不需要输入任何东西 —— 但保留入口，让他知道为什么不用输
+      button.title = status.kind === KEY_STORAGE.SERVER ? 'Key 由服务端托管，不会进入浏览器' : '';
+    }
+    const hint = $('#ai-key-hint');
+    if (hint) {
+      hint.textContent = status.kind === KEY_STORAGE.SERVER
+        ? 'Key 由服务端托管：它只存在于 dev server 进程内，不会到达浏览器。你不需要在这里输入任何东西。'
+        : '无服务端托管时，Key 默认只作用于本次会话。勾选「记住」才会留在这台机器上。';
+    }
+    state.keyStatus = status;
+    return status;
+  }
+
   function bindAiPanel() {
     on('#btn-ai', 'click', () => $('#ai-panel').classList.toggle('open'));
     on('#ai-close', 'click', () => $('#ai-panel').classList.remove('open'));
     onAll('[data-ai-action]', 'click', (event) => runAiAction(event.currentTarget.dataset.aiAction, event.currentTarget));
+
+    on('#btn-ai-key', 'click', () => openKeyDialog());
+    on('#btn-ai-key-save', 'click', () => {
+      const value = $('#ai-key-value')?.value ?? '';
+      if (!value.trim()) { flash($('#btn-ai-key-save'), '请填入 Key'); return; }
+      const remember = Boolean($('#ai-key-remember')?.checked);
+      state.keys.set(value, {
+        remember,
+        provider: $('#ai-key-provider')?.value ?? null,
+        model: $('#ai-key-model')?.value?.trim() || null,
+      });
+      const input = $('#ai-key-value');
+      if (input) input.value = '';   // 存完就把输入框清掉，别让明文留在 DOM 里
+      $('#ai-key-dialog')?.close();
+      renderKeyState();
+      flash($('#btn-ai-key'), remember ? '已记住' : '本次会话有效');
+    });
+    on('#btn-ai-key-clear', 'click', () => {
+      state.keys.clear();
+      const input = $('#ai-key-value');
+      if (input) input.value = '';
+      $('#ai-key-dialog')?.close();
+      renderKeyState();
+      flash($('#btn-ai-key'), '已清除');
+    });
+    on('#btn-ai-key-cancel', 'click', () => $('#ai-key-dialog')?.close());
+  }
+
+  function openKeyDialog() {
+    const dialog = $('#ai-key-dialog');
+    if (!dialog?.showModal) return;
+    // 服务端托管时把输入区说清楚：用户不需要填，但可以覆盖成自己的
+    if (state.keyStatus?.kind === KEY_STORAGE.SERVER) {
+      setText('#ai-key-dialog-hint', `当前由服务端托管（${state.keyStatus.provider ?? ''}）。在这里填入 Key 会覆盖成你自己的、只作用于浏览器的这一份。`);
+    }
+    const provider = $('#ai-key-provider');
+    if (provider && state.keyStatus?.provider) provider.value = state.keyStatus.provider;
+    const model = $('#ai-key-model');
+    if (model && state.keyStatus?.model) model.value = state.keyStatus.model;
+    dialog.showModal();
   }
 
   async function runAiAction(action, button) {
     if (state.aiBusy) return;
     const output = $('#ai-output');
     const text = editor.getText();
+    const status = state.keyStatus ?? await state.keys.status();
 
+    /**
+     * 生成类任务（续写 / 改写 / 扩写 / 精简 / 翻译 / 标题）。
+     *
+     * 两条路，按 D1 分层走：
+     *   · 服务端托管 → 请求打到 /__studio/ai/run，**Key 不进浏览器**
+     *   · 会话级 Key → 也只能走服务端代理（浏览器直连会把 Key 暴露在
+     *     网络面板与扩展面前），所以同样打到那个端点，只是带上会话 Key
+     *   · 都没有 → 诚实报错，不返回任何「猜的续写」
+     */
     if (GENERATIVE_ACTIONS.has(action)) {
-      // 生成类任务没有本地替代。诚实报错，不返回任何「猜的续写」。
-      output.innerHTML = `<div class="ai-error"><strong>AI 写作辅助需要配置 API Key</strong>
-        <p>当前仅支持本地分析功能（摘要 / 关键词 / 可读性 / SEO）。</p>
-        <p class="hint">在设置里填入 Provider 与 API Key 后，续写 / 改写 / 扩写 / 精简才会可用。</p></div>`;
+      if (status.kind === KEY_STORAGE.NONE) {
+        output.innerHTML = `<div class="ai-error"><strong>AI 写作辅助需要配置 API Key</strong>
+          <p>当前仅支持本地分析功能（摘要 / 关键词 / 可读性 / SEO），这些离线也能用。</p>
+          <p class="hint">在「AI 设置」里填入 Key，或用 <code>EMEEEK_OPENAI_API_KEY</code> 启动 <code>emeeek studio</code> 由服务端托管 —— 后者不会让 Key 进入浏览器。</p></div>`;
+        output.classList.add('visible');
+        return;
+      }
+      state.aiBusy = true;
+      button.classList.add('busy');
+      output.innerHTML = '<p class="ai-loading">正在请求 AI…</p>';
       output.classList.add('visible');
+      try {
+        const started = performance.now();
+        const result = await requestGenerative(action, text);
+        const elapsed = Math.round(performance.now() - started);
+        output.innerHTML = renderAiResult(action, result, elapsed);
+      } catch (error) {
+        // 「不确定就说不确定」：不编一个看起来像答案的东西
+        output.innerHTML = `<div class="ai-error"><strong>AI 没能完成这次请求</strong>
+          <p>${escapeHtml(error.message)}</p>
+          <p class="hint">没有返回任何「猜的」内容 —— 不确定的事就该说不确定。</p></div>`;
+      } finally {
+        state.aiBusy = false;
+        button.classList.remove('busy');
+      }
       return;
     }
 
     state.aiBusy = true;
     button.classList.add('busy');
-    output.innerHTML = '<p class="ai-loading">正在加载本地算法…</p>';
+    // 词表加载进度：408KB 第一次取要一点时间，不提示会像卡住
+    output.innerHTML = renderDictProgress(0);
     output.classList.add('visible');
     try {
-      const service = await createLocalAIService({ loadDictionary: fetchDictionaryBytes });
+      const service = await createLocalAIService({
+        loadDictionary: (url) => fetchDictionaryBytes(url, (loaded, total) => {
+          output.innerHTML = renderDictProgress(total ? loaded / total : 0);
+        }),
+      });
+      output.innerHTML = '<p class="ai-loading">正在计算…</p>';
       const started = performance.now();
       const result = await service.run(text, action);
       const elapsed = Math.round(performance.now() - started);
@@ -654,6 +1005,33 @@ async function boot() {
       state.aiBusy = false;
       button.classList.remove('busy');
     }
+  }
+
+  /** 生成类任务统一走服务端代理 —— 即便 Key 在会话里，也不直连 provider。 */
+  async function requestGenerative(action, text) {
+    const apiKey = state.keys.get();
+    const response = await fetch('/__studio/ai/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        input: text,
+        task: action,
+        // 会话级 Key 通过请求体传给**服务端**，由服务端转发。
+        // 它没有出现在任何 URL 上（URL 会进访问日志与浏览器历史）。
+        options: apiKey ? { apiKey, provider: state.keyStatus?.provider, model: state.keyStatus?.model } : {},
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!payload) throw new Error(`服务端没有返回可解析的结果（HTTP ${response.status}）`);
+    if (!payload.ok) throw new Error(payload.error?.message ?? '未知错误');
+    return payload.result;
+  }
+
+  /** 词表加载进度条。用文字而不是只转圈 —— 用户要知道还要等多久。 */
+  function renderDictProgress(ratio) {
+    const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+    return `<p class="ai-loading">正在加载中文词表 408KB… ${percent}%
+      <span class="hint">只在第一次「关键词提取」时需要，之后走浏览器缓存。</span></p>`;
   }
 
   function renderAiResult(action, result, elapsed) {
@@ -869,6 +1247,17 @@ function frameDocument(html) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/__studio/preview.css">
 </head><body class="emeeek-preview"><article class="post-content">${html}</article></body></html>`;
+}
+
+/** 与 core 一致的 FNV-1a 指纹（服务端比对用同一套）。 */
+function fingerprint(text) {
+  const value = String(text ?? '');
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${value.length.toString(36)}-${hash.toString(36)}`;
 }
 
 function isDark(theme) { return theme === 'one-dark' || theme === 'dracula'; }

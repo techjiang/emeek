@@ -17,6 +17,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleClient, bundleFailureNotice, readAsset } from './bundle.js';
 import { detectServerKey, runProxiedTask, serverKeyStatus, describeServerKey, safeLog } from './ai-proxy.js';
+import { createWatcher } from './watcher.js';
+import { decideSync, SYNC_DECISION } from './sync.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,6 +75,13 @@ export async function createStudioServer({
    * 想覆盖探测结果，用环境变量，或者显式传进来（测试用）。
    */
   serverKey = undefined,
+  /**
+   * 是否监听内容目录并把磁盘变更推给编辑器（emeeek dev 集成时开）。
+   *
+   * 默认关：只跑 `emeeek studio` 时，用户改的是草稿不是文件，
+   * 没有东西可监听，开了只是白占 inotify 句柄。
+   */
+  watch = false,
   logger = console,
 } = {}) {
   const aiKey = serverKey === undefined ? detectServerKey() : serverKey;
@@ -86,6 +95,15 @@ export async function createStudioServer({
     lastBuild: null,
     buildMs: null,
     stats: null,
+    /**
+     * 热更新订阅者（SSE 连接）。
+     *
+     * 与 dev 的 `/__emeeek/reload` 分开是因为这个通道承载的是
+     * 「文件变了 + 当时本地脏不脏」—— 后者只有编辑器知道，dev 那条只有变更事件。
+     */
+    syncClients: new Set(),
+    /** 最近一次磁盘变更（编辑器拉取用，避免错过 SSE 的那一瞬）。 */
+    lastDiskChange: null,
   };
 
   async function ensureBundle() {
@@ -271,6 +289,47 @@ export async function createStudioServer({
     }
 
     /**
+     * 热更新通道（决策 D4）。
+     *
+     * 只推「磁盘变了」这个事实，**不推该不该刷新** —— 那个判断要本地脏不脏，
+     * 而只有编辑器手里有这份信息。服务端替它做决定，就成了自动刷新。
+     */
+    if (pathname === '/__studio/sync' && request.method === 'GET') {
+      response.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      });
+      response.write('retry: 1000\n\n');
+      // 连上先补发最近一次变更，避免「断线那几秒」正好错过
+      if (state.lastDiskChange) response.write(`data: ${JSON.stringify(state.lastDiskChange)}\n\n`);
+      state.syncClients.add(response);
+      request.on('close', () => state.syncClients.delete(response));
+      return;
+    }
+
+    /**
+     * 由本地内容指纹 + 磁盘指纹得到同步决策。
+     *
+     * 这个端点存在的理由是「让决定可测」：把判断放在浏览器里，
+     * 测它就要起浏览器；放在这里，可以拿两个指纹直接断言。
+     */
+    if (pathname === '/__studio/sync/decide' && request.method === 'POST') {
+      const raw = await readBody(request);
+      let payload;
+      try { payload = JSON.parse(raw || '{}'); } catch {
+        return send(response, 400, MIME['.json'], JSON.stringify({ error: '请求体不是合法 JSON' }));
+      }
+      const result = decideSync({
+        localDirty: Boolean(payload.localDirty),
+        localFingerprint: payload.localFingerprint ?? null,
+        remoteFingerprint: payload.remoteFingerprint ?? null,
+        currentRemote: payload.currentRemote ?? null,
+      });
+      return send(response, 200, MIME['.json'], JSON.stringify(result));
+    }
+
+    /**
      * AI 服务端状态（决策 D1 第一层）。
      *
      * 只回「有没有配置」与 provider/model —— 不回 Key，一个字符都不回。
@@ -290,12 +349,10 @@ export async function createStudioServer({
      *   2. 回给浏览器的错误信息先消毒（上游 401 的响应体里常带回 Key）
      */
     if (pathname === '/__studio/ai/run' && request.method === 'POST') {
-      if (!aiKey) {
-        return send(response, 200, MIME['.json'], JSON.stringify({
-          ok: false,
-          error: { code: 'not_configured', message: '服务端没有配置 AI Key。设置里填入会话级 Key，或用环境变量启动 emeeek studio。' },
-        }));
-      }
+      // 服务端没托管 Key 时不能直接拒 —— 会话级 Key 也在请求体里，
+      // 要等解析完请求体才知道有没有（第一版在这里提前 return，把会话级
+      // Key 这条路整个堵死了）
+
       const raw = await readBody(request);
       if (Buffer.byteLength(raw) > 2 * 1024 * 1024) {
         return send(response, 413, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'too_large', message: '输入超过 2MB' } }));
@@ -304,11 +361,36 @@ export async function createStudioServer({
       try { payload = JSON.parse(raw || '{}'); } catch {
         return send(response, 400, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'bad_request', message: '请求体不是合法 JSON' } }));
       }
+      /**
+       * 会话级 Key（决策 D1 第二层）。
+       *
+       * 用户没有服务端托管时，Key 存在浏览器会话里；但**仍然不直连 provider** ——
+       * 直连会把 Key 暴露在 DevTools 网络面板、每个浏览器扩展、
+       * 以及「把请求复制成 curl 贴进 Issue」的风险里。
+       * 所以它通过请求体交给服务端，由服务端转发。
+       *
+       * 为什么走请求体而不是 URL 参数：URL 会进访问日志、浏览器历史、
+       * Referer 头。凭证不该出现在这三个地方。
+       */
+      const sessionOptions = payload.options ?? {};
+      const sessionKey = typeof sessionOptions.apiKey === 'string' && sessionOptions.apiKey.trim() ? sessionOptions.apiKey.trim() : null;
+      const { apiKey: _drop, provider: sessionProvider, model: sessionModel, ...passthrough } = sessionOptions;
+      const effective = sessionKey
+        ? { provider: sessionProvider ?? 'openai', apiKey: sessionKey, model: sessionModel ?? null, from: 'session' }
+        : aiKey;
+
+      if (!effective?.apiKey) {
+        return send(response, 200, MIME['.json'], JSON.stringify({
+          ok: false,
+          error: { code: 'not_configured', message: '没有可用的 AI Key。在「AI 设置」里填入会话级 Key，或用环境变量启动 emeeek studio 由服务端托管。' },
+        }));
+      }
+
       const outcome = await runProxiedTask({
         input: String(payload.input ?? ''),
         task: String(payload.task ?? 'summarize'),
-        options: payload.options ?? {},
-        server: aiKey,
+        options: passthrough,
+        server: effective,
       });
       if (!outcome.ok) safeLog(logger, 'warn', `AI 代理失败（${outcome.error.code}）：${outcome.error.message}`);
       return send(response, 200, MIME['.json'], JSON.stringify(outcome));
@@ -322,11 +404,53 @@ export async function createStudioServer({
         buildMs: state.buildMs,
         posts: state.site?.posts?.length ?? 0,
         ai: serverKeyStatus(aiKey),
+        watch: watcher
+          ? { active: true, dir: path.relative(projectRoot, contentDir).split(path.sep).join('/'), rejected: watcher.rejected.length, flooded: watcher.flooded }
+          : { active: false },
       }));
     }
 
     return send(response, 404, 'text/plain; charset=utf-8', 'Not found');
   }
+
+  /**
+   * 内容目录监听（决策 D4）。
+   *
+   * 只有给了 projectRoot + contentDir 才开 —— 也就是 emeeek dev 集成模式。
+   * 事件路径走的是 **HTTP 入口同一个** resolveProjectFile，
+   * 不为监听新写一套判断（S2-3a 那个 symlink 的洞就是这样来的）。
+   */
+  const watcher = watch && projectRoot && contentDir
+    ? createWatcher({
+      root: projectRoot,
+      contentDir,
+      resolve: resolveProjectFile,
+      logger,
+      onChange: async (event) => {
+        /**
+         * 事件里要带上**磁盘当前内容的指纹**。
+         *
+         * 不带的话，编辑器那侧只能拿到「路径变了」这个事实，
+         * 而 decideSync 需要三个指纹才能做判断 —— 缺一个就会退化成
+         * 「什么都没发生」（实测就是这样：同步静默失效，而日志里一切正常）。
+         */
+        // 变量名不要叫 fingerprint —— 会把上面那个函数名遮蔽掉，
+        // 于是 `fingerprint(...)` 变成「调用 null」，参数求值时静默抛错被 catch 吞掉，
+        // 最后推送出去的 fingerprint 永远是 null，同步静默失效（踩过）
+        let diskFingerprint = null;
+        try {
+          diskFingerprint = fingerprint(await fs.readFile(event.absolute, 'utf8'));
+        } catch (error) {
+          logger.warn?.(`读取变更文件算指纹失败：${error.message}`);
+        }
+        state.lastDiskChange = { ...event, fingerprint: diskFingerprint, at: Date.now() };
+        for (const client of state.syncClients) {
+          try { client.write(`data: ${JSON.stringify(state.lastDiskChange)}\n\n`); } catch { state.syncClients.delete(client); }
+        }
+        logger.info?.(`内容目录变更：${event.path}`);
+      },
+    }).start()
+    : null;
 
   await new Promise((resolve) => server.listen(port, host, resolve));
   // 端口传 0（测试）时真正监听到的端口才是答案 —— 用传入的 port 会拼出 :0
@@ -337,7 +461,14 @@ export async function createStudioServer({
     url: `http://${host}:${address.port}/studio`,
     state,
     refreshSite,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () => new Promise((resolve) => {
+      watcher?.stop();
+      for (const client of state.syncClients) { try { client.end(); } catch { /* 已断开 */ } }
+      state.syncClients.clear();
+      server.close(resolve);
+    }),
+    /** 测试与诊断用：直接看监听器。 */
+    watcher,
   };
 }
 

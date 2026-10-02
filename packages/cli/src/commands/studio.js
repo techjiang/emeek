@@ -29,6 +29,10 @@ export async function studio({ cwd, flags }) {
     build,
     contentDir: path.resolve(root, config.content?.dir ?? 'posts'),
     uploadDir: path.resolve(root, 'public/uploads'),
+    // dev 集成：给了 projectRoot 就能读写磁盘上的 Markdown，同时开监听
+    // —— 编辑器里的内容与磁盘保持一致，但不自动覆盖本地脏的改动（D4）
+    projectRoot: root,
+    watch: true,
     logger,
   });
 

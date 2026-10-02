@@ -10,7 +10,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DraftStore, createAutoSaver, createMemoryStorage, draftKey, fingerprint,
-  byteLength, resolveStorage, guessSource, DRAFT_LIMITS, formatBytes,
+  byteLength, resolveStorage, guessSource, DRAFT_LIMITS, formatBytes, isMobileLike,
 } from '../src/studio/drafts.js';
 
 function makeStore(options = {}) {
@@ -418,5 +418,140 @@ describe('formatBytes', () => {
     assert.equal(formatBytes(512), '512B');
     assert.equal(formatBytes(2048), '2.0KB');
     assert.equal(formatBytes(3 * 1024 * 1024), '3.0MB');
+  });
+});
+
+/**
+ * 落盘时机（决策 D3）。
+ *
+ * 这一组测的不是「能不能存」，而是**「定时器被冻结时还存不存得住」**。
+ * 用假的 document/window 注入事件，验证「隐藏时立刻写」这条线真的接上了 ——
+ * 真浏览器里的同一件事在 scripts/e2e/draft-mobile.mjs 里再验一遍。
+ */
+describe('落盘时机与定时器冻结', () => {
+  /** 一个可控的假事件目标。 */
+  function fakeEvents() {
+    const listeners = new Map();
+    const make = (name) => ({
+      visibilityState: 'visible',
+      addEventListener: (event, handler) => listeners.set(`${name}:${event}`, handler),
+      removeEventListener: (event) => listeners.delete(`${name}:${event}`),
+      emit: (event, payload = {}) => listeners.get(`${name}:${event}`)?.(payload),
+    });
+    return { document: make('document'), window: make('window'), listeners };
+  }
+
+  test('页面隐藏时立即落盘，不等 5 秒定时器', () => {
+    const events = fakeEvents();
+    const writes = [];
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      // 定时器故意做成「永远不会跑」—— 模拟被冻结的后台标签页
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => { writes.push(reason); return { ok: true, reason }; },
+    });
+    saver.markDirty();
+    assert.deepEqual(writes, [], '还没到落盘时机');
+    events.document.visibilityState = 'hidden';
+    events.document.emit('visibilitychange');
+    assert.deepEqual(writes, ['hidden'], '隐藏的瞬间就必须写下去');
+    assert.equal(saver.dirty, false);
+  });
+
+  test('pagehide 也会落盘（移动端 beforeunload 常常不触发）', () => {
+    const events = fakeEvents();
+    const writes = [];
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => { writes.push(reason); return { ok: true }; },
+    });
+    saver.markDirty();
+    events.window.emit('pagehide');
+    assert.deepEqual(writes, ['pagehide']);
+  });
+
+  test('隐藏之后又 pagehide 不会重复写（dirty 已清）', () => {
+    const events = fakeEvents();
+    const writes = [];
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => { writes.push(reason); return { ok: true }; },
+    });
+    saver.markDirty();
+    events.document.visibilityState = 'hidden';
+    events.document.emit('visibilitychange');
+    events.window.emit('pagehide');
+    assert.deepEqual(writes, ['hidden'], '第二次应当是空操作，不是重复落盘');
+  });
+
+  test('可见时不写（切回前台不该触发一次多余落盘）', () => {
+    const events = fakeEvents();
+    const writes = [];
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => { writes.push(reason); return { ok: true }; },
+    });
+    saver.markDirty();
+    events.document.visibilityState = 'visible';
+    events.document.emit('visibilitychange');
+    assert.deepEqual(writes, []);
+  });
+
+  test('移动端兜底间隔缩短，桌面端不变', () => {
+    const desktop = createAutoSaver({ filename: 'a.md', save: () => ({ ok: true }) });
+    const mobile = createAutoSaver({ filename: 'a.md', mobile: true, save: () => ({ ok: true }) });
+    assert.equal(desktop.intervalMs, DRAFT_LIMITS.intervalMs);
+    assert.equal(mobile.intervalMs, DRAFT_LIMITS.mobileIntervalMs);
+    assert.ok(DRAFT_LIMITS.mobileIntervalMs < DRAFT_LIMITS.intervalMs, '移动端必须比桌面端勤');
+  });
+
+  test('落盘历史能回答「隐藏那一刻到底存没存」', () => {
+    const events = fakeEvents();
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => ({ ok: true, reason }),
+    });
+    saver.markDirty();
+    events.document.visibilityState = 'hidden';
+    events.document.emit('visibilitychange');
+    assert.equal(saver.history.length, 1);
+    assert.equal(saver.history[0].reason, 'hidden');
+    assert.equal(saver.history[0].result.ok, true);
+  });
+
+  test('stop 之后摘掉监听，不再有落盘（避免销毁后写坏状态）', () => {
+    const events = fakeEvents();
+    const writes = [];
+    const saver = createAutoSaver({
+      filename: 'a.md',
+      timers: { setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 1, clearInterval: () => {} },
+      events,
+      save: (reason) => { writes.push(reason); return { ok: true }; },
+    });
+    saver.start();
+    saver.markDirty();
+    saver.stop();
+    events.document.visibilityState = 'hidden';
+    events.document.emit('visibilitychange');
+    assert.deepEqual(writes, [], 'stop 之后不该再有写入');
+  });
+});
+
+describe('移动端判定', () => {
+  test('触摸 + 窄视口都算移动端', () => {
+    assert.equal(isMobileLike({ width: 390 }), true);
+    assert.equal(isMobileLike({ width: 1440 }), false);
+    assert.equal(isMobileLike({ maxTouchPoints: 5, coarsePointer: true }), true, 'iPad 视口不窄，但有触摸 + 粗指针');
+    assert.equal(isMobileLike({ maxTouchPoints: 5, coarsePointer: false }), false, '有触摸但指针精细（触屏笔记本）不算');
+    assert.equal(isMobileLike(), false);
   });
 });

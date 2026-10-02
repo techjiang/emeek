@@ -14,18 +14,33 @@ import sys
 from contextlib import contextmanager
 from playwright.sync_api import sync_playwright
 
-CHROME_CANDIDATES = [
-    os.environ.get("EMEEEK_CHROMIUM"),
+FIXED_CANDIDATES = [
     "/opt/ms-playwright/chromium-1243/chrome-linux64/chrome",
     "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
     "/usr/local/bin/chromium",
 ]
 
 
 def chrome_path():
-    for candidate in CHROME_CANDIDATES:
-        if candidate and os.path.exists(candidate):
+    """按「最明确 → 最模糊」的顺序找 Chromium。
+
+    CI 里 playwright 会把自己那份装到指定目录，用 EMEeeK_CHROMIUM 传进来；
+    本地开发用系统装的。两条路都要能用，所以先看环境变量。
+    """
+    explicit = os.environ.get("EMEEEK_CHROMIUM")
+    if explicit and os.path.exists(explicit):
+        return explicit
+    for candidate in FIXED_CANDIDATES:
+        if os.path.exists(candidate):
             return candidate
+    # 最后再扫一遍 playwright 的常见安装位置（版本号会变，不能写死）
+    for root in (os.environ.get("PLAYWRIGHT_BROWSERS_PATH"), "/opt/ms-playwright", os.path.expanduser("~/.cache/ms-playwright")):
+        if not root or not os.path.isdir(root):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root):
+            if "chrome" in filenames and dirpath.endswith("chrome-linux64"):
+                return os.path.join(dirpath, "chrome")
     raise SystemExit("找不到 Chromium，可用 EMEEEK_CHROMIUM 指定路径")
 
 
