@@ -1,4 +1,5 @@
 import { slugify } from '../parse/markdown.js';
+import { sanitizeUrl } from '../parse/sanitize-url.js';
 
 /**
  * 双向链接解析器：把 [[标题]] 映射到真实文章 URL，并记录反向引用。
@@ -20,7 +21,11 @@ export function resolveWikiLink(index, target, alias) {
   const label = alias || target;
   const text = escapeHtml(label);
   if (!post) return `<span class="wiki-link wiki-link--missing" title="未找到文章：${escapeHtml(target)}">${text}</span>`;
-  return `<a class="wiki-link" href="${index.urlPattern(post)}" data-post="${post.slug}">${text}</a>`;
+  // wiki 链接的目标 URL 来自站点索引，看起来可信 —— 但索引本身也是内容驱动的
+  // （前端可自定义 urlPattern），所以和普通链接走同一道消毒，不搞例外。
+  const href = sanitizeUrl(index.urlPattern(post));
+  if (href === null) return `<span class="wiki-link wiki-link--missing">${text}</span>`;
+  return `<a class="wiki-link" href="${escapeHtml(href)}" data-post="${escapeHtml(post.slug)}">${text}</a>`;
 }
 
 export const normalize = (text) => String(text).trim().toLowerCase().replace(/\s+/g, ' ');

@@ -16,6 +16,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleClient, bundleFailureNotice, readAsset } from './bundle.js';
+import { detectServerKey, runProxiedTask, serverKeyStatus, describeServerKey, safeLog } from './ai-proxy.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +49,8 @@ const MIME = {
  *   /__studio/upload      图片上传
  *   /__studio/files       可编辑文件索引（emeeek dev 集成时才非空）
  *   /__studio/file        读写内容目录内的 Markdown（GET / PUT）
+ *   /__studio/ai/status   服务端是否托管了 AI Key（只说有没有，不说值）
+ *   /__studio/ai/run      服务端代理转发 AI 任务（Key 不进浏览器）
  */
 export async function createStudioServer({
   port = 3000,
@@ -62,8 +65,19 @@ export async function createStudioServer({
    * 那时它没有任何理由去碰用户的磁盘。
    */
   projectRoot = null,
+  /**
+   * 服务端托管的 AI Key（决策 D1 第一层）。默认从进程环境探测。
+   *
+   * 刻意**不接受来自配置文件的 Key**：配置文件进 git，
+   * 而「把 Key 提交上去」是这类事故里最常见的一种。
+   * 想覆盖探测结果，用环境变量，或者显式传进来（测试用）。
+   */
+  serverKey = undefined,
   logger = console,
 } = {}) {
+  const aiKey = serverKey === undefined ? detectServerKey() : serverKey;
+  if (aiKey) safeLog(logger, 'info', describeServerKey(aiKey));
+
   const state = {
     files: new Map(),       // URL 路径 → 内容（入口 + 语言 chunk）
     bundleError: null,
@@ -256,6 +270,50 @@ export async function createStudioServer({
       }
     }
 
+    /**
+     * AI 服务端状态（决策 D1 第一层）。
+     *
+     * 只回「有没有配置」与 provider/model —— 不回 Key，一个字符都不回。
+     * 前端拿到 configured:true 之后就不再向用户要 Key 了，
+     * 这正是分层的意义：用户在有服务端的场景下根本不需要接触凭证。
+     */
+    if (pathname === '/__studio/ai/status' && request.method === 'GET') {
+      return send(response, 200, MIME['.json'], JSON.stringify(serverKeyStatus(aiKey)));
+    }
+
+    /**
+     * AI 代理转发。
+     *
+     * 浏览器 POST 任务，服务端带 Key 转发给 provider，回结果。
+     * 这里是「Key 不进浏览器」这条承诺的兑现点，所以有两件必须做的事：
+     *   1. 请求体过一遍大小上限（不能变成一个免费的大文件上传通道）
+     *   2. 回给浏览器的错误信息先消毒（上游 401 的响应体里常带回 Key）
+     */
+    if (pathname === '/__studio/ai/run' && request.method === 'POST') {
+      if (!aiKey) {
+        return send(response, 200, MIME['.json'], JSON.stringify({
+          ok: false,
+          error: { code: 'not_configured', message: '服务端没有配置 AI Key。设置里填入会话级 Key，或用环境变量启动 emeeek studio。' },
+        }));
+      }
+      const raw = await readBody(request);
+      if (Buffer.byteLength(raw) > 2 * 1024 * 1024) {
+        return send(response, 413, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'too_large', message: '输入超过 2MB' } }));
+      }
+      let payload;
+      try { payload = JSON.parse(raw || '{}'); } catch {
+        return send(response, 400, MIME['.json'], JSON.stringify({ ok: false, error: { code: 'bad_request', message: '请求体不是合法 JSON' } }));
+      }
+      const outcome = await runProxiedTask({
+        input: String(payload.input ?? ''),
+        task: String(payload.task ?? 'summarize'),
+        options: payload.options ?? {},
+        server: aiKey,
+      });
+      if (!outcome.ok) safeLog(logger, 'warn', `AI 代理失败（${outcome.error.code}）：${outcome.error.message}`);
+      return send(response, 200, MIME['.json'], JSON.stringify(outcome));
+    }
+
     if (pathname === '/__studio/status') {
       return send(response, 200, MIME['.json'], JSON.stringify({
         bundle: state.files.size ? 'ready' : state.bundleError ? 'failed' : 'pending',
@@ -263,6 +321,7 @@ export async function createStudioServer({
         bundleStats: state.stats,
         buildMs: state.buildMs,
         posts: state.site?.posts?.length ?? 0,
+        ai: serverKeyStatus(aiKey),
       }));
     }
 

@@ -12,10 +12,12 @@ import { AIProvider, requireText } from './base.js';
  * 任何面向用户的真实质量判断都不能用 MockProvider 得出。
  */
 export class MockProvider extends AIProvider {
-  constructor({ name = 'mock', quality = AIQuality.GENERATIVE, failOn = null, latency = 0 } = {}) {
+  // sleep 可注入：测试断言的是「延迟参数被传下去且用对了」，不是机器有多忙。
+  constructor({ name = 'mock', quality = AIQuality.GENERATIVE, failOn = null, latency = 0, sleep } = {}) {
     super({ name, quality });
     this.failOn = failOn;
     this.latency = latency;
+    this.sleep = sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.calls = [];
     this.tasks = Object.values(AITask);
   }
@@ -28,7 +30,7 @@ export class MockProvider extends AIProvider {
     const text = requireText(input);
     this.calls.push({ task, input: text });
 
-    if (this.latency) await new Promise((resolve) => setTimeout(resolve, this.latency));
+    if (this.latency) await this.sleep(this.latency);
     if (this.failOn === task) {
       throw new AIError(`MockProvider 按配置在 ${task} 上失败`, { code: AIErrorCode.NETWORK, provider: this.name });
     }

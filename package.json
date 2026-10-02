@@ -22,5 +22,9 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@emeeek/core": "workspace:*",
+    "@emeeek/editor": "workspace:*"
+  }
 }

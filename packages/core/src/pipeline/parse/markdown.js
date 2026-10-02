@@ -9,6 +9,8 @@
  * allowHtml 打开），避免内容仓库被注入。
  */
 import { highlight } from './code-block.js';
+import { sanitizeUrl } from './sanitize-url.js';
+import { sanitizeHtml } from './sanitize-html.js';
 
 export function renderMarkdown(src, options = {}) {
   const { allowHtml = false, resolveImage = (url) => url, resolveLink = (url) => url, headingIds = new Map(), wikiLink } = options;
@@ -214,10 +216,21 @@ function renderInline(text, ctx) {
   let out = text;
   // 行内代码先取出，避免内部的下划线/星号被当成强调。
   out = out.replace(/(`+)([\s\S]*?)\1/g, (_, __, code) => keep(`<code>${escapeHtml(code.trim())}</code>`));
-  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, alt, url, title) =>
-    keep(`<img src="${escapeHtml(ctx.resolveImage(url))}" alt="${escapeHtml(alt)}"${title ? ` title="${escapeHtml(title)}"` : ''} loading="lazy" decoding="async" />`));
-  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, label, url, title) =>
-    keep(`<a href="${escapeHtml(ctx.resolveLink(url))}"${title ? ` title="${escapeHtml(title)}"` : ''}>${renderInline(label, ctx)}</a>`));
+  /**
+   * URL 消毒是硬性的：链接与图片地址先过 sanitizeUrl，被拒的一律**不生成标签**，
+   * 退回纯文本。`[点我](javascript:…)` 渲染成可点链接 = 每次点击都是一次 XSS，
+   * 而 Markdown 的来源（Issue、别人发的 .md）完全不可信。
+   */
+  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, alt, url, title) => {
+    const safe = sanitizeUrl(ctx.resolveImage(url), { allowData: true });
+    if (safe === null) return keep(`<span class="unsafe-url">![${escapeHtml(alt)}]</span>`);
+    return keep(`<img src="${escapeHtml(safe)}" alt="${escapeHtml(alt)}"${title ? ` title="${escapeHtml(title)}"` : ''} loading="lazy" decoding="async" />`);
+  });
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, label, url, title) => {
+    const safe = sanitizeUrl(ctx.resolveLink(url));
+    if (safe === null) return keep(`<span class="unsafe-url">${escapeHtml(label)}</span>`);
+    return keep(`<a href="${escapeHtml(safe)}"${title ? ` title="${escapeHtml(title)}"` : ''}>${renderInline(label, ctx)}</a>`);
+  });
   // 双向链接 [[文章标题]] / [[标题|别名]]
   out = out.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) =>
     keep(ctx.wikiLink ? ctx.wikiLink(target.trim(), alias?.trim()) : `<span class="wiki-link">${escapeHtml(alias ?? target)}</span>`));
@@ -230,7 +243,14 @@ function renderInline(text, ctx) {
     return keep(`<sup class="footnote-ref"><a href="#${ctx.docId}-fn-${anchor}" id="${ctx.docId}-fnref-${anchor}">[${ctx.footnoteOrder.indexOf(anchor) + 1}]</a></sup>`);
   });
   // 先转义再补强调标签：反过来的话，<strong> 会被 escapeHtml 一并逃逸掉。
-  out = ctx.allowHtml ? out : escapeHtml(out);
+  /**
+   * allowHtml 不等于「原样输出」。
+   *
+   * 打开它只是允许结构化标签（<div class="note">），脚本、事件属性、
+   * 非白名单协议仍然会被剥掉 —— 内容作者的 HTML 与「可执行的内容」
+   * 是两件事，后者在 Issue 驱动的站点里等于「任何能提 Issue 的人都能 XSS」。
+   */
+  out = ctx.allowHtml ? sanitizeHtml(out) : escapeHtml(out);
   out = out.replace(/~~([\s\S]+?)~~/g, '<del>$1</del>');
   out = out.replace(/\*\*\*([\s\S]+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   out = out.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
