@@ -98,5 +98,29 @@ weaken "快捷键声明审计（表里有实现没有）" \
   "s|  { id: 'save', label: '保存草稿'|  { id: 'ghost', label: '幽灵条目', keys: 'Ctrl+Alt+Z', group: '编辑', handler: 'global', match: { key: 'z', alt: true }, touch: null },\n  { id: 'save', label: '保存草稿'|" \
   'node scripts/check-shortcuts.mjs'
 
+# 11. 监听范围：把校验摘掉（任何路径都放行）
+weaken "监听范围收敛（resolveProjectFile 摘掉）" \
+  packages/editor/src/studio/watcher.js \
+  "s|    if (!resolve) return { absolute, relative: path.relative(root, absolute).split(path.sep).join('/') };|    return { absolute, relative: path.relative(root, absolute).split(path.sep).join('/') };|" \
+  'node --test packages/editor/tests/watcher.test.js'
+
+# 12. 插件能力：未声明也放行
+weaken "插件能力声明（未声明也放行）" \
+  packages/core/src/plugin/hooks.js \
+  "s|        if (required \&\& !plugin.guard?.has(required)) {|        if (false) {|" \
+  'node --test packages/core/tests/plugin.test.js'
+
+# 13. 凭证剔除：让 stripSecrets 变成恒等
+weaken "凭证不进插件（stripSecrets 恒等）" \
+  packages/core/src/plugin/capabilities.js \
+  "s|export function stripSecrets(value, depth = 0) {|export function stripSecrets(value, depth = 0) { return value; // weakened|" \
+  'node --test packages/core/tests/plugin.test.js'
+
+# 14. 热更新：把冲突判定改成「永远刷新」（= 自动合并的另一种形式）
+weaken "本地脏时不自动合并" \
+  packages/editor/src/studio/sync.js \
+  "s|  if (!localDirty) {|  if (true) {|" \
+  'node --test packages/editor/tests/sync.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -18,6 +18,7 @@ import { byteLength, statusState, formatBytes } from '../editor/statusbar.js';
 import { DraftStore, createAutoSaver, isMobileLike, DRAFT_LIMITS } from './drafts.js';
 import { WELCOME } from './welcome.js';
 import { SHORTCUTS, TOUCH_ALTERNATIVES, groupShortcuts, findShortcut, matchesShortcut } from './shortcuts.js';
+import { decideSync, SYNC_DECISION, connectReloadStream } from './sync.js';
 
 /** 当前编辑器实例。目录点击等回调需要它，而实例在 boot() 里才创建。 */
 let editorRef = null;
@@ -58,6 +59,8 @@ const state = {
   autoSave: null,
   /** 是否按移动端策略跑（更短的兜底间隔、触屏替代入口）。 */
   mobile: false,
+  /** 磁盘变更通道（只在文件模式下存在）。 */
+  sync: null,
 };
 
 /**
@@ -162,6 +165,7 @@ async function boot() {
   bindAiPanel();
   bindRecoveryDialog();
   bindHistoryDialog();
+  startDiskSync();
   applyTheme(state.theme);
   cycleMode(state.mode);
   startAutoSave();
@@ -215,6 +219,83 @@ async function boot() {
   function updatePreviewPane(renderer, text) {
     const start = performance.now();
     renderInto(renderer(text), performance.now() - start);
+  }
+
+  /**
+   * 磁盘变更同步（决策 D4）。
+   *
+   * 立场与 S2-3a 完全一致，这里只是让它对新入口生效：
+   *   本地干净 → 刷新（磁盘是唯一真相）
+   *   本地脏   → 提示、两边都留、不自动合并
+   *
+   * 判断在哪一侧做：**决策在编辑器**。服务端只推「磁盘变了」这个事实，
+   * 因为它不知道本地脏不脏。服务端替它决定就成了自动刷新 ——
+   * 那种「你的改动被静默丢弃」的体验正是这一条要避免的。
+   */
+  function startDiskSync() {
+    if (!state.filePath) return;   // 草稿模式没有磁盘可同步
+    state.sync = connectReloadStream({
+      /**
+       * 通道用 studio 自己的 `/__studio/sync`。
+       *
+       * 默认值 `/__emeeek/reload` 是 dev server 那条 —— 它只推「变了」，
+       * 不带磁盘指纹，拿它做同步决策会一路退化成 noop（sync 静默失效，
+       * 而日志里一切正常：这个坑值得写下来）。
+       */
+      url: '/__studio/sync',
+      onMessage: async (payload) => {
+        // 编辑器自己保存触发的事件会走到这里：此时内容一致，决策是 noop
+        const local = editor.getText();
+        let decision = decideSync({
+          localDirty: state.autoSave?.dirty ?? false,
+          localFingerprint: fingerprint(local),
+          remoteFingerprint: payload.fingerprint ?? null,
+          currentRemote: state.remote?.fingerprint ?? null,
+        });
+        // 服务端能拿到磁盘指纹，用它复核一次 —— 两边都算同一件事
+        try {
+          const response = await fetch('/__studio/sync/decide', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              localDirty: state.autoSave?.dirty ?? false,
+              localFingerprint: fingerprint(local),
+              remoteFingerprint: payload.fingerprint ?? null,
+              currentRemote: state.remote?.fingerprint ?? null,
+            }),
+          });
+          if (response.ok) decision = await response.json();
+        } catch { /* 服务端不可达时用本地判断，不阻断 */ }
+
+        if (decision.decision === SYNC_DECISION.NOOP) return;
+        if (decision.decision === SYNC_DECISION.CONFLICT) {
+          showSyncConflict(decision.message);
+          return;
+        }
+        // 本地干净：把磁盘内容取回来，不刷新整页（刷新会丢掉 AI 面板状态等）
+        try {
+          const file = await vault.read(state.filePath);
+          editor.setText(file.content);
+          state.remote = { id: `file:${file.path}`, kind: 'local-file', fingerprint: file.fingerprint };
+          state.bytes = byteLength(file.content);
+          setSaveState('saved');
+          renderOutline();
+        } catch (error) {
+          console.warn(`[studio] 拉取磁盘内容失败：${error.message}`);
+        }
+      },
+      onError: () => { /* EventSource 自己重连；这里不插手 */ },
+    });
+    state.sync.start();
+  }
+
+  function showSyncConflict(message) {
+    const output = $('#ai-output');
+    if (!output) return;
+    output.classList.add('visible');
+    output.innerHTML = `<div class="ai-error"><strong>磁盘上的文件变了</strong>
+      <p>${escapeHtml(message)}</p>
+      <p class="hint">没有自动合并 —— 那是把「谁的内容对」这个判断从你手里拿走。要覆盖就先「复制 Markdown」备份，再手动粘回去。</p></div>`;
   }
 
   /**
@@ -1010,6 +1091,17 @@ function frameDocument(html) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/__studio/preview.css">
 </head><body class="emeeek-preview"><article class="post-content">${html}</article></body></html>`;
+}
+
+/** 与 core 一致的 FNV-1a 指纹（服务端比对用同一套）。 */
+function fingerprint(text) {
+  const value = String(text ?? '');
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${value.length.toString(36)}-${hash.toString(36)}`;
 }
 
 function isDark(theme) { return theme === 'one-dark' || theme === 'dracula'; }

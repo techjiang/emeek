@@ -9,7 +9,8 @@
 export { createEmeekEditor, mountEditor, THEMES } from './editor/index.js';
 export { updatePreview, buildHtml, previewMeta, createIncrementalRenderer, createWikiLinkResolver, BUILD_PROFILE } from './preview/index.js';
 export { canonicalizeHtml, htmlEquivalent, parseHtml, normalizeTree } from './preview/dom.js';
-export { createStudioServer } from './studio/server.js';
+export { createStudioServer, resolveProjectFile } from './studio/server.js';
+export { createWatcher } from './studio/watcher.js';
 export { bundleClient } from './studio/bundle.js';
 export { SUPPORTED_LANGUAGES, COMMON_LANGUAGES, findLanguage, isKnownLanguage, preloadLanguages } from './editor/languages.js';
 export { buildOutline, headingSlug } from './editor/outline.js';

@@ -305,3 +305,98 @@ describe('项目文件 API', () => {
     assert.equal(resolveProjectFile(null, posts, 'posts/a.md'), null, '没有 projectRoot 时一律拒绝');
   });
 });
+
+/**
+ * 热更新同步与监听接线（决策 D4）。
+ *
+ * 这一组验的是「服务端有没有把决定权交出去」——
+ * 服务端只推「磁盘变了」，推不推「该刷新」取决于本地脏不脏，
+ * 而那份信息只有编辑器有。服务端替它决定，就成了自动刷新。
+ */
+describe('热更新同步 API', () => {
+  let root;
+  let posts;
+  let instance;
+  let base;
+
+  before(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-sync-'));
+    posts = path.join(root, 'posts');
+    fs.mkdirSync(posts, { recursive: true });
+    fs.writeFileSync(path.join(posts, 'a.md'), '# A\n');
+    instance = await createStudioServer({
+      port: 0, host: '127.0.0.1',
+      projectRoot: root, contentDir: posts, watch: true,
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    base = `http://127.0.0.1:${instance.port}`;
+  });
+
+  after(async () => {
+    await instance?.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  test('status 报告监听状态与范围', async () => {
+    const status = await (await fetch(`${base}/__studio/status`)).json();
+    assert.equal(status.watch.active, true);
+    assert.equal(status.watch.dir, 'posts');
+  });
+
+  test('本地干净 → reload', async () => {
+    const response = await fetch(`${base}/__studio/sync/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ localDirty: false, localFingerprint: 'a', remoteFingerprint: 'b', currentRemote: 'a' }),
+    });
+    const body = await response.json();
+    assert.equal(body.decision, 'reload');
+  });
+
+  test('本地脏 → conflict，且文案说两边都留', async () => {
+    const response = await fetch(`${base}/__studio/sync/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ localDirty: true, localFingerprint: 'a', remoteFingerprint: 'b', currentRemote: 'a' }),
+    });
+    const body = await response.json();
+    assert.equal(body.decision, 'conflict');
+    assert.match(body.message, /两边都留着/);
+  });
+
+  test('非法请求体是 400，不是 500', async () => {
+    const response = await fetch(`${base}/__studio/sync/decide`, { method: 'POST', body: 'not json' });
+    assert.equal(response.status, 400);
+  });
+
+  test('watch 关掉时 status 如实说没开', async () => {
+    const off = await createStudioServer({
+      port: 0, host: '127.0.0.1',
+      projectRoot: root, contentDir: posts, watch: false,
+      logger: { info: () => {}, warn: () => {}, error: () => {} },
+    });
+    try {
+      const status = await (await fetch(`http://127.0.0.1:${off.port}/__studio/status`)).json();
+      assert.equal(status.watch.active, false);
+    } finally { await off.close(); }
+  });
+
+  test('监听器收到目录外路径被拒（含 symlink）', async (t) => {
+    // 直接对 watcher 投事件，比造真实文件变动可靠（fs.watch 时序在 CI 里不稳定）
+    const watcher = instance.watcher;
+    assert.ok(watcher, '实例应当暴露 watcher 供诊断与测试');
+    const before = watcher.rejected.length;
+    watcher.inject('change', path.join(root, 'secret.env'));
+    watcher.inject('change', '/etc/passwd');
+    const link = path.join(posts, 'escape.md');
+    try {
+      fs.symlinkSync(path.join(root, 'secret.env'), link);
+      watcher.inject('change', link);
+      fs.unlinkSync(link);
+    } catch {
+      t.diagnostic('平台不支持符号链接，跳过软链那一条');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    assert.ok(watcher.rejected.length > before, '目录外路径必须被拒并留痕');
+  });
+});
