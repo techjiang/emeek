@@ -10,7 +10,8 @@
     "./config": "./src/config/loader.js",
     "./markdown": "./src/pipeline/parse/markdown.js",
     "./render": "./src/pipeline/render/index.js",
-    "./ai/browser": "./src/ai/browser.js"
+    "./ai/browser": "./src/ai/browser.js",
+    "./ai": "./src/ai/index.js"
   },
   "engines": {
     "node": ">=18"

@@ -205,9 +205,13 @@ describe('AIProvider 基类契约', () => {
   });
 
   test('MockProvider 延迟参数可用于测试加载态', async () => {
-    const mock = new MockProvider({ latency: 10 });
-    const start = performance.now();
+    // 用注入的时钟而不是 performance.now() 的壁钟差：
+    // 后者比的是「真实耗时 >= 睡的时间」，而性能抖动会把它变成偶发红
+    // （实测在 CI 上 10ms 的 sleep 有概率读到 9.9）。延迟参数控制的是
+    // 「睡多久」，断言就该盯着这个，而不是盯着机器当时有多忙。
+    const slept = [];
+    const mock = new MockProvider({ latency: 10, sleep: async (ms) => { slept.push(ms); } });
     await mock.complete('输入内容够长够长够长', 'summarize');
-    assert.ok(performance.now() - start >= 10);
+    assert.deepEqual(slept, [10]);
   });
 });

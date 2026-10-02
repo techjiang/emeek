@@ -18,6 +18,15 @@ export function defaultConfig() {
       labels: { publish: 'publish', draft: 'draft', pin: 'pin' },
       categories: {},
       localDirs: ['posts'],
+      /**
+       * 允许正文里的原始 HTML 原样输出。默认关闭。
+       *
+       * 打开它等于把「内容作者的 HTML」直接写进站点 —— 而内容可能来自别人
+       * 提的 Issue、别人发的 .md。所以打开时仍然会做一轮 sanitizeHtml
+       * （剥 <script>/<iframe>/on* 等），见 pipeline/parse/sanitize-html.js。
+       * 不存在「完全不过滤的原样输出」这个选项。
+       */
+      allowHtml: false,
     },
     theme: {
       name: 'minimal',
