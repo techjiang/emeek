@@ -117,3 +117,84 @@ describe('HTML 与命令表一致', () => {
     assert.doesNotMatch(html, /zh-words/);
   });
 });
+
+/**
+ * 文档里写出来的数字，必须是**从代码算出来的**。
+ *
+ * 起因：文档连着四处写「37 种语言」，实际是 36；工具栏写「14 个」，
+ * 实际是 16。两处都是手抄漂移，而且没人会发现 —— 数字错了不会让任何测试变红。
+ *
+ * 所以这里把「会被写进文档的数字」钉住，并要求文档里出现的数字与之相符。
+ * 这样改代码忘了改文档（或反过来）都会当场变红。
+ */
+describe('文档数字与代码一致', () => {
+  test('语言数量：README / docs 里写的数字 = SUPPORTED_LANGUAGES.length', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const { SUPPORTED_LANGUAGES } = await import('../src/editor/languages.js');
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
+    const n = SUPPORTED_LANGUAGES.length;
+    const files = ['README.md', 'CHANGELOG.md', 'docs/studio.md'];
+    const wrong = [];
+    for (const rel of files) {
+      const text = await fs.readFile(path.join(root, rel), 'utf8');
+      /**
+       * 只认「我们自己支持多少种」的写法，排除掉引用别人家的数字。
+       *
+       * 具体是排除两处：`language-data` 那 143 种是**它**的注册表大小，
+       * 不能拿来跟我们的清单比；「本文档早先写的是 37 种」是刻意的历史注记。
+       * 断言太宽就会误报，误报最后一定会被人用 `|| true` 静音 —— 不如一开始写准。
+       */
+      /**
+       * 只认「我们自己支持多少种」的写法，排除掉引用别人家的数字。
+       *
+       * 排除两处，都是按**段落**整段摘掉，不按行 —— 标题与正文会被换行分开，
+       * 按行剥会漏（第一版就是这么漏的）：
+       *   - 「为什么不用 language-data」整节：143 是**它**的注册表大小
+       *   - 「本文档早先写的是 37 种」：刻意的历史注记，不是当前声明
+       *
+       * 断言太宽就会误报，误报最后一定会被人 `|| true` 静音 —— 不如一开始写准。
+       */
+      /**
+       * 只认「我们自己支持多少种」的写法，排除掉引用别人家的数字。
+       *
+       * 做法：把**提到 language-data 的那一段**整段摘掉 —— 那里的 143 是
+       * `language-data` 自己的注册表大小，不是我们的清单。
+       *
+       * 按「句子」剥不够：那段话里有以逗号结尾的句子，会漏。所以按段落剥。
+       * 断言太宽会误报，误报最后一定会被人 `|| true` 静音 —— 不如一开始写准。
+       */
+      const scoped = text
+        .split(/\n{2,}/)
+        .filter((para) => !para.includes('language-data'))
+        // 「本文档早先写的是 37 种」是刻意的历史注记，不是当前声明
+        .map((para) => para.replace(/[^。\n]*早先写的是[^。\n]*。?/g, ''))
+        .join('\n\n');
+      for (const m of scoped.matchAll(/(\d+)\s*种语言/g)) {
+        if (Number(m[1]) !== n) wrong.push(`${rel}: 写了 ${m[1]} 种，实际 ${n} 种`);
+      }
+    }
+    assert.deepEqual(wrong, [], wrong.join('；'));
+  });
+
+  test('工具栏按钮数量：docs 里写的数字 = HTML 里 data-command 的个数', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
+    const html = await fs.readFile(path.join(root, 'packages/editor/src/assets/studio.html'), 'utf8');
+    const n = [...html.matchAll(/data-command="([^"]+)"/g)].map((m) => m[1]).length;
+
+    const wrong = [];
+    for (const rel of ['README.md', 'CHANGELOG.md', 'docs/studio.md']) {
+      const text = await fs.readFile(path.join(root, rel), 'utf8');
+      for (const m of text.matchAll(/(\d+)\s*个格式按钮/g)) {
+        if (Number(m[1]) !== n) wrong.push(`${rel}: 写了 ${m[1]} 个，实际 ${n} 个`);
+      }
+    }
+    assert.deepEqual(wrong, [], wrong.join('；'));
+  });
+});

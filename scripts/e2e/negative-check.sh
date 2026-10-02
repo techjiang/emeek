@@ -152,5 +152,14 @@ weaken "隐藏瞬间落盘（visibilitychange 触发）" \
   "s|      if (targets.document.visibilityState === 'hidden') flush('hidden');|      if (false) flush('hidden');|" \
   'node --test packages/editor/tests/drafts.test.js'
 
+# 19. 文档数字与代码一致：让文档写错一个数字。
+#
+# 文档里「N 种语言」「N 个按钮」这类数字，错了不会让任何功能测试变红 ——
+# 所以专门有一条测试盯着它。这里确认那条测试真的守得住。
+weaken "文档数字与代码一致（语言数量写错）" \
+  README.md \
+  "s|\\*\\*36 种语言\\*\\*代码块高亮|**37 种语言**代码块高亮|" \
+  'node --test packages/editor/tests/studio-client.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1
