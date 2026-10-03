@@ -1,11 +1,6 @@
 /* ── 搜索页（P3-2b） ──
    配色全部走主题变量，所以亮暗切换与主题配置改色都能跟着走，
    不需要为搜索页单独写一套暗色规则。 */
-.visually-hidden {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
 .search-shell { max-width: var(--max-width); }
 .search-hero { margin-bottom: 1.5rem; }
 .search-hero-sub { color: var(--text-dim); margin: 0.4rem 0 0; }

@@ -7,7 +7,12 @@ import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
-import { buildJsonLd, renderHeadMeta, buildSitemap, buildRobots } from './transform/seo.js';
+import { extractAboutTitle } from './transform/about.js';
+import {
+  buildSeoView, renderSeoTags, buildStructuredData, renderJsonLd,
+  buildSitemap, buildSitemapIndex, planSitemapShards, SITEMAP_POLICY,
+  buildRobots, truncate,
+} from './transform/seo.js';
 import { buildRss, buildAtom } from '../feed/build.js';
 import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
 import { loadSearchClient } from '../search/ui/index.js';
@@ -146,6 +151,19 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   // ── 5. 渲染页面 ────────────────────────────────────────────────
   const pages = [];
+  /**
+   * 面包屑：所有非首页都从「首页」起算。爬虫靠它理解站点层级，
+   * 搜索结果里也会显示成 example.com › 标签 › 主题 而不是一串裸 URL。
+   */
+  const homeCrumb = { name: config.site.title, url: `${config.site.url}/` };
+  const seo = {
+    homeCrumb,
+    // 封面图兜底：文章没写 cover 时用站点级 og 图。
+    // 刻意**不给默认值**：没有真实图片时输出一个空 og:image，
+    // 社交平台会抓到一张白图 —— 比「没有图」更难看。
+    defaultImage: config.seo?.defaultImage ?? null,
+  };
+
   const common = () => ({
     site: siteData,
     config,
@@ -198,10 +216,14 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       data: {
         ...common(),
         type: 'home',
+        seoKind: 'blog',
         title: null,
         description: config.site.description,
         canonical: index === 0 ? `${config.site.url}/` : `${config.site.url}${url}`,
         posts: slice.map(toCard),
+        // rel=prev/next 的 href 必须是绝对地址：相对地址在分页目录下会解析错。
+        seoPrev: index > 0 ? `${config.site.url}${index === 1 ? '/' : `/page/${index}.html`}` : null,
+        seoNext: index + 1 < pageCount ? `${config.site.url}/page/${index + 2}.html` : null,
         pagination: { current: index + 1, total: pageCount, prev: index > 0 ? (index === 1 ? '/' : `/page/${index}.html`) : null, next: index + 1 < pageCount ? `/page/${index + 2}.html` : null },
         pinned: index === 0 ? sorted.filter((p) => p.pinned).map(toCard) : [],
       },
@@ -216,14 +238,18 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       data: {
         ...common(),
         type: 'article',
+        seoKind: 'blogpost',
         title: post.title,
         description: post.description,
         image: post.cover,
         lang: post.lang,
+        author: post.author ?? siteData.author,
+        publishedTime: post.date,
+        modifiedTime: post.updated ?? post.date,
+        articleTags: post.tags,
         canonical: `${config.site.url}${post.url}`,
         post,
         related: findRelated(post, sorted),
-        jsonLd: JSON.stringify(buildJsonLd({ site: siteData, post, url: `${config.site.url}${post.url}` })),
       },
     });
   }
@@ -232,25 +258,37 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     layout: 'archive',
     strict: true,
     path: '/archive.html',
-    data: { ...common(), type: 'website', title: '归档', description: '全部文章按时间排列', canonical: `${config.site.url}/archive.html`, groups: groupByYear(sorted) },
+    data: { ...common(), type: 'website', seoKind: 'collection', title: '归档', description: '全部文章按时间排列', canonical: `${config.site.url}/archive.html`, groups: groupByYear(sorted) },
   });
   pages.push({
     layout: 'tags',
     strict: true,
     path: '/tags.html',
-    data: { ...common(), type: 'website', title: '标签', description: '按标签浏览文章', canonical: `${config.site.url}/tags.html`, tags: tags.sort((a, b) => b.count - a.count) },
+    data: { ...common(), type: 'website', seoKind: 'collection', title: '标签', description: '按标签浏览文章', canonical: `${config.site.url}/tags.html`, tags: tags.sort((a, b) => b.count - a.count) },
   });
+  // 关于页：正文里的 h1 提成页面主标题，避免「布局 h1 + 正文 h1」一页两个。
+  const about = extractAboutTitle(await renderAbout(cwd, config), '关于');
   pages.push({
     layout: 'about',
     strict: true,
     path: '/about.html',
-    data: { ...common(), type: 'website', title: '关于', description: `${config.site.title} 的关于页`, canonical: `${config.site.url}/about.html`, content: await renderAbout(cwd, config) },
+    data: {
+      ...common(),
+      type: 'website',
+      seoKind: 'about',
+      title: about.title,
+      description: `${config.site.title} 的关于页`,
+      canonical: `${config.site.url}/about.html`,
+      content: about.html,
+      aboutTitle: about.title,
+      aboutTitleSource: about.titleSource,
+    },
   });
   pages.push({
     layout: '404',
     strict: true,
     path: '/404.html',
-    data: { ...common(), type: 'website', title: '页面不存在', canonical: `${config.site.url}/404.html`, description: '找不到这个页面' },
+    data: { ...common(), type: 'website', seoKind: 'webpage', title: '页面不存在', canonical: `${config.site.url}/404.html`, description: '找不到这个页面', noindex: true },
   });
 
   // 搜索页。索引已在上一步算好 —— 这里只决定「内联还是外链」。
@@ -265,6 +303,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       data: {
         ...common(),
         type: 'website',
+        seoKind: 'webpage',
         title: '搜索',
         description: `在 ${config.site.title} 中搜索`,
         canonical: `${config.site.url}${searchPath}`,
@@ -292,7 +331,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
         layout: definition.layout,
         path: definition.path,
         plugin: plugin.name,
-        data: { ...common(), type: 'website', title: definition.title ?? null, description: definition.description ?? '', canonical: `${siteData.url}${definition.path}`, ...definition.data },
+        data: { ...common(), type: 'website', seoKind: 'webpage', title: definition.title ?? null, description: definition.description ?? '', canonical: `${siteData.url}${definition.path}`, ...definition.data },
       });
     }
   }
@@ -300,28 +339,49 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   // 布局渲染 + 插件钩子
   const rendered = [];
   for (const page of pages) {
-    // headMeta 依赖 title/description/canonical，只能在页面数据齐备后生成。
-    page.data.headMeta = renderHeadMeta({
-      site: siteData,
-      page: { title: page.data.title, description: page.data.description, type: page.data.type, image: page.data.image, lang: page.data.lang },
-      canonical: page.data.canonical,
-    });
+    applySeo(page.data, { site: siteData, config, seo });
     const html = renderLayout(theme, page.layout, page.data, { strict: page.strict === true });
     rendered.push({ ...page, html });
   }
   await hooks.run('onBeforeRender', { config, pages: rendered, posts, site: siteData });
 
   // ── 6. 附加文件 ────────────────────────────────────────────────
+  //
+  // sitemap 的条目**必须来自实际产出的页面**，不能用模板重新拼一遍路径。
+  // 之前是后者：标签页/分类页/搜索页/分页全都不在里面，于是搜索引擎
+  // 只能靠链接爬 —— 而孤立的标签页几乎没有入链。
+  // 现在直接读 rendered（已排除 noindex 页面）。
   if (config.seo?.sitemap !== false) {
-    extraFiles.push({
-      path: '/sitemap.xml',
-      content: buildSitemap(siteData, [
-        { url: `${siteData.url}/`, priority: '1.0', changefreq: 'daily' },
-        ...sorted.map((p) => ({ url: `${siteData.url}${p.url}`, lastmod: p.updated?.slice(0, 10) })),
-        { url: `${siteData.url}/archive.html`, priority: '0.5' },
-        { url: `${siteData.url}/tags.html`, priority: '0.5' },
-      ]),
-    });
+    // 站点最新一次内容变更。首页/归档/标签这些聚合页的 lastmod 用它，
+    // 而不是构建时间 —— 构建时间会让每次 CI 重建都把整份 sitemap 的
+    // lastmod 刷新一遍，搜索引擎会开始忽略这个字段。
+    const latestUpdate = sorted.reduce((acc, post) => {
+      const value = (post.updated ?? post.date ?? '').slice(0, 10);
+      return value > acc ? value : acc;
+    }, '');
+
+    const sitemapEntries = rendered
+      .filter((page) => !page.data.noindex)
+      .map((page) => ({
+        url: page.data.canonical,
+        lastmod: (page.data.modifiedTime ?? page.data.post?.updated ?? page.data.post?.date)?.slice(0, 10)
+          ?? (page.data.type === 'home' || page.data.seoKind === 'collection' ? latestUpdate || null : null),
+        ...sitemapPolicyFor(page),
+      }))
+      // 同一 canonical 只留一条：分页首页的 canonical 指向 /，会与首页重复。
+      .filter((entry, index, all) => all.findIndex((e) => e.url === entry.url) === index);
+
+    const shards = planSitemapShards(sitemapEntries);
+    if (shards) {
+      // > 50000 条：sitemaps.org 硬限制。拆成 index + 分片，
+      // 否则整份 sitemap 会被搜索引擎直接判为无效（不是「只收前 5 万条」）。
+      for (const shard of shards) extraFiles.push({ path: shard.path, content: buildSitemap(siteData, shard.entries) });
+      extraFiles.push({ path: '/sitemap.xml', content: buildSitemapIndex(siteData, shards) });
+      logger.info(`Sitemap：${sitemapEntries.length} 条 URL，拆成 ${shards.length} 个分片`);
+    } else {
+      extraFiles.push({ path: '/sitemap.xml', content: buildSitemap(siteData, sitemapEntries) });
+      logger.info(`Sitemap：${sitemapEntries.length} 条 URL`);
+    }
   }
   if (config.feed?.enabled !== false) {
     const feedOptions = {
@@ -338,7 +398,10 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     logger.info(`Feed：RSS + Atom · ${Math.min(kept.length, feedOptions.limit)} 条${feedOptions.fullContent ? '（含全文）' : ''}`);
   }
   if (config.seo?.robots !== false) {
-    extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData) });
+    // config.seo.robots 可以是 false（整份不产出）、true/undefined（默认规则），
+    // 或一个对象（额外 Disallow / 自定义规则）。默认规则里的搜索页屏蔽不可取消。
+    const robotsConfig = typeof config.seo.robots === 'object' && config.seo.robots !== null ? config.seo.robots : {};
+    extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData, robotsConfig) });
   }
   // ── 7. 写盘 ────────────────────────────────────────────────────
   const outDir = path.resolve(cwd, config.output?.dir ?? 'dist');
@@ -448,6 +511,91 @@ function groupBy(entries) {
   return [...map.values()];
 }
 
+/**
+ * 把 SEO 视图挂到页面数据上。4 套主题统一 include "seo" partial，
+ * 只读 seoView / jsonLd —— 主题不参与任何 SEO 决策。
+ *
+ * 为什么由引擎统一生成而不是各主题自己拼：
+ * 4 份手写的 JSON-LD 一定会漂移（其中一两份漏掉 dateModified 都很难发现），
+ * 而结构化数据错了不会让页面看起来有任何异常。
+ */
+function applySeo(data, { site, config, seo }) {
+  const breadcrumbs = buildBreadcrumbs(data, site, seo);
+  const canonical = data.canonical ?? `${site.url}/`;
+  const image = data.image ?? seo.defaultImage ?? null;
+
+  const view = buildSeoView({
+    site,
+    page: {
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      image,
+      lang: data.lang,
+      ogType: data.type === 'home' ? 'website' : undefined,
+      publishedTime: data.publishedTime ?? null,
+      modifiedTime: data.modifiedTime ?? null,
+      articleTags: data.articleTags ?? [],
+      author: data.author ?? null,
+      authorUrl: config.seo?.authorUrl ?? site.authorUrl ?? null,
+      noindex: data.noindex === true,
+    },
+    canonical,
+    breadcrumbs,
+    prev: data.seoPrev ?? null,
+    next: data.seoNext ?? null,
+  });
+
+  data.seoView = view;
+  data.breadcrumbs = breadcrumbs;
+  data.headMeta = renderSeoTags(view);
+  data.jsonLd = config.seo?.structuredData === false
+    ? ''
+    : renderJsonLd(buildStructuredData({
+      kind: data.seoKind ?? 'webpage',
+      site,
+      url: canonical,
+      page: data,
+      post: data.post,
+      breadcrumbs,
+      authorUrl: data.authorUrl ?? config.seo?.authorUrl ?? null,
+    }));
+}
+
+/** 面包屑：首页 → 中间层 → 当前页。首页自身不给面包屑（一条只有自己的链没有信息）。 */
+function buildBreadcrumbs(data, site, seo) {
+  if (data.type === 'home' || data.noindex) return [];
+  const crumbs = [seo.homeCrumb];
+  if (data.type === 'article' && data.post) {
+    crumbs.push({ name: '归档', url: `${site.url}/archive.html` });
+    crumbs.push({ name: data.title, url: data.canonical });
+  } else if (/^标签：/.test(String(data.title ?? ''))) {
+    crumbs.push({ name: '标签', url: `${site.url}/tags.html` });
+    crumbs.push({ name: data.title, url: data.canonical });
+  } else if (/^分类：/.test(String(data.title ?? ''))) {
+    // 分类目前与标签共用 /tags.html 总览页。面包屑指向那里是据实 —
+    // 编一个并不存在的 /categories.html 会让爬虫多抓一个 404。
+    crumbs.push({ name: '分类', url: `${site.url}/tags.html` });
+    crumbs.push({ name: data.title, url: data.canonical });
+  } else if (data.title) {
+    crumbs.push({ name: data.title, url: data.canonical });
+  }
+  return crumbs;
+}
+
+/**
+ * sitemap 的 changefreq/priority 策略。判据是「页面类型」而不是路径字符串 ——
+ * 路径是可以配置的（搜索页路径就能改），拿路径做判断迟早对不上。
+ */
+function sitemapPolicyFor(page) {
+  if (page.data.type === 'home') return SITEMAP_POLICY.home;
+  if (page.data.type === 'article') return SITEMAP_POLICY.post;
+  const title = String(page.data.title ?? '');
+  if (page.layout === 'tags' && /^(?:标签|分类)：/.test(title)) return SITEMAP_POLICY.taxonomy;
+  if (page.data.type === 'website' && ['归档', '标签'].includes(title)) return SITEMAP_POLICY.taxonomy;
+  return SITEMAP_POLICY.page;
+}
+
 function slugifyTag(text) {
   return String(text).toLowerCase().trim().replace(/[\s\u3000]+/g, '-').replace(/[^\p{L}\p{N}-]/gu, '') || encodeURIComponent(text);
 }
@@ -492,6 +640,7 @@ function renderTaxonomyPages(kind, groups, config, base, wikiIndex, imageResolve
     data: {
       ...base,
       type: 'website',
+      seoKind: 'collection',
       title: `${kind === 'tag' ? '标签' : '分类'}：${group.name}`,
       description: `包含「${group.name}」的全部文章`,
       canonical: `${config.site.url}/${kind === 'tag' ? 'tags' : 'categories'}/${encodeURIComponent(group.slug)}.html`,
@@ -506,7 +655,19 @@ async function renderAbout(cwd, config) {
   for (const candidate of candidates) {
     try {
       const raw = await fs.readFile(path.resolve(cwd, candidate), 'utf8');
-      return renderMarkdown(raw, { allowHtml: false, resolveImage: (u) => u, resolveLink: (u) => u, headingIds: new Map() });
+      // demoteH1: false —— 关于页的正文一级标题不是「正文里的第二个主标题」，
+      // 它**就是**这一页的主标题。渲染时降级会让 extractAboutTitle 再也找不到它，
+      // 于是页面主标题变成布局里写死的「关于」，而作者写的那句被降成 h2 印在正文里。
+      //
+      // 这里踩过一次：最初默认降级，测试断言「主标题来自 ABOUT.md」直接红了 ——
+      // 红得对。降级是为了防止「一页两个主标题」，而关于页的 h1 是唯一那个。
+      return renderMarkdown(raw, {
+        allowHtml: false,
+        resolveImage: (u) => u,
+        resolveLink: (u) => u,
+        headingIds: new Map(),
+        demoteH1: false,
+      });
     } catch { /* 继续找下一个 */ }
   }
   return `<p>还没有写关于页。在项目根目录放一个 <code>ABOUT.md</code> 即可自动出现在这里。</p>`;

@@ -25,7 +25,8 @@
     "screenshots:themes": "node scripts/screenshots/capture.mjs",
     "preview:themes": "node scripts/preview-images.mjs",
     "lighthouse:themes": "node scripts/lighthouse-themes.mjs",
-    "e2e:theme": "node scripts/e2e/theme.mjs"
+    "e2e:theme": "node scripts/e2e/theme.mjs",
+    "check:seo": "node scripts/check-seo.mjs"
   },
   "engines": {
     "node": ">=18"

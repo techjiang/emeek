@@ -354,5 +354,110 @@ weaken "Feed discovery 单一来源（layout 里加回硬编码）" \
   "s|{% include \"head\" %}|<link rel=\"alternate\" type=\"application/rss+xml\" href=\"/rss.xml\" />{% include \"head\" %}|" \
   'node --test "packages/core/tests/feed/*.test.js"'
 
+# ── P3-3a SEO 防线 ──────────────────────────────────────────────
+#
+# 42. JSON-LD 必须走 JSON.stringify：改成手拼字符串。
+#
+# 手拼的 JSON-LD 在标题带引号或 </script> 时会直接变成语法错误 ——
+# 而页面看起来完全正常，只有 Google 富媒体测试会报错。
+weaken "JSON-LD 转义（改成手拼字符串）" \
+  packages/core/src/pipeline/transform/seo.js \
+  "s|^export function jsonLdSafe(data) {|export function jsonLdSafe(data) { return JSON.stringify(data); // weakened\nfunction _unused(data) {|" \
+  'node --test packages/core/tests/seo/structured-data.test.js'
+
+# 43. 结构化数据必须真解析：让 renderJsonLd 输出不可解析的内容。
+weaken "JSON-LD 可解析（renderJsonLd 输出坏 JSON）" \
+  packages/core/src/pipeline/transform/seo.js \
+  "s|  return \`<script type=\"application/ld+json\">\${jsonLdSafe(data)}</script>\`;|  return \`<script type=\"application/ld+json\">{oops}</script>\`;|" \
+  'node --test packages/core/tests/seo/structured-data.test.js'
+
+# 44. sitemap 子元素必须按 XSD 顺序：把 loc 提到最前。
+#
+# sitemaps.org 的 XSD 是 sequence。顺序错了整份 sitemap 无效，
+# 但浏览器打开它看起来完全正常。
+weaken "sitemap 元素顺序（loc 提前）" \
+  packages/core/src/pipeline/transform/seo.js \
+  "s|      entry.lastmod ? \`    <lastmod>|      \`    <loc>\${escapeHtml(entry.url)}</loc>\`, entry.lastmod ? \`    <lastmod>|" \
+  'node --test packages/core/tests/seo/crawl.test.js'
+
+# 45. sitemap 必须转义 & 与 <：让 escapeHtml 直通。
+weaken "sitemap XML 转义（escapeHtml 直通）" \
+  packages/core/src/pipeline/transform/toc.js \
+  "s|^export function escapeHtml(text) {|export function escapeHtml(text) { return String(text ?? '');\nfunction _unused(text) {|" \
+  'node --test packages/core/tests/seo/crawl.test.js'
+
+# 46. 搜索页必须被 robots 屏蔽：把那条 Disallow 删掉。
+#
+# 允许收录搜索页会产生「重复内容」，稀释整站权重 ——
+# 这不是可配置的偏好问题。
+weaken "robots 屏蔽搜索页（删掉 Disallow）" \
+  packages/core/src/pipeline/transform/seo.js \
+  "s|'Disallow: /search/', ||" \
+  'node --test packages/core/tests/seo/crawl.test.js'
+
+# 47. 404 必须 noindex：让 noindex 判断恒为假。
+weaken "404 noindex（判断恒假）" \
+  packages/core/src/pipeline/transform/seo.js \
+  "s|    view.noindex ? '<meta name=\"robots\" content=\"noindex, follow\" />' : '',||" \
+  'node --test packages/core/tests/seo/integration.test.js'
+
+# 48. 每页恰好一个 canonical：在 seo partial 里再加一个。
+weaken "canonical 唯一（partial 里加第二个）" \
+  packages/theme-minimal/partials/seo.html \
+  "s|^{{{ headMeta }}}|{{{ headMeta }}}\n<link rel=\"canonical\" href=\"/dup\" />|" \
+  'node --test packages/core/tests/seo/integration.test.js'
+
+# 49. 正文 h1 必须降级：关掉 demoteH1。
+#
+# 不降级就有两个主标题（布局一个、正文一个），搜索引擎分不清
+# 哪个是页面主题，屏幕阅读器也会把大纲读成两棵树。
+weaken "正文 h1 降级（关掉 demoteH1）" \
+  packages/core/src/pipeline/parse/markdown.js \
+  "s|      const level = demoteH1 \&\& hashes.length === 1 ? 2 : hashes.length;|      const level = hashes.length;|" \
+  'node --test packages/core/tests/seo/integration.test.js'
+
+# 50. 外链必须带 rel=noopener noreferrer：让它不加。
+#
+# 缺了 noopener 就留着 window.opener 这条跨域改写标签页的路径。
+weaken "外链 rel（不再加 rel）" \
+  packages/core/src/pipeline/parse/markdown.js \
+  "s|    const rel = external ? ' rel=\"noopener noreferrer\"' : '';|    const rel = '';|" \
+  'node --test packages/core/tests/security/xss.test.js'
+
+# 51. 首屏图片不得懒加载：让所有图片都 lazy。
+#
+# 首屏图通常就是 LCP 那张，给它 loading=lazy 会让「最快内容绘制」反而更慢。
+weaken "首屏图 eager（改成全部 lazy）" \
+  packages/core/src/pipeline/transform/images.js \
+  "s|    const isEager = index < eagerCount;|    const isEager = false;|" \
+  'node --test packages/core/tests/transform.test.js'
+
+# 52. 图片 alt 必须有兜底：让 alt 变回空字符串。
+#
+# 空 alt 让图片对屏幕阅读器与图片搜索完全消失。
+weaken "图片 alt 兜底（改回空 alt）" \
+  packages/core/src/pipeline/transform/images.js \
+  "s|      next += \` alt=\"\${escapeAttr(derived)}\" data-alt-inferred=\"true\"\`;|      next += ' alt=\"\"';|" \
+  'node --test packages/core/tests/transform.test.js'
+
+# 53. 关于页的主标题必须来自正文，而不是硬编码的「关于」。
+#
+# 这里有个真实的教训：我最初写的是「不提取 h1 就会有两个主标题」，
+# 但把提取函数削弱之后测试仍然全绿 —— 因为正文 h1 已经被降级成 h2，
+# 「两个 h1」那个断言是靠降级守住的，跟提取无关（这一条我实测过）。
+# 提取真正保护的是**标题内容**：关于页的主标题应当是作者写的
+# 「关于这个演示站」，而不是布局里写死的「关于」。
+# 一条削弱之后不会红的负向验证，本身就是在自欺 —— 所以改成了这条。
+weaken "关于页标题取正文（不提取）" \
+  packages/core/src/pipeline/transform/about.js \
+  "s|  const match = .*exec(html);|  const match = null;|" \
+  'node --test packages/core/tests/seo/about-title.test.js'
+
+# 54. sitemap 里的 URL 必须有对应产物：往 sitemap 里塞一个不存在的页面。
+weaken "sitemap 与产物一致（不过滤 noindex）" \
+  packages/core/src/pipeline/index.js \
+  "s|      .filter((page) => !page.data.noindex)|      .filter(() => true) // weakened|" \
+  'node --test packages/core/tests/seo/integration.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

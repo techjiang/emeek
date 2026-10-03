@@ -400,3 +400,11 @@ html[data-theme="light"] .tok-property { color: #c0392b; }
 .feed-link:hover { color: var(--accent); }
 .feed-icon { flex: none; }
 .feed-label { font-size: inherit; }
+
+/* 无障碍工具类：视觉上隐藏、语义上保留。
+   首页的主标题、表单 label 都用它 —— 视觉可以不要，文档大纲不能没有。
+   放在 main.css 而不是 search.css：它是通用工具类，搜索页只是使用者之一。 */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

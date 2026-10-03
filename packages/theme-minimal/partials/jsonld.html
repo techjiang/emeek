@@ -1,0 +1,9 @@
+{# 结构化数据（JSON-LD）。
+   这里的 jsonLd 是**已经是完整 <script> 标签**的字符串（由 seo.js 的
+   renderJsonLd 产出），所以只做三花括号插值，不能再包一层 <script> ——
+   双层 <script> 会让整块 JSON-LD 变成一段纯文本，JSON.parse 直接失败，
+   而页面看起来毫无异常，只有 Google 富媒体测试会报错。
+
+   放在 <body> 末尾而不是 <head>：首屏 <head> 更小，
+   结构化数据不参与渲染，放最后不影响任何东西。 #}
+{{{ jsonLd }}}
