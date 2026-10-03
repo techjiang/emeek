@@ -8,6 +8,8 @@
   2. 明暗切换：点按钮 → data-theme 翻转 → localStorage 记住。
   3. legacy 明暗策略：light/dark 强制模式下，按钮点击不改变外观。
   4. 两套主题视觉不同：同一页面，CSS 变量与关键布局属性不同。
+  5. 布局结构两两可辨：4 套主题的首页版面结构（网格/单栏/两栏/多栏）
+     两两至少一项不同 —— 「换主题只换颜色」在这里被挡住。
 
 输入 JSON：{dist: {theme: dir}, out: manifest 路径, root, targets}
 """
@@ -53,6 +55,63 @@ def serve(directory):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     return f"http://127.0.0.1:{port}", httpd.shutdown
+
+
+# 首页「版面结构」采样：这些字段描述的是**布局**，不是配色。
+#   mainDisplay/mainCols/mainFlex —— 页面主容器的排列方式
+#   listDisplay/listCols/listFlex  —— 文章列表容器的排列方式
+#   cardFullWidth                 —— 首页所有卡片是否等宽（单栏/多栏的信号）
+#   asideColumn                   —— 是否存在并排的侧栏列
+# 判据只有一条：任意两套主题，这份结构快照至少一项不同。
+LAYOUT_PROBE = """()=>{
+  const cs = (el) => el ? getComputedStyle(el) : null;
+  const main = document.querySelector('.site-main');
+  const cards = [...document.querySelectorAll('.card')];
+  // 主容器里的直接子元素（排除 script），用来判断有没有「并排的第二列」
+  const mainChildren = main ? [...main.children].filter(Boolean) : [];
+  const list = document.querySelector('.post-list') || document.querySelector('.post-grid')
+    || document.querySelector('.lead-grid') || document.querySelector('.index-column');
+  const widths = cards.map((c) => Math.round(c.getBoundingClientRect().width));
+  const uniqueWidths = [...new Set(widths)];
+  return {
+    mainDisplay: cs(main)?.display ?? '',
+    mainCols: cs(main)?.gridTemplateColumns ?? '',
+    mainFlex: cs(main)?.flexDirection ?? '',
+    mainChildCount: mainChildren.length,
+    listDisplay: cs(list)?.display ?? '',
+    listCols: cs(list)?.gridTemplateColumns ?? '',
+    listFlex: cs(list)?.flexDirection ?? '',
+    cardCount: cards.length,
+    // 「所有卡片同宽」在单栏与网格里都可能成立，但它区分「有主次」的杂志版式
+    allCardsEqualWidth: uniqueWidths.length <= 1,
+    // 第一张卡是否明显比其余宽 —— Magazine 的封面头条就是这种结构
+    hasLeadCard: widths.length > 1 && widths[0] > Math.max(...widths.slice(1)) * 1.2,
+    // 首页是否有 hero 区（Aurora 的渐变舞台、Inkstone/Magazine 的刊头）
+    hasHero: !!document.querySelector('.hero'),
+    // 区块编号（Magazine 的 01/02），是它「三级权重」的可见标记
+    hasSectionNumber: !!document.querySelector('.section-number'),
+  };
+}"""
+
+
+def probe_layout_structure(config):
+    """返回 {theme: {signature, metrics}}，供两两比较用。"""
+    out = {}
+    with sync_playwright() as playwright:
+        b = playwright.chromium.launch(executable_path=browser.chrome_path())
+        for theme in config["targets"]:
+            origin, shutdown = serve(config["dist"][theme])
+            ctx = b.new_context(viewport={"width": 1280, "height": 900}, color_scheme="dark")
+            ctx.add_init_script("localStorage.setItem('emeeek-theme','dark')")
+            pg = ctx.new_page()
+            pg.goto(origin + "/index.html")
+            pg.wait_for_timeout(120)
+            metrics = pg.evaluate(LAYOUT_PROBE)
+            ctx.close()
+            shutdown()
+            out[theme] = {"metrics": metrics}
+        b.close()
+    return out
 
 
 def probe_themes(config):
@@ -115,13 +174,13 @@ def main(config_file):
     config = json.load(open(config_file, encoding="utf8"))
     rows = probe_themes(config)
 
-    # 4. 两套主题互不相同：同一路由下 --bg / 字体 / 圆角至少两项不同
+    # 4. 主题两两可辨：计算样式 ≥ 5 项不同（配色/字体/圆角/卡片宽度…）
+    structure = probe_layout_structure(config)
     if len(config["targets"]) >= 2:
-        a, b_ = config["targets"][0], config["targets"][1]
         with sync_playwright() as playwright:
             br = playwright.chromium.launch(executable_path=browser.chrome_path())
             samples = {}
-            for theme in (a, b_):
+            for theme in config["targets"]:
                 origin, shutdown = serve(config["dist"][theme])
                 ctx = br.new_context(viewport={"width": 1280, "height": 900}, color_scheme="dark")
                 ctx.add_init_script("localStorage.setItem('emeeek-theme','dark')")
@@ -134,6 +193,9 @@ def main(config_file):
                     bg:cs.getPropertyValue('--bg').trim(),
                     radius:cs.getPropertyValue('--radius').trim(),
                     font:cs.getPropertyValue('--font-body').trim(),
+                    fontSize:cs.getPropertyValue('--font-size-base').trim(),
+                    lineHeight:cs.getPropertyValue('--line-height-base').trim(),
+                    maxWidth:cs.getPropertyValue('--max-width').trim(),
                     cardRadius:card?getComputedStyle(card).borderRadius:'',
                     cardWidth:card?Math.round(card.getBoundingClientRect().width):0,
                   };
@@ -141,9 +203,24 @@ def main(config_file):
                 ctx.close()
                 shutdown()
             br.close()
-            diff = [k for k in samples[a] if samples[a][k] != samples[b_][k]]
-            rows.append(check(None, f"主题 {a} 与 {b_} 视觉可辨（≥2 项不同）",
-                              len(diff) >= 2, f"不同项 {diff}"))
+            themes = list(config["targets"])
+            for i in range(len(themes)):
+                for j in range(i + 1, len(themes)):
+                    a, b_ = themes[i], themes[j]
+                    diff = [k for k in samples[a] if samples[a][k] != samples[b_][k]]
+                    rows.append(check(None, f"主题 {a} 与 {b_} 计算样式可辨（≥5 项不同）",
+                                      len(diff) >= 5, f"不同 {len(diff)} 项 {diff}"))
+
+    # 5. 布局结构快照：把每套主题的原始结构指标一并回传。
+    #    判据（签名压缩 + 两两比较）由 Node 侧的 scripts/e2e/theme_signature.mjs
+    #    计算 —— 那里有单测钉着，Python 这边只负责“把真浏览器的结果读出来”。
+    if structure:
+        rows.append({
+            "name": "首页版面结构快照（供两两比较）",
+            "ok": True,
+            "detail": ", ".join(f"{t}:{structure[t]['metrics']['listDisplay']}" for t in structure),
+            "layout": {t: structure[t]["metrics"] for t in structure},
+        })
 
     if config.get("out"):
         json.dump({"rows": rows}, open(config["out"], "w", encoding="utf8"), ensure_ascii=False)

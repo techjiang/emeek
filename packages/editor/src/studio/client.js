@@ -20,6 +20,7 @@ import { WELCOME } from './welcome.js';
 import { SHORTCUTS, TOUCH_ALTERNATIVES, groupShortcuts, findShortcut, matchesShortcut } from './shortcuts.js';
 import { decideSync, SYNC_DECISION, connectReloadStream } from './sync.js';
 import { KeyStore, KEY_STORAGE, KEY_STORAGE_LABEL } from './keyring.js';
+import { describeFields, flattenValues, fieldControl, toOverrides, readPrefs, writePrefs } from './theme-panel.js';
 
 /** 当前编辑器实例。目录点击等回调需要它，而实例在 boot() 里才创建。 */
 let editorRef = null;
@@ -66,6 +67,8 @@ const state = {
   keys: null,
   /** 当前 Key 状态（四档之一）。 */
   keyStatus: null,
+  /** 主题配置：描述符 + 默认值 + 用户运行时覆盖。 */
+  themeConfig: null,
 };
 
 /**
@@ -168,6 +171,7 @@ async function boot() {
   bindLayout();
   bindKeyboardShortcuts();
   bindAiPanel();
+  bindThemePanel();
   state.keys = createKeyStore();
   bindRecoveryDialog();
   bindHistoryDialog();
@@ -210,7 +214,7 @@ async function boot() {
   function renderInto(result, elapsedMs) {
     const frame = $('#preview-frame');
     if (!frame) return;
-    frame.srcdoc = frameDocument(result.html);
+    frame.srcdoc = frameDocument(result.html, frame.dataset.themeOverrides ?? '');
     // 渲染耗时既上预览标题栏（诊断），也进状态栏（预期管理）——
     // 两处说的是同一件事，不该各算一次。
     state.renderMs = elapsedMs;
@@ -643,6 +647,164 @@ async function boot() {
     const list = typeof selector === 'string' ? document.querySelectorAll(selector) : selector;
     if (!list.length) console.warn(`[studio] 找不到任何 ${selector}`);
     list.forEach((el) => el.addEventListener(event, handler));
+  }
+
+  /**
+   * 主题配置面板（feature D）。
+   *
+   * 数据流：Studio 服务端给描述符与当前值 → 面板按描述符画控件 →
+   * 用户改一项就 POST 校验一次 → 接受的值写进预览 iframe 的 CSS 变量。
+   *
+   * 「改配置即时预览」在这里的落点是：覆盖值通过 iframe 的 srcdoc 前置
+   * 一个 :root 变量块生效 —— 与构建期变量块走的是同一套变量名，
+   * 所以预览看到的就是构建后大致的样子。
+   */
+  function bindThemePanel() {
+    const panel = $('#theme-panel');
+    if (!panel) return;
+    on('#btn-theme-config', 'click', async () => {
+      const open = panel.classList.toggle('open');
+      if (open) await loadThemeConfig();
+    });
+    on('#theme-close', 'click', () => panel.classList.remove('open'));
+    on('#btn-theme-reset', 'click', async () => {
+      state.themeOverrides = {};
+      writePrefs(safeStorage(), {});
+      await loadThemeConfig();
+      applyThemeOverridesToPreview();
+    });
+    // 事件委托：字段是动态渲染的，逐个绑会随每次重画丢监听器
+    on('#theme-fields', 'input', (event) => handleThemeInput(event));
+    on('#theme-fields', 'change', (event) => handleThemeInput(event));
+  }
+
+  async function loadThemeConfig() {
+    if (!state.themeConfig) {
+      try {
+        const response = await fetch('/__studio/theme/config');
+        const payload = await response.json();
+        if (!payload.available) {
+          setText('#theme-panel-name', '当前环境不可用');
+          $('#theme-fields').innerHTML = '<p class="theme-hint">主题配置面板需要 emeeek dev 的 Studio 环境。</p>';
+          return;
+        }
+        state.themeConfig = payload;
+      } catch (error) {
+        $('#theme-fields').innerHTML = `<p class="theme-hint">读取主题配置失败：${escapeHtml(error.message)}</p>`;
+        return;
+      }
+    }
+    state.themeOverrides = readPrefs(safeStorage());
+    renderThemeFields();
+    applyThemeOverridesToPreview();
+  }
+
+  function renderThemeFields() {
+    const groups = describeFields(state.themeConfig.meta.config ?? {});
+    setText('#theme-panel-name', state.themeConfig.meta.name ?? '');
+    const values = { ...state.themeConfig.values };
+    for (const [group, items] of Object.entries(state.themeOverrides)) {
+      for (const [key, value] of Object.entries(items)) values[`${group}.${key}`] = value;
+    }
+    const host = $('#theme-fields');
+    if (!host) return;
+    host.innerHTML = groups.map((group) => `
+      <div class="theme-group">
+        <h4>${escapeHtml(groupLabel(group.group))}</h4>
+        ${flattenValues([group], values).map(renderField).join('')}
+      </div>`).join('');
+  }
+
+  function renderField(field) {
+    const control = fieldControl(field);
+    const id = `tf-${field.path.replace(/\./g, '-')}`;
+    const attrs = Object.entries(control.attrs).filter(([k]) => k !== 'value' && k !== 'checked')
+      .map(([k, v]) => `${k}="${escapeHtml(v)}"`).join(' ');
+    let input;
+    if (control.tag === 'select') {
+      input = `<select id="${id}" ${attrs}>${control.options.map((opt) => `<option value="${escapeHtml(opt)}"${opt === control.value ? ' selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select>`;
+    } else if (control.tag === 'input') {
+      const valueAttr = control.attrs.type === 'checkbox'
+        ? (control.attrs.checked ? ' checked' : '')
+        : ` value="${escapeHtml(control.attrs.value)}"`;
+      input = `<input id="${id}" ${attrs}${valueAttr}>`;
+    } else {
+      input = `<span class="theme-value">${escapeHtml(control.attrs.value)}</span>`;
+    }
+    const valueLabel = ['number'].includes(field.type) ? `<span class="theme-value" data-value-for="${field.path}">${field.value}</span>` : '';
+    return `<div class="theme-field"><label for="${id}">${escapeHtml(field.label)}</label>${input}${valueLabel}</div>`;
+  }
+
+  async function handleThemeInput(event) {
+    const target = event.target;
+    const path = target?.dataset?.path;
+    if (!path) return;
+    const type = target.dataset.type;
+    let value;
+    if (type === 'boolean') value = target.checked;
+    else if (type === 'number') value = Number(target.value);
+    else value = target.value;
+
+    const [group, key] = path.split('.');
+    state.themeOverrides = { ...state.themeOverrides, [group]: { ...(state.themeOverrides[group] ?? {}), [key]: value } };
+
+    // 数字滑块旁边的读数即时跟手（不等服务端往返）
+    const readout = document.querySelector(`[data-value-for="${path}"]`);
+    if (readout) readout.textContent = String(value);
+
+    await verifyOverrides();
+    writePrefs(safeStorage(), toOverrides(flatOverrides(), flatDefaults()));
+    applyThemeOverridesToPreview();
+  }
+
+  /** 提交给服务端校验，把被拒的键显示出来（不静默丢弃）。 */
+  async function verifyOverrides() {
+    const host = $('#theme-rejected');
+    try {
+      const response = await fetch('/__studio/theme/override', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ overrides: state.themeOverrides }),
+      });
+      const payload = await response.json();
+      if (payload.rejected?.length && host) {
+        host.hidden = false;
+        host.innerHTML = `<strong>以下值没被接受：</strong><ul>${payload.rejected.map((r) => `<li>${escapeHtml(r.key)}：${escapeHtml(r.reason)}</li>`).join('')}</ul>`;
+      } else if (host) {
+        host.hidden = true;
+        host.innerHTML = '';
+      }
+    } catch { /* 校验不可达时不阻断预览，值仍会写进本地偏好 */ }
+  }
+
+  function flatOverrides() {
+    const out = {};
+    for (const [group, items] of Object.entries(state.themeOverrides ?? {})) {
+      for (const [key, value] of Object.entries(items)) out[`${group}.${key}`] = value;
+    }
+    return out;
+  }
+  function flatDefaults() {
+    const out = {};
+    for (const [group, items] of Object.entries(state.themeConfig?.meta?.config ?? {})) {
+      for (const [key, item] of Object.entries(items)) out[`${group}.${key}`] = item.default;
+    }
+    return out;
+  }
+
+  /**
+   * 把覆盖值变成一段 :root 变量块，塞进预览 iframe。
+   *
+   * 变量名映射刻意与 core 的 vars.js 保持一致（--primary/--bg/…）——
+   * 两边不一致的话，面板里改颜色预览会变、构建出来却不变，是最坏的那种「看起来能行」。
+   * 这里只覆盖最常用的几项，不做完整映射：预览是给人看的，不是构建的替代。
+   */
+  function applyThemeOverridesToPreview() {
+    const frame = $('#preview-frame');
+    if (!frame) return;
+    const declarations = overrideDeclarations(flatOverrides());
+    frame.dataset.themeOverrides = declarations;
+    if (state.mode !== 'edit') schedulePreview(editor.getText());
   }
 
   function bindToolbar(editor) {
@@ -1110,6 +1272,45 @@ const COMMANDS = {
    * 全部字段由 statusbar.js 的纯函数算出来，这里只做赋值 ——
    * 「保存失败却显示已保存」这类问题因此能在没有浏览器的测试里被抓
 /**
+ * 覆盖值 → CSS 变量声明。变量名与 core/theme/vars.js 对齐。
+ * 只映射「改了会立刻看得出来」的项，其余留给构建期。
+ */
+const OVERRIDE_VAR_MAP = {
+  'colors.primary': '--primary',
+  'colors.accent': '--accent',
+  'colors.background': '--bg',
+  'colors.surface': '--bg-soft',
+  'colors.text': '--text',
+  'colors.muted': '--text-dim',
+  'colors.border': '--border',
+  'typography.fontSize': '--font-size-base',
+  'typography.lineHeight': '--line-height-base',
+  'typography.headingFont': '--font-heading',
+  'typography.bodyFont': '--font-body',
+  'typography.codeFont': '--font-mono',
+  'layout.maxWidth': '--max-width',
+};
+
+export function overrideDeclarations(flat = {}) {
+  const parts = [];
+  for (const [path, value] of Object.entries(flat)) {
+    const varName = OVERRIDE_VAR_MAP[path];
+    if (!varName) continue;
+    const unit = path === 'typography.fontSize' || path === 'layout.maxWidth' ? 'px' : '';
+    parts.push(`${varName}: ${value}${unit};`);
+  }
+  return parts.length ? `:root{${parts.join('')}}` : '';
+}
+
+function groupLabel(group) {
+  return { colors: '颜色', typography: '字体', layout: '布局', features: '功能' }[group] ?? group;
+}
+
+function safeStorage() {
+  try { return globalThis.localStorage; } catch { return null; }
+}
+
+/**
  * 状态栏渲染（模块级）。
  *
  * 为什么在 boot() 之外：保存是异步的（写文件要走一个 HTTP 往返），
@@ -1242,10 +1443,13 @@ const GENERATIVE_ACTIONS = new Set(['continue', 'rewrite', 'expand', 'condense',
 // 预览 iframe 的文档壳：只带一份极简主题，正文 HTML 完全来自 core。
 // 用 iframe 是为了让预览样式与站点样式隔离 —— 编辑器 UI 的 CSS 不会漏进预览，
 // 预览的 CSS 也不会污染编辑器（否则「预览和构建不一样」就有了借口）。
-function frameDocument(html) {
+function frameDocument(html, themeOverrides = '') {
+  // themeOverrides 是面板生成的 :root 变量块。放在 preview.css 之后，
+  // 与构建期「变量块写在主题 CSS 之后」同序 —— 预览与构建才一致。
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/__studio/preview.css">
+${themeOverrides ? `<style>${themeOverrides}</style>` : ''}
 </head><body class="emeeek-preview"><article class="post-content">${html}</article></body></html>`;
 }
 

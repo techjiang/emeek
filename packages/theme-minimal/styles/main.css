@@ -115,8 +115,11 @@ a:hover { text-decoration: underline; }
 .section-label { margin-top: 2.5rem; }
 
 /* ── 文章卡片 ── */
-.post-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
-.card { padding: 1.25rem 0; border-bottom: 1px solid var(--border); }
+/* 首页单栏流式列表：排版为王，一栏到底。
+   与 Aurora/Magazine 的多栏网格、Inkstone 的两栏（正文+侧栏）都不同 ——
+   布局本身就是「这是哪套主题」的信号，不只靠颜色。 */
+.post-grid { display: block; }
+.card { padding: 1.25rem 0; margin-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
 .card-link { color: inherit; display: block; }
 .card-link:hover { text-decoration: none; }
 .card-link:hover .card-title { color: var(--accent); }

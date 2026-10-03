@@ -170,3 +170,101 @@ test('clean 删除产物目录', async () => {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+// ── emeeek theme（P3-1b-3b feature E） ──────────────────────────
+
+test('theme list 列出内置主题并标出当前主题', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.mkdir(path.join(dir, 'posts'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `export default { site: { url: 'https://x.dev' }, theme: { name: 'minimal' } };`, 'utf8');
+    const { code, stdout } = await cli(['theme', 'list', '--cwd', dir]);
+    assert.equal(code, 0, stdout);
+    for (const name of ['aurora', 'minimal', 'inkstone', 'magazine']) {
+      assert.match(stdout, new RegExp(name));
+    }
+    assert.match(stdout, /当前主题：minimal/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme switch 改写配置里的 theme.name，注释与其它字段保留', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.mkdir(path.join(dir, 'posts'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `// 我的博客\nexport default {\n  site: { url: 'https://x.dev', title: 'T' },\n  theme: { name: 'minimal', darkMode: 'auto' },\n};\n`, 'utf8');
+    const { code, stdout } = await cli(['theme', 'switch', 'magazine', '--cwd', dir]);
+    assert.equal(code, 0, stdout);
+    const after = await fs.readFile(path.join(dir, 'emeeek.config.js'), 'utf8');
+    assert.match(after, /name: 'magazine'/);
+    assert.match(after, /darkMode: 'auto'/, '未指定的字段应保留');
+    assert.match(after, /\/\/ 我的博客/, '注释应保留');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme switch --dark 同时改 darkMode', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.mkdir(path.join(dir, 'posts'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `export default { site: { url: 'https://x.dev' }, theme: { name: 'minimal', darkMode: 'auto' } };`, 'utf8');
+    await cli(['theme', 'switch', 'aurora', '--dark', '--cwd', dir]);
+    const after = await fs.readFile(path.join(dir, 'emeeek.config.js'), 'utf8');
+    assert.match(after, /name: 'aurora'/);
+    assert.match(after, /darkMode: 'dark'/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme switch 未知主题以非零码退出并列出可用项', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `export default { site: { url: 'https://x.dev' } };`, 'utf8');
+    const { code, stderr } = await cli(['theme', 'switch', 'nope', '--cwd', dir]);
+    assert.notEqual(code, 0);
+    assert.match(stderr + '', /找不到主题/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme create 生成可构建的骨架', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.mkdir(path.join(dir, 'posts'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'posts/a.md'), '---\ntitle: T\n---\n\n正文。', 'utf8');
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `export default { site: { url: 'https://x.dev' }, theme: { name: 'minimal' } };`, 'utf8');
+    const created = await cli(['theme', 'create', 'my-theme', '--cwd', dir]);
+    assert.equal(created.code, 0, created.stdout);
+    await assert.doesNotReject(fs.access(path.join(dir, 'themes/my-theme/theme.json')));
+
+    await cli(['theme', 'switch', 'my-theme', '--cwd', dir]);
+    const built = await cli(['build', '--cwd', dir]);
+    assert.equal(built.code, 0, built.stdout);
+    await assert.doesNotReject(fs.access(path.join(dir, 'dist/index.html')));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme create 重名时拒绝（除非 --force）', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'emeeek-cli-'));
+  try {
+    await fs.writeFile(path.join(dir, 'emeeek.config.js'), `export default { site: { url: 'https://x.dev' } };`, 'utf8');
+    await cli(['theme', 'create', 'dup', '--cwd', dir]);
+    const again = await cli(['theme', 'create', 'dup', '--cwd', dir]);
+    assert.notEqual(again.code, 0);
+    assert.match(again.stderr + '', /已存在/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('theme 无子命令时输出用法', async () => {
+  const { code, stdout } = await cli(['theme']);
+  assert.equal(code, 0);
+  assert.match(stdout, /用法: emeeek theme/);
+});

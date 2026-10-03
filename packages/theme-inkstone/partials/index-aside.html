@@ -1,0 +1,23 @@
+{# 首页侧栏：与文章页的 sidebar.html 不同 —— 首页没有 post.toc，
+   用「水墨印记 + 标签」构成右侧窄栏。两栏结构是本主题的版面身份。 #}
+<aside class="index-aside" aria-label="首页侧栏">
+    <div class="aside-block aside-seal" aria-hidden="true">
+        <span class="seal">墨</span>
+    </div>
+    {% if allTags.length %}
+    <div class="aside-block">
+        <h3 class="aside-title">题签</h3>
+        <div class="tag-cloud compact">
+            {% for tag in allTags %}<a class="tag" href="{{ tag.url }}">{{ tag.name }}</a>{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    <nav class="aside-block" aria-label="浏览">
+        <h3 class="aside-title">栏目</h3>
+        <ul class="aside-links">
+            <li><a href="/archive.html">归档</a></li>
+            <li><a href="/tags.html">标签</a></li>
+            <li><a href="/about.html">关于</a></li>
+        </ul>
+    </nav>
+</aside>

@@ -260,6 +260,36 @@ a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 @media (min-width: 70rem) {
   .post-layout { grid-template-columns: minmax(0, 1fr) 13rem; max-width: 76rem; }
 }
+
+/* ── 首页两栏版面 ──
+   左栏文章单栏流式，右栏印记与题签。窄屏折成一栏：
+   两栏是身份，不是「必须在手机上挤成两列」的理由。 */
+.index-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3rem; }
+@media (min-width: 70rem) {
+  .index-layout { grid-template-columns: minmax(0, 1fr) 12rem; max-width: 76rem; align-items: start; }
+}
+.index-aside { font-size: 0.9rem; display: flex; flex-direction: column; gap: 1.75rem; }
+@media (min-width: 70rem) {
+  .index-aside { position: sticky; top: 6rem; }
+}
+.aside-block { margin-bottom: 0.25rem; }
+.aside-title {
+  font-family: var(--font-heading); font-size: 0.8rem; font-weight: 600;
+  letter-spacing: 0.22em; color: var(--text-secondary);
+  margin: 0 0 0.9rem; padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+.aside-links { list-style: none; padding: 0; margin: 0; }
+.aside-links li { margin: 0.55rem 0; }
+.aside-links a { color: var(--text-secondary); letter-spacing: 0.08em; }
+.aside-seal { text-align: center; }
+.seal {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 3rem; height: 3rem; border-radius: 3px;
+  background: var(--seal-red); color: var(--bg-soft);
+  font-family: var(--font-heading); font-size: 1.35rem; font-weight: 700;
+  letter-spacing: 0.05em;
+}
 .post-header { margin-bottom: 2.4rem; padding-bottom: 1.6rem; border-bottom: 2px solid var(--rule); }
 .post-title {
   font-family: var(--font-heading); font-weight: 700;

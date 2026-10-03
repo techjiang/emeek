@@ -7,22 +7,23 @@
  * 一个 backdrop-filter 或一个大渐变就能把移动端 Performance 拉下来，
  * 而桌面看不出来。所以这里桌面与移动都跑，取各自最低分。
  *
- * 用法：node scripts/lighthouse-themes.mjs [主题名...]
+ * 主题清单动态扫 packages/theme-*。
+ *
+ * 用法：node scripts/lighthouse-themes.mjs [主题...]
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
-import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROOT, listThemes, resolveRequested } from './lib/themes.mjs';
+import { buildThemes } from './lib/build-theme.mjs';
 
-const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const DEMO = path.join(ROOT, 'examples/themes-demo');
 const PORT = Number(process.env.PORT ?? 8231);
 const THRESHOLD = Number(process.env.THEME_LH_THRESHOLD ?? 90);
 
-const requested = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-const THEMES = requested.length ? requested : ['aurora', 'minimal', 'inkstone', 'magazine'];
+const requested = resolveRequested();
+const THEMES = listThemes({ only: requested.length ? requested : undefined });
 
 const PAGES = [
   ['首页', '/index.html'],
@@ -33,22 +34,7 @@ const PAGES = [
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
 
-function buildTheme(theme) {
-  const configFile = path.join(DEMO, 'emeeek.config.js');
-  const original = fs.readFileSync(configFile, 'utf8');
-  fs.writeFileSync(configFile, original.replace(/theme:\s*\{[^}]*\}/, `theme: { name: '${theme}', darkMode: 'auto' }`));
-  try {
-    const result = spawnSync(process.execPath, [path.join(ROOT, 'packages/cli/bin/emeeek.js'), 'build', '--cwd', DEMO], { encoding: 'utf8' });
-    if (result.status !== 0) throw new Error(`构建 ${theme} 失败：\n${result.stderr}`);
-  } finally {
-    fs.writeFileSync(configFile, original);
-  }
-  const target = path.join(DEMO, `.dist-${theme}`);
-  fs.rmSync(target, { recursive: true, force: true });
-  fs.renameSync(path.join(DEMO, 'dist'), target);
-  return target;
-}
-
+/** 与其它脚本共用的本地静态服务（走 HTTP，绝不用 file://）。 */
 function serve(dist) {
   return http.createServer(async (req, res) => {
     let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '');
@@ -57,8 +43,8 @@ function serve(dist) {
       const content = await fsp.readFile(path.join(dist, rel));
       res.writeHead(200, { 'Content-Type': MIME[path.extname(rel)] ?? 'application/octet-stream' });
       res.end(content);
-    } catch (error) {
-            res.writeHead(404).end('not found');
+    } catch {
+      res.writeHead(404).end('not found');
     }
   });
 }
@@ -92,11 +78,11 @@ function runLighthouse(url, { mobile }) {
 }
 
 async function main() {
+  const dist = buildThemes(THEMES);
   const summary = [];
   for (const theme of THEMES) {
     console.log(`\n▸ 主题 ${theme}`);
-    const dist = buildTheme(theme);
-    const server = serve(dist);
+    const server = serve(dist[theme]);
     await new Promise((r) => server.listen(PORT, r));
     try {
       for (const [label, route] of PAGES) {

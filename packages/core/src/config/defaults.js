@@ -41,6 +41,14 @@ export function defaultConfig() {
       customCSS: '',
       customHead: '',
       customFooter: '',
+      /**
+       * 运行时主题切换按钮（P3-1b-3b feature F）。默认关闭。
+       *
+       * themes 里每项 { name, label, url } 的 url 必须是真实存在的另一套主题产物
+       * （例如同仓库多主题部署时各自的路径）。没有 url 的主题会以「仅此站」灰态
+       * 列出，而不是给一个点了没反应的链接。
+       */
+      switcher: null,
     },
     search: { enabled: true, fuzzy: true, maxResults: 10 },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },

@@ -82,6 +82,12 @@ export async function createStudioServer({
    * 没有东西可监听，开了只是白占 inotify 句柄。
    */
   watch = false,
+  /**
+   * 主题配置的提供者：返回 { meta, values }（见 createStudioServer 的路由
+   * `/__studio/theme/config`）。给了它，Studio 才能渲染「主题配置」面板。
+   * 不给则面板隐藏 —— 不做「面板在但改不动」的假界面。
+   */
+  themeProvider = null,
   logger = console,
 } = {}) {
   const aiKey = serverKey === undefined ? detectServerKey() : serverKey;
@@ -394,6 +400,48 @@ export async function createStudioServer({
       });
       if (!outcome.ok) safeLog(logger, 'warn', `AI 代理失败（${outcome.error.code}）：${outcome.error.message}`);
       return send(response, 200, MIME['.json'], JSON.stringify(outcome));
+    }
+
+    /**
+     * 主题配置（P3-1b-3b feature D）。
+     *
+     * 返回主题声明的配置描述符（type/min/max/options）与当前生效值。
+     * 面板据此画控件 —— 控件类型完全由主题自己声明，Studio 不猜。
+     *
+     * 只回描述符与值，不回任何可执行内容：customCSS/customHead/customFooter
+     * 不进这里（它们有各自的消毒器，且不由面板编辑）。
+     */
+    if (pathname === '/__studio/theme/config' && request.method === 'GET') {
+      if (!themeProvider) return send(response, 200, MIME['.json'], JSON.stringify({ available: false }));
+      try {
+        const payload = await themeProvider();
+        return send(response, 200, MIME['.json'], JSON.stringify({ available: true, ...payload }));
+      } catch (error) {
+        return send(response, 500, MIME['.json'], JSON.stringify({ available: false, error: error.message }));
+      }
+    }
+
+    /**
+     * 校验一份运行时覆盖：值是否对得上描述符。
+     *
+     * 面板改一下就 PATCH 一次，拿回规范化后的值 + 被拒的键 ——
+     * 拒绝原因直接显示在面板上，而不是静默失效。
+     */
+    if (pathname === '/__studio/theme/override' && request.method === 'POST') {
+      const raw = await readBody(request);
+      let payload;
+      try { payload = JSON.parse(raw || '{}'); } catch {
+        return send(response, 400, MIME['.json'], JSON.stringify({ error: '请求体不是合法 JSON' }));
+      }
+      if (!themeProvider) return send(response, 200, MIME['.json'], JSON.stringify({ available: false }));
+      try {
+        const { normalizeOverrides } = await import('@emeeek/core');
+        const { meta, values } = await themeProvider();
+        const { values: normalized, rejected } = normalizeOverrides(meta, payload.overrides ?? {});
+        return send(response, 200, MIME['.json'], JSON.stringify({ available: true, accepted: normalized, rejected, defaults: values }));
+      } catch (error) {
+        return send(response, 500, MIME['.json'], JSON.stringify({ error: error.message }));
+      }
     }
 
     if (pathname === '/__studio/status') {

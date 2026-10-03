@@ -17,6 +17,25 @@
  * 不做「任意位置注入」：位置由加载器写死在固定标记处，用户值只能填内容。
  */
 
+import { buildThemeSwitcher, SWITCHER_CSS } from './switcher.js';
+
+/**
+ * 组装切换器片段。开关与可选主题列表从 theme.json 的 config.features.themeSwitcher
+ * 与 config.themeSwitcher 读；缺省不启用 —— 不做用户没要的浮层。
+ */
+function buildSwitcher(theme, themeConfig = {}) {
+  const options = themeConfig.switcher ?? theme?.config?.['features.themeSwitcher'] ?? null;
+  if (!options || options.enabled === false) return { style: '', html: '', script: '' };
+  const switcher = buildThemeSwitcher({
+    current: theme?.meta?.name,
+    themes: Array.isArray(options.themes) ? options.themes : [],
+    darkToggle: options.darkToggle !== false,
+    position: options.position === 'bottom-left' ? 'bottom-left' : 'bottom-right',
+  });
+  if (!switcher.html) return { style: '', html: '', script: '' };
+  return { style: `<style>${SWITCHER_CSS}</style>`, html: switcher.html, script: `<script>${switcher.script}</script>` };
+}
+
 /** 剥掉能终止 <style> 的序列，以及旧 IE 的表达式执行入口。 */
 export function sanitizeCss(css) {
   return String(css ?? '')
@@ -137,6 +156,8 @@ export function buildInjections(theme, themeConfig = {}) {
   return {
     /** 变量 + 自定义 CSS，包在一个 <style> 里，减少节点数。 */
     headStyle: cssBlocks.length ? `<style>${cssBlocks.join('\n')}</style>` : '',
+    /** 运行时主题切换按钮（feature F）：见 theme/switcher.js。 */
+    switcher: buildSwitcher(theme, themeConfig),
     headExtra: themeConfig.customHead ? sanitizeInjection(themeConfig.customHead, 'head') : '',
     footerExtra: themeConfig.customFooter ? sanitizeInjection(themeConfig.customFooter, 'footer') : '',
     noFlash: buildNoFlashScript(themeConfig.darkMode ?? 'auto'),
