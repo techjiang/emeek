@@ -21,7 +21,11 @@
     "test:e2e": "node scripts/e2e/xss.mjs && node scripts/e2e/draft-mobile.mjs && node scripts/e2e/dev-integration.mjs && node scripts/e2e/ai-panel.mjs",
     "test:negative": "bash scripts/e2e/negative-check.sh",
     "check:shortcuts": "node scripts/check-shortcuts.mjs",
-    "test:perf": "node scripts/lighthouse.mjs"
+    "test:perf": "node scripts/lighthouse.mjs",
+    "screenshots:themes": "node scripts/screenshots/capture.mjs",
+    "preview:themes": "node scripts/preview-images.mjs",
+    "lighthouse:themes": "node scripts/lighthouse-themes.mjs",
+    "e2e:theme": "node scripts/e2e/theme.mjs"
   },
   "engines": {
     "node": ">=18"

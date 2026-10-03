@@ -4,22 +4,26 @@
   'use strict';
 
   // ── 主题切换 ──────────────────────────────────────────────
+  // 契约（与 theme/inject.js 的首帧脚本一致）：
+  //   data-theme      实际生效的 light | dark —— 样式只看这一个
+  //   data-theme-mode auto | light | dark —— 用户的策略选择
+  // 首帧脚本已经把 data-theme 定好，这里只负责「点击切换 + 系统变化时跟随」。
   var root = document.documentElement;
-  var mode = root.dataset.theme || 'auto';
+  var forced = root.getAttribute('data-theme-mode') || 'auto';
   var stored = null;
   try { stored = localStorage.getItem('emeeek-theme'); } catch (e) { /* 隐私模式 */ }
 
-  function applyTheme(value) {
-    if (value === 'auto') {
-      root.removeAttribute('data-theme');
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    } else {
-      root.setAttribute('data-theme', value);
-    }
+  function resolve(value) {
+    if (value === 'light' || value === 'dark') return value;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 
-  if (mode !== 'light' && mode !== 'dark') {
+  function applyTheme(value) {
+    root.setAttribute('data-theme', resolve(value));
+    root.setAttribute('data-theme-mode', value);
+  }
+
+  if (forced !== 'light' && forced !== 'dark') {
     applyTheme(stored || 'auto');
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
       if (!stored) applyTheme('auto');

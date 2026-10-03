@@ -1,0 +1,42 @@
+{
+  "$schema": "https://emeeek.dev/schema/theme.json",
+  "name": "aurora",
+  "version": "1.0.0",
+  "author": "Emeek Team",
+  "description": "极光渐变暗色科技感 —— 毛玻璃卡片、发光边框、暗色为主，亮色为独立的极昼变体。",
+  "preview": "preview.png",
+  "entryLayout": "index",
+  "layouts": ["index", "post", "archive", "tags", "about", "404"],
+  "features": ["dark-mode", "light-mode", "syntax-highlight", "math", "mermaid", "toc", "search", "search-index", "reading-progress", "related-posts"],
+  "compatible": ">=1.0.0",
+  "config": {
+    "colors": {
+      "primary": { "type": "color", "default": "#f8fafc", "label": "标题色" },
+      "accent": { "type": "color", "default": "#8b5cf6", "label": "强调色" },
+      "background": { "type": "color", "default": "#0b0b1a", "label": "背景色" },
+      "text": { "type": "color", "default": "#e2e8f0", "label": "正文色" },
+      "muted": { "type": "color", "default": "#94a3b8", "label": "次要色" }
+    },
+    "typography": {
+      "headingFont": { "type": "font", "default": "Inter, Noto Sans SC", "label": "标题字体" },
+      "bodyFont": { "type": "font", "default": "Inter, Noto Sans SC", "label": "正文字体" },
+      "codeFont": { "type": "font", "default": "JetBrains Mono", "label": "代码字体" },
+      "fontSize": { "type": "number", "default": 16, "min": 12, "max": 24, "label": "正文字号" },
+      "lineHeight": { "type": "number", "default": 1.8, "min": 1.2, "max": 2.2, "label": "行高" }
+    },
+    "layout": {
+      "maxWidth": { "type": "number", "default": 736, "min": 600, "max": 1200, "label": "内容最大宽度" },
+      "sidebar": { "type": "boolean", "default": true, "label": "显示侧边栏" },
+      "toc": { "type": "boolean", "default": true, "label": "显示目录" },
+      "footer": { "type": "boolean", "default": true, "label": "显示页脚" }
+    },
+    "features": {
+      "darkMode": { "type": "select", "options": ["auto", "light", "dark", "toggle"], "default": "auto", "label": "明暗模式" },
+      "readingProgress": { "type": "boolean", "default": true, "label": "阅读进度条" },
+      "syntaxHighlight": { "type": "boolean", "default": true, "label": "代码高亮" },
+      "math": { "type": "boolean", "default": true, "label": "数学公式" },
+      "mermaid": { "type": "boolean", "default": true, "label": "图表" },
+      "relatedPosts": { "type": "boolean", "default": true, "label": "相关文章" }
+    }
+  }
+}

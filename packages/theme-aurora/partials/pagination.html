@@ -1,0 +1,7 @@
+{% if pagination.total > 1 %}
+<nav class="pagination" aria-label="分页">
+    {% if pagination.prev %}<a class="page-link" href="{{ pagination.prev }}">← 上一页</a>{% else %}<span class="page-link disabled">← 上一页</span>{% endif %}
+    <span class="page-info">{{ pagination.current }} / {{ pagination.total }}</span>
+    {% if pagination.next %}<a class="page-link" href="{{ pagination.next }}">下一页 →</a>{% else %}<span class="page-link disabled">下一页 →</span>{% endif %}
+</nav>
+{% endif %}

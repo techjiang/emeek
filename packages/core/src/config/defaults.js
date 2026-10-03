@@ -29,13 +29,18 @@ export function defaultConfig() {
       allowHtml: false,
     },
     theme: {
+      /**
+       * 只放「与具体主题无关」的开关。颜色与字体**刻意不给默认值** ——
+       * 它们由所选主题的 theme.json config 提供。
+       * 若在这里写死一套颜色，它会在合并时盖掉主题自己的默认值：
+       * 加载 aurora 却拿到 minimal 的黑白配色，且看不出是谁改的。
+       * 用户要覆盖就写 theme.colors（见 docs/themes.md）。
+       */
       name: 'minimal',
       darkMode: 'auto',
       customCSS: '',
       customHead: '',
       customFooter: '',
-      colors: { primary: '#111827', accent: '#2563eb', background: '#ffffff' },
-      fonts: { sans: 'system-ui, -apple-system, sans-serif', mono: 'ui-monospace, monospace' },
     },
     search: { enabled: true, fuzzy: true, maxResults: 10 },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
