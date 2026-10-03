@@ -18,7 +18,7 @@ const DEMO = path.join(ROOT, 'examples/themes-demo');
 const OUT = path.join(ROOT, 'docs/assets/themes');
 
 const requested = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-const TARGETS = requested.length ? requested : ['aurora', 'minimal'];
+const TARGETS = requested.length ? requested : ['aurora', 'minimal', 'inkstone', 'magazine'];
 
 function withTheme(name, fn) {
   const file = path.join(DEMO, 'emeeek.config.js');

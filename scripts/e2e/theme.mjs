@@ -18,7 +18,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const DEMO = path.join(ROOT, 'examples/themes-demo');
 const JSON_ONLY = process.argv.includes('--json');
-const TARGETS = ['aurora', 'minimal'];
+const TARGETS = ['aurora', 'minimal', 'inkstone', 'magazine'];
 
 function build(theme) {
   const file = path.join(DEMO, 'emeeek.config.js');

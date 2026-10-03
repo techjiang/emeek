@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+</head>
+<body class="layout-404">
+    {% include "header" %}
+    <main class="site-main center">
+        <h1 class="error-code">404</h1>
+        <p>这一期不存在，可能已经撤稿或改了期号。</p>
+        <p><a class="button" href="/">回到首页</a></p>
+    </main>
+    {% include "footer" %}
+</body>
+</html>

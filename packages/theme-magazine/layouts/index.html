@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
+</head>
+<body class="layout-index">
+    {% include "header" %}
+    <main class="site-main">
+        {# Hero：封面区。无图也立得住 —— 渐变 + 噪点 + 压在下缘的大标题。 #}
+        <section class="hero">
+            <div class="hero-inner">
+                <p class="hero-kicker">本期要目</p>
+                <h1 class="hero-title">{{ site.title }}</h1>
+                {% if site.description %}<p class="hero-sub">{{ site.description }}</p>{% endif %}
+            </div>
+        </section>
+        {% if posts.length %}
+        {# 封面文章：第一篇独占头条位（横向大卡），第二篇做侧栏主角。
+           剩下的一律进多栏网格 —— 三级视觉权重，读者一眼知道先看哪篇。 #}
+        <section class="lead-section">
+            <div class="section-head">
+                <span class="section-number" aria-hidden="true">01</span>
+                <h2 class="section-title">封面文章</h2>
+            </div>
+            <div class="lead-grid">
+                {% for post in posts | slice: 0, 1 %}{% include "card-lead" %}{% endfor %}
+                {% if posts.length > 1 %}
+                <div class="lead-side">
+                    {% for post in posts | slice: 1, 2 %}{% include "card" %}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% if posts.length > 2 %}
+        <section class="index-section">
+            <div class="section-head">
+                <span class="section-number" aria-hidden="true">02</span>
+                <h2 class="section-title">全部文章</h2>
+            </div>
+            <div class="post-grid">
+                {% for post in posts | slice: 2 %}{% include "card" %}{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        {% else %}
+        <p class="empty">还没有文章。在 <code>posts/</code> 下新建一个 <code>.md</code> 文件就能开始写作。</p>
+        {% endif %}
+        {% include "pagination" %}
+    </main>
+    {% include "footer" %}
+</body>
+</html>

@@ -11,9 +11,13 @@
 
 输入 JSON：{dist: {theme: dir}, out: manifest 路径, root, targets}
 """
+import functools
+import http.server
 import json
 import os
+import socketserver
 import sys
+import threading
 
 from playwright.sync_api import sync_playwright
 
@@ -25,13 +29,40 @@ def check(page, name, ok, detail=""):
     return {"name": name, "ok": bool(ok), "detail": detail}
 
 
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    """静态服务：不往 stderr 刷访问日志（失败详情由断言给出，噪音只会淹没它）。"""
+
+    def log_message(self, *args):
+        pass
+
+
+def serve(directory):
+    """每个主题的产物各起一个本地服务，返回 base URL 与关闭函数。
+
+    为什么必须走 HTTP 而不是 file://：
+      CSS 超过 24KB 的主题会退回外链 /assets/theme.css（见 output.js 的
+      inlineCriticalCss）。file:// 下 `/assets/...` 会被解析成文件系统根目录，
+      外链永远 404 —— 主题看起来「暗色不生效」，其实是样式表根本没加载。
+      内联 CSS 的主题（体积小）碰巧不受影响，于是这个缺陷只在第 4 套主题
+      上才暴露。用 HTTP 服务，阈值两侧的主题走同一条路径。
+    """
+    handler = functools.partial(_QuietHandler, directory=directory)
+    httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
+    httpd.allow_reuse_address = True
+    port = httpd.server_address[1]
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    return f"http://127.0.0.1:{port}", httpd.shutdown
+
+
 def probe_themes(config):
     rows = []
     with sync_playwright() as playwright:
         b = playwright.chromium.launch(executable_path=browser.chrome_path())
         for theme in config["targets"]:
             dist = config["dist"][theme]
-            base = "file://" + os.path.join(dist, "index.html")
+            origin, shutdown = serve(dist)
+            base = f"{origin}/index.html"
 
             # 1. 首帧无闪烁：dark 偏好 + 无 localStorage
             ctx = b.new_context(viewport={"width": 1280, "height": 900}, color_scheme="dark")
@@ -68,12 +99,13 @@ def probe_themes(config):
                 ctx = b.new_context(viewport={"width": 1280, "height": 900}, color_scheme=mode)
                 ctx.add_init_script(f"localStorage.setItem('emeeek-theme','{mode}')")
                 pg = ctx.new_page()
-                pg.goto(base)
+                pg.goto(origin + "/index.html")
                 colors[mode] = pg.evaluate("()=>getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()")
                 ctx.close()
             rows.append(check(None, f"[{theme}] 亮/暗背景不同（独立配色，非反转也行但必须不同）",
                               colors["light"] != colors["dark"], f"{colors['light']} vs {colors['dark']}"))
             rows[-1]["colors"] = colors
+            shutdown()
 
         b.close()
     return rows
@@ -90,10 +122,11 @@ def main(config_file):
             br = playwright.chromium.launch(executable_path=browser.chrome_path())
             samples = {}
             for theme in (a, b_):
+                origin, shutdown = serve(config["dist"][theme])
                 ctx = br.new_context(viewport={"width": 1280, "height": 900}, color_scheme="dark")
                 ctx.add_init_script("localStorage.setItem('emeeek-theme','dark')")
                 pg = ctx.new_page()
-                pg.goto("file://" + os.path.join(config["dist"][theme], "index.html"))
+                pg.goto(origin + "/index.html")
                 samples[theme] = pg.evaluate("""()=>{
                   const cs=getComputedStyle(document.documentElement);
                   const card=document.querySelector('.card');
@@ -106,6 +139,7 @@ def main(config_file):
                   };
                 }""")
                 ctx.close()
+                shutdown()
             br.close()
             diff = [k for k in samples[a] if samples[a][k] != samples[b_][k]]
             rows.append(check(None, f"主题 {a} 与 {b_} 视觉可辨（≥2 项不同）",

@@ -151,3 +151,42 @@ test('finalizeHtml 仍压缩 <style> 之外的空白（没有因保护样式而�
     assert.ok(!/>\s{2,}</.test(raw), 'HTML 结构空白应被压缩');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+test('站点 assets/ 拷进产物的 /assets（封面图不该 404）', async () => {
+  const dir = await makeSite(`
+    export default {
+      site: { title: 'T', url: 'https://x.dev' },
+      theme: { name: 'minimal' },
+    };`);
+  try {
+    await fs.mkdir(path.join(dir, 'assets', 'covers'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'assets', 'covers', 'a.svg'), '<svg/>', 'utf8');
+    await fs.writeFile(path.join(dir, 'posts', 'hello.md'),
+      '---\ntitle: 你好\ndate: 2024-01-01\ncover: /assets/covers/a.svg\n---\n\n正文。\n', 'utf8');
+    await build({ cwd: dir });
+    // front-matter 里的 cover 是绝对路径，产物必须真的存在，否则浏览器 404
+    const copied = await fs.readFile(path.join(dir, 'dist', 'assets', 'covers', 'a.svg'), 'utf8');
+    assert.equal(copied, '<svg/>');
+    // 主题自己的资源不能被站点内容挤掉
+    await fs.access(path.join(dir, 'dist', 'assets', 'favicon.svg'));
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('CSS 超阈值时改用外链，且 /assets/theme.css 真的写出来', async () => {
+  // inlineCriticalCss 在 24KB 以上返回 <link>。这条路径曾经是死路：
+  // HTML 指着 /assets/theme.css，却没有任何地方写这个文件。
+  // magazine 的 CSS 有 30KB，正好压在这条路径上。
+  const dir = await makeSite(`
+    export default {
+      site: { title: 'T', url: 'https://x.dev' },
+      theme: { name: 'magazine' },
+    };`);
+  try {
+    await build({ cwd: dir });
+    const html = await read(dir, 'index.html');
+    assert.match(html, /<link rel="stylesheet" href="\/assets\/theme\.css"/, '超阈值应改外链');
+    const css = await fs.readFile(path.join(dir, 'dist', 'assets', 'theme.css'), 'utf8');
+    assert.ok(css.length > 24 * 1024, `theme.css 应包含完整样式（实际 ${css.length} 字节）`);
+    assert.match(css, /\.section-number/, '外链里要有主题的特色样式');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
