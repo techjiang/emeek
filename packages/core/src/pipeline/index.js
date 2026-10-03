@@ -9,6 +9,7 @@ import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transfo
 import { decorateImages, createImageResolver } from './transform/images.js';
 import { buildJsonLd, renderHeadMeta, buildSitemap, buildRss, buildRobots, buildSearchIndex } from './transform/seo.js';
 import { loadTheme, renderLayout } from './render/theme.js';
+import { buildInjections } from '../theme/inject.js';
 import { loadPlugins } from '../plugin/loader.js';
 import { createHookRunner } from '../plugin/hooks.js';
 import { writeOutput } from './render/output.js';
@@ -43,6 +44,16 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   const theme = await loadTheme(cwd, config);
   logger.info(`主题：${theme.meta.name} v${theme.meta.version ?? '0.0.0'}`);
+  for (const warning of theme.warnings ?? []) {
+    logger.warn(`theme.json ${warning.path}: ${warning.message}`);
+  }
+
+  // 主题注入片段：变量块 / 自定义 CSS / 自定义 head·footer / 首帧防闪烁脚本。
+  // 安全过滤在这一步完成（见 theme/inject.js），模板只负责摆放，不负责清洗。
+  const injections = buildInjections(theme, config.theme ?? {});
+  // 变量 + 自定义 CSS 必须写在内联主题 CSS 之后，所以挂到 theme 上，
+  // 由 output.js 在 `</head>` 前统一落位（见 inlineCriticalCss）。
+  theme.__varsOverride = injections.headStyle ? `\n${injections.headStyle}` : '';
 
   // ── 2. 预处理：先定 URL 与 wiki 链接索引，正文渲染时需要用到 ──
   const urlFor = (post) => `/${config.postPath ?? 'posts'}/${post.slug}.html`;
@@ -120,6 +131,11 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     year: new Date().getFullYear(),
     themeCSS: inlineStyles(theme),
     themeJS: inlineScripts(theme),
+    themeName: theme.meta.name,
+    themeFeatureAttrs: theme.featureAttrs,
+    themeHeadExtra: injections.headExtra,
+    themeFooterExtra: injections.footerExtra,
+    noFlashScript: injections.noFlash,
     searchIndexUrl: config.search?.enabled ? '/search-index.json' : null,
     tagUrl,
     headMeta: '',

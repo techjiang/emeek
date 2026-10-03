@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
+</head>
+<body class="layout-index">
+    {% include "header" %}
+    <main class="site-main">
+        <section class="hero">
+            <div class="hero-glow" aria-hidden="true"></div>
+            <p class="hero-kicker">AURORA</p>
+            <h1 class="hero-title">{{ site.title }}</h1>
+            <p class="hero-sub">{{ site.description }}</p>
+        </section>
+        {% if pinned.length %}
+        <section class="pinned-section">
+            <h2 class="section-label">置顶</h2>
+            <div class="post-grid">
+                {% for post in pinned %}{% include "card" %}{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        <section class="post-list">
+            <h2 class="section-label">最新文章</h2>
+            {% if posts.length %}
+            {% for post in posts %}{% include "card" %}{% endfor %}
+            {% else %}
+            <p class="empty">还没有文章。在 <code>posts/</code> 下新建一个 <code>.md</code> 文件就能开始写作。</p>
+            {% endif %}
+        </section>
+        {% include "pagination" %}
+    </main>
+    {% include "footer" %}
+</body>
+</html>

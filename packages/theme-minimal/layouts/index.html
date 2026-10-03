@@ -1,10 +1,7 @@
 <!DOCTYPE html>
-<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}">
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    {{{ headMeta }}}
+    {% include "head" %}
     <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
 </head>
 <body class="layout-index">

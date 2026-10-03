@@ -155,15 +155,40 @@ slug: custom-url # 自定义 URL
 
 ```
 packages/
-  core/            引擎：内容管线 / 渲染 / 主题 / 插件
+  core/            引擎：内容管线 / 渲染 / 主题加载器与规范 / 插件
   cli/             命令行
   editor/          Emeek Studio：CodeMirror 6 编辑器 + 预览 + 服务端
-  theme-minimal/   默认主题
+  theme-aurora/    内置主题：极光渐变暗色科技感
+  theme-minimal/   内置主题：极简黑白，排版为王（默认）
 examples/
   minimal/         最小示例（本地 Markdown）
+  themes-demo/     主题演示站（同一份内容，多套主题构建）
   full-featured/   全功能示例（hybrid 源 + 插件）
 docs/              配置、主题、插件、性能、编辑器文档
 ```
+
+## 主题
+
+内置 **4 套设计语言**（P3-1 交付，Inkstone / Magazine 随 P3-1b 补齐）。
+每套主题明暗两套配色**独立设计**，不做「背景变黑、文字变白」的反转。
+
+| Aurora（暗色） | Aurora（亮色） |
+| --- | --- |
+| ![Aurora 暗色](docs/assets/themes/aurora-home-desktop-dark.png) | ![Aurora 亮色](docs/assets/themes/aurora-home-desktop-light.png) |
+
+| Minimal（亮色） | Minimal（暗色） |
+| --- | --- |
+| ![Minimal 亮色](docs/assets/themes/minimal-home-desktop-light.png) | ![Minimal 暗色](docs/assets/themes/minimal-home-desktop-dark.png) |
+
+切换主题只改一行配置：
+
+```javascript
+// emeeek.config.js
+export default { theme: { name: 'aurora' } };
+```
+
+主题是「数据 + 模板」：`theme.json` 声明可配置项，主题 CSS 只消费 CSS 变量。
+自定义 CSS / HTML 走白名单消毒，注入位置固定 —— 详见 [主题文档](docs/themes.md)。
 
 ## AI 能力（可选）
 

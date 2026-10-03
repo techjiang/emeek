@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://emeeek.dev/schema/theme.json",
+  "title": "Emeek Theme Manifest",
+  "description": "主题元数据与可配置项声明。主题是「数据 + 模板」，不是可执行代码。",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "主题标识，小写字母数字与连字符" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "author": { "type": "string" },
+    "description": { "type": "string" },
+    "preview": { "type": "string", "description": "预览图相对路径（512x256 PNG）" },
+    "entryLayout": { "type": "string", "default": "index" },
+    "layouts": {
+      "type": "array",
+      "items": {
+        "enum": ["index", "post", "page", "archive", "tag", "tags", "category", "search", "about", "404"]
+      },
+      "description": "主题实现的页面布局；未实现的页面回退到 entryLayout"
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "主题声明的能力标记"
+    },
+    "compatible": { "type": "string", "description": "兼容的引擎版本范围，如 \">=1.0.0\"" },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "colors": { "$ref": "#/definitions/group" },
+        "typography": { "$ref": "#/definitions/group" },
+        "layout": { "$ref": "#/definitions/group" },
+        "features": { "$ref": "#/definitions/group" }
+      }
+    }
+  },
+  "definitions": {
+    "group": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/item" }
+    },
+    "item": {
+      "type": "object",
+      "required": ["type", "default"],
+      "properties": {
+        "type": { "enum": ["color", "font", "number", "boolean", "select", "string"] },
+        "default": {},
+        "label": { "type": "string" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "options": { "type": "array" }
+      }
+    }
+  }
+}
