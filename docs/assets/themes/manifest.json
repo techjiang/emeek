@@ -3,29 +3,22 @@
     "theme": "aurora",
     "page": "home",
     "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/aurora-home-desktop-light.png"
-  },
-  {
-    "theme": "aurora",
-    "page": "post",
-    "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/aurora-post-desktop-light.png"
-  },
-  {
-    "theme": "aurora",
-    "page": "home",
-    "device": "desktop",
     "mode": "dark",
     "file": "docs/assets/themes/aurora-home-desktop-dark.png"
   },
   {
     "theme": "aurora",
-    "page": "post",
+    "page": "home",
     "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/aurora-home-desktop-light.png"
+  },
+  {
+    "theme": "aurora",
+    "page": "home",
+    "device": "mobile",
     "mode": "dark",
-    "file": "docs/assets/themes/aurora-post-desktop-dark.png"
+    "file": "docs/assets/themes/aurora-home-mobile-dark.png"
   },
   {
     "theme": "aurora",
@@ -37,16 +30,16 @@
   {
     "theme": "aurora",
     "page": "post",
-    "device": "mobile",
-    "mode": "light",
-    "file": "docs/assets/themes/aurora-post-mobile-light.png"
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/aurora-post-desktop-dark.png"
   },
   {
     "theme": "aurora",
-    "page": "home",
-    "device": "mobile",
-    "mode": "dark",
-    "file": "docs/assets/themes/aurora-home-mobile-dark.png"
+    "page": "post",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/aurora-post-desktop-light.png"
   },
   {
     "theme": "aurora",
@@ -56,74 +49,11 @@
     "file": "docs/assets/themes/aurora-post-mobile-dark.png"
   },
   {
-    "theme": "minimal",
-    "page": "home",
-    "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/minimal-home-desktop-light.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "post",
-    "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/minimal-post-desktop-light.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "home",
-    "device": "desktop",
-    "mode": "dark",
-    "file": "docs/assets/themes/minimal-home-desktop-dark.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "post",
-    "device": "desktop",
-    "mode": "dark",
-    "file": "docs/assets/themes/minimal-post-desktop-dark.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "home",
-    "device": "mobile",
-    "mode": "light",
-    "file": "docs/assets/themes/minimal-home-mobile-light.png"
-  },
-  {
-    "theme": "minimal",
+    "theme": "aurora",
     "page": "post",
     "device": "mobile",
     "mode": "light",
-    "file": "docs/assets/themes/minimal-post-mobile-light.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "home",
-    "device": "mobile",
-    "mode": "dark",
-    "file": "docs/assets/themes/minimal-home-mobile-dark.png"
-  },
-  {
-    "theme": "minimal",
-    "page": "post",
-    "device": "mobile",
-    "mode": "dark",
-    "file": "docs/assets/themes/minimal-post-mobile-dark.png"
-  },
-  {
-    "theme": "inkstone",
-    "page": "home",
-    "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/inkstone-home-desktop-light.png"
-  },
-  {
-    "theme": "inkstone",
-    "page": "post",
-    "device": "desktop",
-    "mode": "light",
-    "file": "docs/assets/themes/inkstone-post-desktop-light.png"
+    "file": "docs/assets/themes/aurora-post-mobile-light.png"
   },
   {
     "theme": "inkstone",
@@ -134,10 +64,17 @@
   },
   {
     "theme": "inkstone",
-    "page": "post",
+    "page": "home",
     "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-home-desktop-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "home",
+    "device": "mobile",
     "mode": "dark",
-    "file": "docs/assets/themes/inkstone-post-desktop-dark.png"
+    "file": "docs/assets/themes/inkstone-home-mobile-dark.png"
   },
   {
     "theme": "inkstone",
@@ -149,16 +86,16 @@
   {
     "theme": "inkstone",
     "page": "post",
-    "device": "mobile",
-    "mode": "light",
-    "file": "docs/assets/themes/inkstone-post-mobile-light.png"
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-post-desktop-dark.png"
   },
   {
     "theme": "inkstone",
-    "page": "home",
-    "device": "mobile",
-    "mode": "dark",
-    "file": "docs/assets/themes/inkstone-home-mobile-dark.png"
+    "page": "post",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-post-desktop-light.png"
   },
   {
     "theme": "inkstone",
@@ -166,5 +103,124 @@
     "device": "mobile",
     "mode": "dark",
     "file": "docs/assets/themes/inkstone-post-mobile-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "post",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-post-mobile-light.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "home",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-home-desktop-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "home",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-home-desktop-light.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "home",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-home-mobile-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "home",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-home-mobile-light.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "post",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-post-desktop-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "post",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-post-desktop-light.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "post",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-post-mobile-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "post",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-post-mobile-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "home",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-home-desktop-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "home",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-home-desktop-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "home",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-home-mobile-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "home",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-home-mobile-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "post",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-post-desktop-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "post",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-post-desktop-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "post",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-post-mobile-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "post",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-post-mobile-light.png"
   }
 ]

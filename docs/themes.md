@@ -107,6 +107,35 @@ my-theme/
 
 **没有默认值的配置项等于不存在** —— 校验会报错。零配置原则要求每个可配置项都能自解释。
 
+### ⚠️ 主题开发须知：config 默认值会覆盖 CSS 里的同名字面量
+
+这是主题作者最容易踩的坑，两套主题各踩过一次（Inkstone 的 `muted`、
+Magazine 的渐变端点）。机制本身没错，但触发是静默的：
+
+```
+theme.json 的每个 config 项都会生成一个 CSS 变量覆盖块
+  → 该块排在主题 CSS **之后**（同权重 :root，后写生效）
+  → 于是 CSS 里精挑的 --text-dim 会被 config.muted 的默认值悄悄盖回去
+  → 改 CSS 不生效，且没有任何报错
+```
+
+**规则**：`theme.json` 里 config 项的 `default` 必须与 CSS 里的实际颜色**逐字一致**。
+
+```jsonc
+// theme.json
+"muted": { "type": "color", "default": "#6f6a60" }
+```
+```css
+/* styles/main.css —— 必须同为 #6f6a60，不能是别的「差不多的」灰 */
+:root { --text-dim: #6f6a60; }
+```
+
+改动配色时**两处一起改**。四套内置主题都有「config 与 CSS 一致性」断言钉死这件事
+（见 `packages/core/tests/theme/*.test.js`），新主题建议照抄这几条断言。
+
+对照度也要一起盯：`muted` 这类浅色最容易掉到 AA（4.5:1）以下 ——
+Inkstone 的 `#8a8a8a` 在暖白纸底上只有 3.04:1，Lighthouse a11y 直接掉到 95。
+
 ### 校验
 
 加载主题时都会过一遍规范校验：
@@ -359,5 +388,7 @@ theme: { name: 'aurora' }         // 内置
 3. 从 `packages/theme-minimal/` 拷 `partials/head.html` 的骨架（首帧脚本 + 注入点）
 4. 写 `layouts/*.html`，用 `{% include "head" %}` 统一 head
 5. 写 `styles/main.css`：`:root` 放暗色默认值，`html[data-theme="light"]` 放亮色
+   （改色前先读上面的「主题开发须知」—— config 与 CSS 必须同步）
 6. `emeeek dev --cwd examples/themes-demo` 看效果（改配置里的 `theme.name`）
 7. `node scripts/e2e/theme.mjs` + `node scripts/lighthouse-themes.mjs` 自检
+8. `node scripts/screenshots/capture.mjs mytheme` 出图（8 张，亮暗 × 桌面/移动 × 首页/文章页）
