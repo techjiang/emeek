@@ -319,5 +319,40 @@ weaken "搜索页逐主题适配（minimal 高亮规则改名）" \
   "s|^\\.search-result mark {|.zzz-mark {|" \
   'node --test packages/core/tests/search/page.test.js'
 
+# ── P3-2c Feed 防线 ──────────────────────────────────────────────
+#
+# 38. Atom updated 必须是 RFC 3339：改成 toUTCString（RFC 822）。
+#
+# Atom 验证器对这个格式是硬要求，而 toUTCString 得到的 RFC 822
+# 肉眼看着也「像个日期」。这条守的是「阅读器不会拒收」。
+weaken "Atom updated 用 RFC 3339（改成 toUTCString）" \
+  packages/core/src/feed/build.js \
+  "s|toISOString()|toUTCString()|g" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 39. feed 里的 XML 必须转义：把 escapeXml 改成恒等。
+#
+# 标题里的 & 或 < 会直接把 XML 弄坏，阅读器报解析错误。
+weaken "Feed XML 转义（escapeXml 恒等）" \
+  packages/core/src/feed/build.js \
+  "s|export function escapeXml(text) {|export function escapeXml(text) { return String(text ?? '');\nfunction _unused(text) {|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 40. CDATA 里的 ]]> 必须拆开：让 cdataSafe 变成恒等。
+#
+# 正文里出现 ]]>（写代码文档时常见）会让整个 feed 变成坏 XML。
+weaken "CDATA 转义 ]]>（cdataSafe 恒等）" \
+  packages/core/src/feed/build.js \
+  "s|^function cdataSafe(html) {|function cdataSafe(html) { return String(html ?? '');\nfunction _cdataUnused(html) {|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 41. feed discovery 只能由 head partial 提供：把硬编码加回 layout。
+#
+# 硬编码那份不跟配置（写死 /rss.xml）、且只覆盖首页与文章页。
+weaken "Feed discovery 单一来源（layout 里加回硬编码）" \
+  packages/theme-minimal/layouts/index.html \
+  "s|{% include \"head\" %}|<link rel=\"alternate\" type=\"application/rss+xml\" href=\"/rss.xml\" />{% include \"head\" %}|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

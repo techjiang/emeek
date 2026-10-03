@@ -7,7 +7,8 @@ import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
-import { buildJsonLd, renderHeadMeta, buildSitemap, buildRss, buildRobots } from './transform/seo.js';
+import { buildJsonLd, renderHeadMeta, buildSitemap, buildRobots } from './transform/seo.js';
+import { buildRss, buildAtom } from '../feed/build.js';
 import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
 import { loadSearchClient } from '../search/ui/index.js';
 import { loadTheme, renderLayout } from './render/theme.js';
@@ -169,6 +170,14 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     // 搜索页数据（仅 search 布局用）。索引小就内联，省一次请求；
     // 超过阈值走外链 —— 把几百 KB 的 JSON 塞进每个页面的 <script> 里
     // 会让所有页面都变大，那正是「搜索是增强」不该有的代价。
+    // head 里的 feed discovery：<link rel="alternate"> 让浏览器/阅读器
+    // 自动发现订阅地址。少了它，读者只能靠猜 /rss.xml。
+    feedLinks: config.feed?.enabled !== false
+      ? [
+        { href: '/rss.xml', type: 'application/rss+xml', title: `${config.site.title} · RSS` },
+        { href: '/atom.xml', type: 'application/atom+xml', title: `${config.site.title} · Atom` },
+      ]
+      : [],
     searchInlineIndex: null,
     searchScript: null,
     searchFacets: null,
@@ -315,7 +324,18 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     });
   }
   if (config.feed?.enabled !== false) {
-    extraFiles.push({ path: '/rss.xml', content: buildRss(siteData, sorted, { limit: config.feed?.limit ?? 20 }) });
+    const feedOptions = {
+      limit: config.feed?.limit ?? 20,
+      // fullContent 默认关：整站正文塞进 feed 会让文件巨大，
+      // 而多数阅读器本来也只显示摘要。要全文就显式开。
+      fullContent: config.feed?.fullContent === true,
+      categories: config.feed?.categories ?? [],
+    };
+    extraFiles.push({ path: '/rss.xml', content: buildRss(siteData, sorted, feedOptions) });
+    extraFiles.push({ path: '/atom.xml', content: buildAtom(siteData, sorted, feedOptions) });
+    const kept = sorted.filter((p) => !feedOptions.categories.length
+      || (p.categories ?? []).some((c) => feedOptions.categories.map((x) => String(x).toLowerCase()).includes(String(c).toLowerCase())));
+    logger.info(`Feed：RSS + Atom · ${Math.min(kept.length, feedOptions.limit)} 条${feedOptions.fullContent ? '（含全文）' : ''}`);
   }
   if (config.seo?.robots !== false) {
     extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData) });

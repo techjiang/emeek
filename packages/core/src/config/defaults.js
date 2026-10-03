@@ -74,7 +74,15 @@ export function defaultConfig() {
       inlineLimit: 65536,
     },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
-    feed: { enabled: true, limit: 20 },
+    /**
+     * Feed 配置。
+     *
+     * fullContent  false 时只发摘要（阅读器列表页用），true 时发正文全文。
+     *              全文会让 feed 体积大很多 —— 对「订阅」是好事，
+     *              对带宽不一定是。默认关。
+     * categories   只要这些分类的文章（空数组 = 全部）。
+     */
+    feed: { enabled: true, limit: 20, fullContent: false, categories: [] },
     perf: { lazyLoading: true, criticalCSS: true },
     plugins: [],
     deploy: { target: 'github-pages', customDomain: '' },

@@ -12,6 +12,8 @@ const RULES = [
   { path: 'theme.name', type: 'string' },
   { path: 'theme.darkMode', type: 'string', check: (v) => ['auto', 'light', 'dark', 'toggle'].includes(v) || '只能是 auto / light / dark / toggle' },
   { path: 'feed.limit', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'feed.fullContent', type: 'boolean' },
+  { path: 'feed.categories', type: 'array' },
   { path: 'search.maxResults', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
   { path: 'search.suggest', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
   { path: 'search.gzipBudget', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数（字节）' },

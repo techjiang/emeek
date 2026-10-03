@@ -71,11 +71,17 @@ Issue 上除 `publish`/`draft`/`pin` 之外的标签会自动合并进文章标�
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `enabled` | `true` | 是否生成 `search-index.json` |
+| `enabled` | `true` | 是否生成索引与搜索页 |
+| `fuzzy` | `true` | ≥4 字 CJK 词元的编辑距离 1 展开 |
 | `maxResults` | `10` | 展示条数上限 |
+| `suggest` | `8` | 输入联想条数上限 |
+| `indexPath` | `'/search-index.json'` | 索引发布路径 |
+| `pagePath` | `'/search/'` | 搜索页路径 |
+| `gzipBudget` | `512000` | 索引 gzip 上限（字节），超了构建失败 |
+| `inlineLimit` | `65536` | 索引超过这个字节就不内联进页面，改走外链 |
+| `allowOverBudget` | `false` | 超预算时只告警不失败 |
 
-索引只含标题、标签与正文前 2000 字符，由浏览器端做子串匹配。
-没有索引服务，没有额外请求。
+索引是全静态的：构建期切词建倒排表，浏览器端查询。详见 [搜索](search.md)。
 
 ## seo
 
@@ -90,8 +96,12 @@ Issue 上除 `publish`/`draft`/`pin` 之外的标签会自动合并进文章标�
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `enabled` | `true` | 生成 `rss.xml` |
+| `enabled` | `true` | 生成 `rss.xml` 与 `atom.xml` |
 | `limit` | `20` | 条目上限 |
+| `fullContent` | `false` | 是否输出正文全文（否则只发摘要） |
+| `categories` | `[]` | 只要这些分类（空 = 全部） |
+
+同时产出 RSS 2.0 与 Atom 1.0。详见 [Feed](feed.md)。
 
 ## perf
 
