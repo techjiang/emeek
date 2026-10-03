@@ -374,12 +374,24 @@ theme: { name: 'aurora' }         // 内置
 
 ## 工具与脚本
 
+主题清单**动态扫 `packages/theme-*`**（见 `scripts/lib/themes.mjs`）——
+新加一套主题，下面所有脚本自动带上它，不需要改脚本。
+
 | 脚本 | 用途 |
 | --- | --- |
 | `node scripts/screenshots/capture.mjs [主题…]` | 每套主题 × 亮暗 × 桌面/移动 截图 → `docs/assets/themes/` |
-| `node scripts/preview-images.mjs` | 生成 `preview.png` / `preview-light.png`（512×256） |
+| `node scripts/preview-images.mjs [主题…]` | 生成 `preview.png` / `preview-light.png`（512×256） |
 | `node scripts/lighthouse-themes.mjs [主题…]` | 每套主题的 Lighthouse 门禁（≥90，桌面+移动） |
-| `node scripts/e2e/theme.mjs` | 主题系统 e2e（首帧无闪烁 / 切换 / 亮暗可辨） |
+| `node scripts/e2e/theme.mjs [主题…]` | 主题系统 e2e（首帧无闪烁 / 切换 / 亮暗可辨 / 4 套两两布局可辨） |
+
+只跑一套：`node scripts/screenshots/capture.mjs magazine`（或 `--theme magazine`）。
+只跑一套截图时，`docs/assets/themes/manifest.json` 会**合并**新条目而不是覆盖 ——
+单跑一套不会把其它主题的清单抹掉。
+
+所有脚本打开产物一律走本地 HTTP 服务，**不用 `file://`**：
+CSS 超过 24KB 的主题（Magazine）会把样式退回外链 `/assets/theme.css`，
+而 `file://` 下 `/assets/...` 会指向文件系统根目录、样式 404 ——
+截图会拍到没有样式的裸 HTML（亮暗两版还会逐字节相同）。
 
 ## 从零写一套主题
 

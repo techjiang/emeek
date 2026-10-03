@@ -22,7 +22,20 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 const OUT = path.join(REPO, 'docs/assets/themes');
-const THEMES = ['aurora', 'minimal', 'inkstone', 'magazine'];
+
+/**
+ * 主题清单动态扫 packages/theme-*，而不是写死 ——
+ * 新主题加进来时，截图覆盖断言必须跟着扩展，否则「清单里缺第 5 套」
+ * 会静默通过（这正是「加主题忘了改脚本」那类问题的对称面）。
+ */
+const THEMES = fs.readdirSync(path.join(REPO, 'packages'))
+  .filter((name) => name.startsWith('theme-'))
+  .filter((name) => fs.existsSync(path.join(REPO, 'packages', name, 'theme.json')))
+  .map((name) => {
+    const meta = JSON.parse(fs.readFileSync(path.join(REPO, 'packages', name, 'theme.json'), 'utf8'));
+    return typeof meta.name === 'string' && meta.name ? meta.name : name.replace(/^theme-/, '');
+  })
+  .sort();
 const DEVICES = ['desktop', 'mobile'];
 const PAGES = ['home', 'post'];
 const MODES = ['light', 'dark'];
@@ -30,7 +43,7 @@ const MODES = ['light', 'dark'];
 const manifest = () => JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8'));
 const rel = (t, p, d, m) => `${t}-${p}-${d}-${m}.png`;
 
-test('截图清单覆盖 4 套主题 × 亮暗 × 桌面/移动 × 首页/文章页', () => {
+test('截图清单覆盖全部内置主题 × 亮暗 × 桌面/移动 × 首页/文章页', () => {
   const rows = manifest();
   for (const theme of THEMES) {
     for (const page of PAGES) {
