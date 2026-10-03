@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="{{ post.lang || site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
+</head>
+<body class="layout-post">
+    {% include "header" %}
+    <div class="reading-progress" aria-hidden="true"><span id="reading-bar"></span></div>
+    <main class="site-main post-layout">
+        <article class="post">
+            <header class="post-header">
+                <h1 class="post-title">{{ post.title }}</h1>
+                <div class="post-meta">
+                    <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
+                    <span class="dot">·</span>
+                    <span>{{ post.readingTime }} 分钟读完</span>
+                    <span class="dot">·</span>
+                    <span>{{ post.wordCount }} 字</span>
+                    {% if post.backlinks %}<span class="dot">·</span><span>被引用 {{ post.backlinks }} 次</span>{% endif %}
+                </div>
+                {% if post.tags.length %}
+                <div class="post-tags">
+                    {% for tag in post.tagLinks %}<a class="tag" href="{{ tag.url }}">{{ tag.name }}</a>{% endfor %}
+                </div>
+                {% endif %}
+            </header>
+            {{{ post.tocHtml }}}
+            <div class="prose">{{{ post.html }}}</div>
+            {% include "related" %}
+            {% include "comments" %}
+        </article>
+        {% include "sidebar" %}
+    </main>
+    <button class="to-top" id="to-top" type="button" aria-label="回到顶部">↑</button>
+    {% include "footer" %}
+</body>
+</html>

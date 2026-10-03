@@ -169,7 +169,7 @@ docs/              配置、主题、插件、性能、编辑器文档
 
 ## 主题
 
-内置 **4 套设计语言**（P3-1 交付，Inkstone / Magazine 随 P3-1b 补齐）。
+内置 **4 套设计语言**（P3-1 交付 Aurora / Minimal，P3-1b 补齐 Inkstone，Magazine 待补）。
 每套主题明暗两套配色**独立设计**，不做「背景变黑、文字变白」的反转。
 
 | Aurora（暗色） | Aurora（亮色） |
@@ -179,6 +179,10 @@ docs/              配置、主题、插件、性能、编辑器文档
 | Minimal（亮色） | Minimal（暗色） |
 | --- | --- |
 | ![Minimal 亮色](docs/assets/themes/minimal-home-desktop-light.png) | ![Minimal 暗色](docs/assets/themes/minimal-home-desktop-dark.png) |
+
+| Inkstone（亮色，宣纸） | Inkstone（暗色，夜读） |
+| --- | --- |
+| ![Inkstone 亮色](docs/assets/themes/inkstone-home-desktop-light.png) | ![Inkstone 暗色](docs/assets/themes/inkstone-home-desktop-dark.png) |
 
 切换主题只改一行配置：
 
