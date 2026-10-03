@@ -112,8 +112,15 @@ async function loadThemeDir(dir, { themeConfig, themeConfigRuntime } = {}) {
  * 反过来的话，{% for post in posts %}{% include "card" %} 里的 post
  * 会取到页面级的同名变量，卡片就永远显示同一篇文章。
  */
-export function renderLayout(theme, layoutName, data) {
-  const layout = theme.layouts.get(layoutName) ?? theme.layouts.get(theme.entry) ?? theme.layouts.get('index');
+export function renderLayout(theme, layoutName, data, { strict = false } = {}) {
+  // 回退链（找不到就退到 entry / index）对「插件声明的自定义布局」是必要的
+  // 便利，但对**引擎自己要求必须存在的布局**（如 search）是危险的：
+  // 主题没提供 search.html 时，搜索页会静默渲染成首页 —— 构建报成功、
+  // 页面也长得像模像样，只是没有搜索框。这类失败最难在 CI 里发现。
+  // 所以引擎内置布局走 strict，缺了直接抛。
+  const layout = strict
+    ? theme.layouts.get(layoutName)
+    : theme.layouts.get(layoutName) ?? theme.layouts.get(theme.entry) ?? theme.layouts.get('index');
   if (!layout) throw new Error(`主题 ${theme.meta.name} 里找不到布局 ${layoutName}`);
 
   return layout.compiled({

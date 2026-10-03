@@ -192,24 +192,6 @@ a:hover { text-decoration: underline; text-underline-offset: 0.18em; }
 .icon-button:hover { border-color: var(--accent); color: var(--accent); }
 
 /* 搜索面板 */
-.search-panel {
-  max-width: var(--max-width); margin: 0 auto; padding: 0 2rem 1.2rem;
-}
-.search-panel input {
-  width: 100%; padding: 0.7rem 1rem; font-size: 0.95rem; font-family: var(--font-body);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg-soft); color: var(--text);
-}
-.search-panel input:focus { outline: 2px solid var(--accent-2); outline-offset: -1px; }
-.search-results { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.search-results a {
-  display: block; padding: 0.7rem 0.9rem; border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); background: var(--bg-card);
-}
-.search-results a:hover { border-color: var(--accent-2); text-decoration: none; }
-.search-results small { color: var(--text-dim); }
-.search-results mark { background: var(--accent-soft); color: var(--accent); }
-.search-empty { color: var(--text-dim); font-size: 0.9rem; }
 
 .site-main { max-width: var(--max-width); margin: 0 auto; padding: 2.5rem 2rem 4rem; }
 
@@ -743,7 +725,6 @@ html[data-theme="dark"] .tok-property { color: #ff8a80; }
   .site-nav { margin-left: 0; gap: 0.9rem; flex-wrap: wrap; width: 100%; order: 3; }
   .site-nav a { white-space: nowrap; }
   .header-actions { margin-left: auto; }
-  .search-panel { padding: 0 1rem 1rem; }
   .site-main { padding: 1.6rem 1rem 2.5rem; }
   .hero {
     min-height: 42vh; padding: 1.8rem 1.2rem 1.5rem;

@@ -139,23 +139,6 @@ a:hover { text-decoration: none; filter: brightness(1.15); }
 .icon-button:hover { color: var(--aurora-blue); border-color: var(--border-glow); box-shadow: 0 0 14px var(--border-glow); }
 
 /* ── 搜索 ── */
-.search-panel {
-  max-width: 68rem; margin: 0 auto; padding: 0 1.5rem 1rem;
-}
-.search-panel input {
-  width: 100%; padding: 0.65rem 0.9rem; font-size: 1rem; font-family: inherit;
-  border: 1px solid var(--border); border-radius: 10px;
-  background: var(--bg-elevated); color: var(--text); backdrop-filter: blur(8px);
-}
-.search-panel input:focus { outline: none; border-color: var(--border-glow); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18); }
-.search-results { margin-top: 0.6rem; max-height: 60vh; overflow-y: auto; }
-.search-results a {
-  display: block; padding: 0.6rem 0.7rem; border-radius: 8px; color: var(--text);
-  border: 1px solid transparent;
-}
-.search-results a:hover { background: var(--bg-soft); border-color: var(--border); }
-.search-results mark { background: rgba(139, 92, 246, 0.35); color: inherit; border-radius: 3px; }
-.search-empty { color: var(--text-dim); padding: 0.6rem 0.7rem; font-size: 0.9rem; }
 
 /* ── Hero ── */
 .site-main { max-width: 68rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }

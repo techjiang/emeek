@@ -166,18 +166,6 @@ a:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 .icon-button:hover { color: var(--seal-red); border-color: var(--seal-red); }
 
 /* ── 搜索 ── */
-.search-panel { max-width: 64rem; margin: 0 auto; padding: 0 1.5rem 1rem; }
-.search-panel input {
-  width: 100%; padding: 0.6rem 0.85rem; font-size: 1rem; font-family: inherit;
-  border: 1px solid var(--border); border-radius: 2px;
-  background: var(--bg-soft); color: var(--text);
-}
-.search-panel input:focus { outline: none; border-color: var(--accent-light); }
-.search-results { margin-top: 0.55rem; max-height: 60vh; overflow-y: auto; }
-.search-results a { display: block; padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); color: var(--text); }
-.search-results a:hover { background: var(--bg-soft); text-decoration: none; }
-.search-results mark { background: color-mix(in srgb, var(--seal-red) 22%, transparent); color: inherit; }
-.search-empty { color: var(--text-dim); padding: 0.5rem; font-size: 0.9rem; }
 
 /* ── 首页 Hero：留白 + 书法感标题 ── */
 .site-main { max-width: 64rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }

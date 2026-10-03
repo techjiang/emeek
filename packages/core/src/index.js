@@ -28,4 +28,5 @@ export { search, runLevel, filterDocs, expandFuzzy, DEFAULT_MAX_RESULTS } from '
 export { buildIndex, serializeIndex, parseIndex, measureIndexBytes, INDEX_VERSION } from './search/indexer.js';
 export { toPlainText, makeSnippet, locateTerms } from './search/plain-text.js';
 export { createSearchSession } from './search/runtime.js';
+export { runQuery as runClientQuery, collectSuggestions } from './search/ui/matcher.js';
 // 构建期接缝（含 node:zlib）不在主入口导出 —— 浏览器打包会炸。走 ./search/build。

@@ -60,7 +60,19 @@ export function defaultConfig() {
      * suggest     输入联想条数上限。
      * fuzzy       对 ≥4 字 CJK 词元做编辑距离 1 展开。
      */
-    search: { enabled: true, fuzzy: true, maxResults: 10, suggest: 8, indexPath: '/search-index.json', gzipBudget: 512000, allowOverBudget: false },
+    search: {
+      enabled: true,
+      fuzzy: true,
+      maxResults: 10,
+      suggest: 8,
+      indexPath: '/search-index.json',
+      gzipBudget: 512000,
+      allowOverBudget: false,
+      /** 搜索页路径。目录形式（/search/）比 /search.html 更适合带查询参数。 */
+      pagePath: '/search/',
+      /** 索引内联上限（字节）。超过就走外链，避免所有页面都变胖。 */
+      inlineLimit: 65536,
+    },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
     feed: { enabled: true, limit: 20 },
     perf: { lazyLoading: true, criticalCSS: true },

@@ -10,14 +10,8 @@
             {% endfor %}
         </nav>
         <div class="header-actions">
-            {% if searchIndexUrl %}<button class="icon-button" id="search-toggle" type="button" aria-label="搜索">寻</button>{% endif %}
+            {% if searchPageUrl %}<a class="icon-button" id="search-link" href="{{ searchPageUrl }}" aria-label="搜索">寻</a>{% endif %}
             <button class="icon-button" id="theme-toggle" type="button" aria-label="切换明暗">◑</button>
         </div>
     </div>
-    {% if searchIndexUrl %}
-    <div class="search-panel" id="search-panel" hidden>
-        <input type="search" id="search-input" placeholder="搜索文章…" autocomplete="off" aria-label="搜索文章" />
-        <div class="search-results" id="search-results"></div>
-    </div>
-    {% endif %}
 </header>

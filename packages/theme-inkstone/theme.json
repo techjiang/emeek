@@ -6,7 +6,7 @@
   "description": "水墨宣纸质感 —— 暖白纸底、墨色三级层次、印章与晕染。为中文长文写作设计，留白为主，装饰克制。",
   "preview": "preview.png",
   "entryLayout": "index",
-  "layouts": ["index", "post", "archive", "tags", "about", "404"],
+  "layouts": ["index", "post", "archive", "tags", "about", "404", "search"],
   "features": ["dark-mode", "light-mode", "syntax-highlight", "math", "mermaid", "toc", "search", "search-index", "reading-progress", "related-posts"],
   "compatible": ">=1.0.0",
   "config": {

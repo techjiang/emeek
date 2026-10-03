@@ -272,5 +272,52 @@ weaken "浏览器入口零 node: 依赖（runtime 顶层引入 node:fs）" \
   "s|^import { analyze, matchIndexedWords } from './tokenizer.js';|import { readFileSync } from 'node:fs';\nimport { analyze, matchIndexedWords } from './tokenizer.js';|" \
   'node scripts/check-search-browser-deps.mjs'
 
+# ── P3-2b 搜索页防线 ──────────────────────────────────────────────
+#
+# 33. 内置布局缺失必须报错：关掉 strict（回退到 index）。
+#
+# 主题没提供 search.html 时，搜索页会静默渲染成首页 —— 构建成功、
+# 页面看着正常、只是没有搜索框。这类失败最难在 CI 里发现，
+# 所以专门造一条负向确认 strict 真的在起作用。
+weaken "内置布局缺失报错（关掉 strict 回退）" \
+  packages/core/src/pipeline/render/theme.js \
+  "s|^  const layout = strict$|  const layout = false|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 34. 搜索页内联脚本必须用三花括号：改回转义输出。
+#
+# 转义后 `&` 变成 `&amp;`，内联脚本直接语法错误（浏览器报
+# Unexpected token）。这条守住「搜索页不会变成白板」。
+weaken "内联脚本不转义（改用 {{ searchScript }}）" \
+  packages/theme-minimal/layouts/search.html \
+  "s|<script>{{{ searchScript }}}</script>|<script>{{ searchScript }}</script>|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 35. header 只能有一个搜索入口：把内联面板加回来。
+#
+# 两套搜索实现必然分叉（内联那份要自己 fetch 索引、只能做子串 AND）。
+# 加回来后断言必须红。
+weaken "header 单一搜索入口（加回内联面板）" \
+  packages/theme-minimal/partials/header.html \
+  "s|<div class=\"header-actions\">|<div class=\"search-panel\" id=\"search-panel\"><input id=\"search-input\"></div><div class=\"header-actions\">|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 36. 搜索客户端里 runQuery 必须来自 matcher（占位符必须被替换）。
+#
+# 占位符没了却没人发现，会产出一个「runQuery is not defined」的页面。
+weaken "搜索客户端占位符替换（改成不替换）" \
+  packages/core/src/search/ui/index.js \
+  "s|  cached = shell.replace(PLACEHOLDER, indent(stripModuleSyntax(matcher)));|  cached = shell;|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 37. 搜索页样式必须逐主题适配：让某主题的搜索 CSS 空掉。
+#
+# 「4 套主题的搜索页都要好看」如果退化成「共用一套样式」，
+# 两两可辨的断言会红。这条守的是「适配确实发生了」。
+weaken "搜索页逐主题适配（minimal 高亮规则改名）" \
+  packages/theme-minimal/styles/search.css \
+  "s|^\\.search-result mark {|.zzz-mark {|" \
+  'node --test packages/core/tests/search/page.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1
