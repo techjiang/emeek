@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { build as coreBuild, logger, loadConfig } from '@emeeek/core';
+import { build as coreBuild, logger, loadConfig, loadTheme, normalizeOverrides } from '@emeeek/core';
 import { createStudioServer } from '@emeeek/editor';
 
 /**
@@ -23,6 +23,28 @@ export async function studio({ cwd, flags }) {
     return stats;
   };
 
+  /**
+   * 主题配置提供者（feature D）。
+   *
+   * 每次请求时按当前配置重新加载主题，返回描述符与生效值 ——
+   * 用户改了 emeeek.config.js 的 theme.name，面板下一次请求就跟上，
+   * 不需要重启 Studio。
+   */
+  const themeProvider = async () => {
+    const { config: latest } = await loadConfig(root);
+    const theme = await loadTheme(root, latest);
+    const { values } = normalizeOverrides(theme.meta, latest.theme ?? {});
+    // 生效值 = 主题声明默认值 ← 用户覆盖值，摊平成点号路径表
+    const effective = {};
+    for (const [group, items] of Object.entries(theme.meta.config ?? {})) {
+      for (const [key, item] of Object.entries(items)) {
+        if (item?.default !== undefined) effective[`${group}.${key}`] = item.default;
+      }
+    }
+    Object.assign(effective, values);
+    return { meta: { name: theme.meta.name, config: theme.meta.config ?? {} }, values: effective };
+  };
+
   instance = await createStudioServer({
     port: Number(flags.port ?? 3000),
     host: String(flags.host ?? 'localhost'),
@@ -33,6 +55,7 @@ export async function studio({ cwd, flags }) {
     // —— 编辑器里的内容与磁盘保持一致，但不自动覆盖本地脏的改动（D4）
     projectRoot: root,
     watch: true,
+    themeProvider,
     logger,
   });
 

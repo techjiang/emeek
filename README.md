@@ -169,8 +169,16 @@ docs/              配置、主题、插件、性能、编辑器文档
 
 ## 主题
 
-内置 **4 套设计语言**（P3-1 交付 Aurora / Minimal，P3-1b 补齐 Inkstone，Magazine 待补）。
+内置 **4 套设计语言**（P3-1 交付：Aurora / Minimal / Inkstone / Magazine）。
 每套主题明暗两套配色**独立设计**，不做「背景变黑、文字变白」的反转。
+四套主题**首页版面结构两两不同** —— 换主题不只是换颜色：
+
+| 主题 | 首页版面 |
+| --- | --- |
+| Aurora | 渐变 hero + 多栏网格 |
+| Minimal | 一栏到底的流式列表 |
+| Inkstone | 两栏（正文 + 印记/题签侧栏） |
+| Magazine | 封面头条 + 三级权重多栏 |
 
 | Aurora（暗色） | Aurora（亮色） |
 | --- | --- |
@@ -184,7 +192,20 @@ docs/              配置、主题、插件、性能、编辑器文档
 | --- | --- |
 | ![Inkstone 亮色](docs/assets/themes/inkstone-home-desktop-light.png) | ![Inkstone 暗色](docs/assets/themes/inkstone-home-desktop-dark.png) |
 
-切换主题只改一行配置：
+| Magazine（亮色，日刊） | Magazine（暗色，夜刊） |
+| --- | --- |
+| ![Magazine 亮色](docs/assets/themes/magazine-home-desktop-light.png) | ![Magazine 暗色](docs/assets/themes/magazine-home-desktop-dark.png) |
+
+切换主题：
+
+```bash
+emeeek theme list                  # 列出可用主题
+emeeek theme switch magazine       # 写入 emeeek.config.js
+emeeek theme preview aurora        # 切换 + 起预览
+emeeek theme create my-theme       # 生成自定义主题骨架
+```
+
+或直接改一行配置：
 
 ```javascript
 // emeeek.config.js
@@ -192,7 +213,8 @@ export default { theme: { name: 'aurora' } };
 ```
 
 主题是「数据 + 模板」：`theme.json` 声明可配置项，主题 CSS 只消费 CSS 变量。
-自定义 CSS / HTML 走白名单消毒，注入位置固定 —— 详见 [主题文档](docs/themes.md)。
+自定义 CSS / HTML 走白名单消毒，注入位置固定。颜色/字体/布局可在 `emeeek dev` 的
+Studio「主题配置」面板里实时调整，也可在页面挂一个运行时切换浮层 —— 详见 [主题文档](docs/themes.md)。
 
 ## AI 能力（可选）
 

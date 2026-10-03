@@ -190,3 +190,51 @@ test('CSS 超阈值时改用外链，且 /assets/theme.css 真的写出来', asy
     assert.match(css, /\.section-number/, '外链里要有主题的特色样式');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+// ── 运行时主题切换（P3-1b-3b feature F） ─────────────────────
+
+test('switcher 未配置时页面里没有浮层（不做用户没要的东西）', async () => {
+  const dir = await makeSite(`
+    export default { site: { title: 'T', url: 'https://x.dev' }, theme: { name: 'minimal' } };`);
+  try {
+    await build({ cwd: dir });
+    const html = await read(dir, 'index.html');
+    assert.doesNotMatch(html, /emeeek-switcher/);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('switcher 启用时注入浮层、面板与 noscript 兜底', async () => {
+  const dir = await makeSite(`
+    export default {
+      site: { title: 'T', url: 'https://x.dev' },
+      theme: { name: 'minimal', switcher: { enabled: true, themes: [
+        { name: 'minimal', label: '极简', url: '/' },
+        { name: 'magazine', label: '杂志', url: '/magazine/' },
+      ] } },
+    };`);
+  try {
+    await build({ cwd: dir });
+    const html = await read(dir, 'index.html');
+    assert.match(html, /emeeek-switcher/);
+    assert.match(html, /href="\/magazine\/"/);
+    assert.match(html, /<noscript>/);
+    // 开关按钮与亮暗切换都在
+    assert.match(html, /emeeek-switcher-toggle/);
+    assert.match(html, /emeeek-switch-dark/);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('switcher 的主题 label 里带 HTML 时不产生注入（转义）', async () => {
+  const dir = await makeSite(`
+    export default {
+      site: { title: 'T', url: 'https://x.dev' },
+      theme: { name: 'minimal', switcher: { enabled: true, themes: [
+        { name: 'x', label: '</a><script>alert(1)</script>', url: '/' },
+      ] } },
+    };`);
+  try {
+    await build({ cwd: dir });
+    const html = await read(dir, 'index.html');
+    assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});

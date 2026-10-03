@@ -6,6 +6,7 @@ import { studio } from './commands/studio.js';
 import { doctor } from './commands/doctor.js';
 import { clean } from './commands/clean.js';
 import { newPost } from './commands/new.js';
+import { themeCommand } from './commands/theme.js';
 
 const VERSION = '0.1.0';
 
@@ -17,6 +18,7 @@ const COMMANDS = {
   doctor: { run: doctor, desc: '诊断环境、配置与主题' },
   clean: { run: clean, desc: '清理构建产物' },
   new: { run: newPost, desc: '新建一篇文章' },
+  theme: { run: themeCommand, desc: '查看 / 切换 / 创建主题' },
 };
 
 const HELP = `
@@ -30,6 +32,7 @@ Emeek v${VERSION} —— 基于 Gmeek 理念的下一代知识站引擎
   dev      本地开发预览
   studio   打开 Emeek Studio 编辑器（写作 + 实时预览）
   new      新建文章
+  theme    查看 / 切换 / 创建主题（list / switch / preview / create）
   doctor   诊断配置与依赖
   clean    清理 dist/
 
@@ -42,6 +45,8 @@ Emeek v${VERSION} —— 基于 Gmeek 理念的下一代知识站引擎
   emeeek init my-blog
   cd my-blog && emeeek dev
   emeeek studio --cwd my-blog     # 写作编辑器，预览与 build 逐字节一致
+  emeeek theme list               # 列出可用主题
+  emeeek theme switch magazine    # 切换主题（写入 emeeek.config.js）
 
 零配置即可运行：没有 emeeek.config.js 时使用内置默认值。
 `;

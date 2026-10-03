@@ -81,33 +81,8 @@ export function resolveThemeConfig(meta, userOverrides = {}) {
   return { ...defaults, ...flatOverrides };
 }
 
-/** CSS 值的安全化：颜色与数字是配置里仅有的两类会被写进声明的值。 */
-function cssColor(value) {
-  const raw = String(value ?? '').trim();
-  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(raw)) return raw;
-  if (/^(?:rgb|hsl)a?\([\d\s.,%/-]+\)$/i.test(raw)) return raw;
-  // 命名色（rebeccapurple 等）：只允许纯字母，杜绝 `red; } evil {` 这类闭合注入。
-  if (/^[a-z]+$/i.test(raw)) return raw;
-  return null;
-}
-
-function cssNumber(value, { min = -Infinity, max = Infinity, unit = '' } = {}) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return null;
-  return `${Math.min(max, Math.max(min, num))}${unit}`;
-}
-
-/** 字体串：只允许字母数字、空格、逗号、连字符、下划线、点、引号、CJK。 */
-function cssFont(value) {
-  const raw = String(value ?? '').trim();
-  if (!raw) return null;
-  if (!/^[\w\s,'".\-\u4e00-\u9fff]+$/.test(raw)) return null;
-  return raw;
-}
-
-function cssBoolean(value) {
-  return value === true || value === 'true' ? '1' : '0';
-}
+// 值的规范化与 override.js 共用一份（见 values.js）。
+import { cssColorValue as cssColor, cssNumberValue as cssNumber, cssFontValue as cssFont, cssBooleanValue as cssBoolean } from './values.js';
 
 /**
  * 生成 :root 变量块。

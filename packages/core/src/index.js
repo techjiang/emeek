@@ -12,6 +12,8 @@ export { buildWikiLinkIndex, resolveWikiLink } from './pipeline/transform/links.
 export { renderArticle } from './pipeline/index.js';
 export { makeExcerpt, readingTime, countWords } from './pipeline/transform/excerpt.js';
 export { loadTheme } from './pipeline/render/theme.js';
+export { normalizeOverrides, mergeOverrides } from './theme/override.js';
+export { listBuiltinThemes, listAvailableThemes } from './theme/registry.js';
 export { writeOutput, finalizeHtml } from './pipeline/render/output.js';
 export { logger } from './util/logger.js';
 export { loadPlugins, pluginApi } from './plugin/loader.js';

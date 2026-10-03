@@ -161,5 +161,54 @@ weaken "文档数字与代码一致（语言数量写错）" \
   "s|\\*\\*36 种语言\\*\\*代码块高亮|**37 种语言**代码块高亮|" \
   'node --test packages/editor/tests/studio-client.test.js'
 
+# 20. 布局差异化：把 Minimal 的单栏改回网格。
+#
+# 「4 套主题两两可辨」这条如果削弱了还是绿的，说明它没被守住 ——
+# 而它正是 P3-1b-3 的核心交付之一。
+weaken "Minimal 单栏化（.post-grid 改回网格）" \
+  packages/theme-minimal/styles/main.css \
+  "s|^.post-grid { display: block; }|.post-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }|" \
+  'node --test packages/core/tests/theme/layouts.test.js'
+
+# 21. 主题发现：把脚本里写死的主题数组塞回去。
+#
+# 「新主题自动纳入」靠的是动态扫描。把发现逻辑换成一份常量表，
+# 断言必须变红，否则它只在「现在恰好对」而不是「一直对」。
+weaken "主题动态发现（listThemes 改回写死数组）" \
+  scripts/lib/themes.mjs \
+  "s|  const names = found.map((t) => t.name);|  const names = ['aurora', 'minimal', 'inkstone', 'magazine'];|" \
+  'node --test packages/core/tests/theme/discovery.test.js'
+
+# 22. 版面结构签名：让列数永远算成 0。
+#
+# 「两两可辨」的比较逻辑一旦退化（列数都算成 0），网格与单栏会被判成相同。
+# 这条确认那个纯函数被单测守着。
+weaken "版面结构签名（列数恒为 0）" \
+  scripts/e2e/theme_signature.mjs \
+  "s|  return parts.length;|  return 0; // weakened|" \
+  'node --test packages/core/tests/theme/layouts.test.js'
+
+# 23. 自定义配置覆盖链：让 normalizeOverrides 不再校验（全部放行）。
+#
+# 「配置面板能改但不能改坏」是 feature D 的底线。削弱校验后断言必须红。
+weaken "自定义配置校验（normalizeOverrides 全放行）" \
+  packages/core/src/theme/override.js \
+  "s|      const desc = descriptors|      const desc = { type: 'string' }, _orig = descriptors|" \
+  'node --test packages/core/tests/theme/override.test.js'
+
+# 24. 切换按钮禁用：拔掉 noscript 兜底与属性转义。
+#
+# 无 JS 时按钮必须消失（不留死浮层）；label 必须转义（不产生注入）。
+weaken "切换按钮 label 转义（escapeHtml 直通）" \
+  packages/core/src/theme/switcher.js \
+  "s|function escapeHtml(text) {|function escapeHtml(text) { return String(text ?? ''); // weakened\nfunction _unused(text) {|" \
+  'node --test packages/core/tests/theme/switcher.test.js packages/core/tests/theme/integration.test.js'
+
+# 25. 主题注册表：让项目内同名主题不再覆盖内置（优先级退化）。
+weaken "项目内主题优先于内置（改成内置覆盖项目）" \
+  packages/core/src/theme/registry.js \
+  "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
+  'node --test packages/core/tests/theme/registry.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

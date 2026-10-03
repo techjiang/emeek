@@ -6,29 +6,34 @@
 </head>
 <body class="layout-index">
     {% include "header" %}
-    <main class="site-main">
-        <section class="hero">
-            <p class="hero-kicker">墨 迹</p>
-            <h1 class="hero-title">{{ site.title }}</h1>
-            {% if site.description %}<p class="hero-sub">{{ site.description }}</p>{% endif %}
-            <div class="hero-stroke" aria-hidden="true"></div>
-        </section>
-        {% if pinned.length %}
-        <section class="pinned-section">
-            <h2 class="section-label">置顶</h2>
-            <div class="post-list">
-                {% for post in pinned %}{% include "card" %}{% endfor %}
-            </div>
-        </section>
-        {% endif %}
-        <section class="post-list">
-            {% if posts.length %}
-            {% for post in posts %}{% include "card" %}{% endfor %}
-            {% else %}
-            <p class="empty">还没有文章。在 <code>posts/</code> 下新建一个 <code>.md</code> 文件就能开始写作。</p>
+    {# 两栏版面：左栏文章（单栏流式、格线分隔），右栏印记与题签。
+       与 Minimal 的「一栏到底」形成结构差异 —— 布局本身就是主题身份。 #}
+    <main class="site-main index-layout">
+        <div class="index-column">
+            <section class="hero">
+                <p class="hero-kicker">墨 迹</p>
+                <h1 class="hero-title">{{ site.title }}</h1>
+                {% if site.description %}<p class="hero-sub">{{ site.description }}</p>{% endif %}
+                <div class="hero-stroke" aria-hidden="true"></div>
+            </section>
+            {% if pinned.length %}
+            <section class="pinned-section">
+                <h2 class="section-label">置顶</h2>
+                <div class="post-list">
+                    {% for post in pinned %}{% include "card" %}{% endfor %}
+                </div>
+            </section>
             {% endif %}
-        </section>
-        {% include "pagination" %}
+            <section class="post-list">
+                {% if posts.length %}
+                {% for post in posts %}{% include "card" %}{% endfor %}
+                {% else %}
+                <p class="empty">还没有文章。在 <code>posts/</code> 下新建一个 <code>.md</code> 文件就能开始写作。</p>
+                {% endif %}
+            </section>
+            {% include "pagination" %}
+        </div>
+        {% include "index-aside" %}
     </main>
     {% include "footer" %}
 </body>

@@ -440,3 +440,44 @@ kbd {
 @media (pointer: coarse), (max-width: 900px) {
   .mobile-help { display: inline-flex; }
 }
+
+/**
+ * 主题配置面板（P3-1b-3b feature D）。
+ *
+ * 与 AI 面板同构：右侧滑出、同样的宽度与边框。复用视觉语言而不是
+ * 另发明一套，用户的肌肉记忆才能延续。
+ */
+.theme-panel {
+  position: fixed; top: var(--toolbar-h); right: 0; bottom: var(--status-h);
+  width: 320px; max-width: 92vw;
+  background: var(--bg-elevated); border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform .18s ease;
+  display: flex; flex-direction: column; z-index: 21;
+  box-shadow: -12px 0 28px #0003;
+}
+.theme-panel.open { transform: none; }
+.theme-body { flex: 1; overflow: auto; padding: 12px; }
+.theme-hint { font-size: 12px; color: var(--text-dim); margin: 0 0 12px; line-height: 1.5; }
+.theme-fields { display: flex; flex-direction: column; gap: 12px; }
+.theme-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.theme-group h4 { margin: 0 0 8px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+.theme-field { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; margin-bottom: 8px; }
+.theme-field:last-child { margin-bottom: 0; }
+.theme-field label { font-size: 12px; }
+.theme-field input[type="color"] { width: 36px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: none; padding: 0; }
+.theme-field input[type="text"], .theme-field input[type="number"], .theme-field select {
+  min-width: 0; width: 140px; font-size: 12px; padding: 3px 6px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;
+}
+.theme-field input[type="range"] { width: 140px; }
+.theme-field .theme-value { font-size: 11px; color: var(--text-dim); min-width: 2.5rem; text-align: right; }
+.theme-rejected {
+  margin-top: 12px; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+  background: color-mix(in srgb, #d29922 14%, transparent); border: 1px solid #d29922;
+}
+.theme-actions { margin-top: 14px; display: flex; gap: 8px; }
+.theme-actions button {
+  flex: 1; font-size: 12px; padding: 6px 10px; cursor: pointer;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+}
+.theme-actions button:hover { border-color: var(--accent, #58a6ff); }
