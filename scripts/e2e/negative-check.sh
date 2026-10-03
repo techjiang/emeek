@@ -210,5 +210,67 @@ weaken "项目内主题优先于内置（改成内置覆盖项目）" \
   "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
   'node --test packages/core/tests/theme/registry.test.js'
 
+# ── P3-2a 搜索层防线 ──────────────────────────────────────────────
+#
+# 26. 标题命中必须被查：让 AND 只看 words，不看 titleIndex。
+#
+# 这是真实踩过的坑：标题含「博客」但正文不含的文章，只查 words 表永远
+# 搜不到。削弱后「标题命中提权」的断言必须红。
+weaken "标题命中纳入检索（AND 只查 words）" \
+  packages/core/src/search/query.js \
+  "s|      postingList(index, 'titleIndex', word),|      [],|" \
+  'node --test packages/core/tests/search/query.test.js'
+
+# 27. 索引感知查询：让 matchIndexedWords 不再从索引表认词。
+#
+# 词典未就绪时（前端首开），这是精确检索的唯一来源。削弱后
+# 「词典缺失仍走 AND」的断言必须红。
+weaken "索引感知查询（matchIndexedWords 失效）" \
+  packages/core/src/search/tokenizer.js \
+  "s|  const table = index?.words ?? {};|  const table = {}; // weakened|" \
+  'node --test packages/core/tests/search/tokenizer.test.js packages/core/tests/search/runtime.test.js'
+
+# 28. 代码块必须退出索引：让围栏检测永远为假。
+#
+# 否则示例代码里的词会污染检索结果 —— 搜「function」搜出一堆文章，
+# 页面上却没有这个词。削弱后「代码块不进索引」的断言必须红。
+weaken "代码块退出索引（围栏检测失效）" \
+  packages/core/src/search/plain-text.js \
+  "s|    if (FENCE.test(line)) {|    if (false) {|" \
+  'node --test packages/core/tests/search/plain-text.test.js'
+
+# 29. front-matter 必须剥离：让元数据留在正文里。
+#
+# 否则 draft: true 里的 true 能被搜出来。削弱后断言必须红。
+weaken "front-matter 剥离（元数据泄漏）" \
+  packages/core/src/search/plain-text.js \
+  "s|  text = text.replace(FRONTMATTER, '');|  // weakened|" \
+  'node --test packages/core/tests/search/plain-text.test.js'
+
+# 30. 索引版本头必须校验：让 parseIndex 不看版本。
+#
+# 前端拿到旧结构的索引应当降级，而不是跑出错误结果。
+weaken "索引版本校验（parseIndex 忽略 version）" \
+  packages/core/src/search/indexer.js \
+  "s|  if (parsed.version !== expectedVersion) return null;|  // weakened|" \
+  'node --test packages/core/tests/search/indexer.test.js'
+
+# 31. 体积预算必须守：让超预算不再失败。
+#
+# 索引跟着页面下载，超预算静默发布等于拖垮首屏。削弱后断言必须红。
+weaken "索引体积预算（超预算不抛错）" \
+  packages/core/src/search/site-index.js \
+  "s|  if (stats.overBudget) {|  if (false) {|" \
+  'node --test packages/core/tests/search/site-index.test.js'
+
+# 32. 浏览器入口必须零 node: 依赖：往 runtime 顶部塞一个 node: 引用。
+#
+# 这是浏览器打包的硬边界。本地 Node 测试全绿、打包时炸，
+# 是最难在 CI 里提前发现的一类问题，所以专门造一条负向。
+weaken "浏览器入口零 node: 依赖（runtime 顶层引入 node:fs）" \
+  packages/core/src/search/runtime.js \
+  "s|^import { analyze, matchIndexedWords } from './tokenizer.js';|import { readFileSync } from 'node:fs';\nimport { analyze, matchIndexedWords } from './tokenizer.js';|" \
+  'node scripts/check-search-browser-deps.mjs'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

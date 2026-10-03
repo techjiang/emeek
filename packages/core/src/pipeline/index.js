@@ -7,7 +7,8 @@ import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
-import { buildJsonLd, renderHeadMeta, buildSitemap, buildRss, buildRobots, buildSearchIndex } from './transform/seo.js';
+import { buildJsonLd, renderHeadMeta, buildSitemap, buildRss, buildRobots } from './transform/seo.js';
+import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
 import { loadTheme, renderLayout } from './render/theme.js';
 import { buildInjections } from '../theme/inject.js';
 import { loadPlugins } from '../plugin/loader.js';
@@ -139,7 +140,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     themeSwitcher: injections.switcher?.html ?? '',
     themeSwitcherScript: injections.switcher?.script ?? '',
     noFlashScript: injections.noFlash,
-    searchIndexUrl: config.search?.enabled ? '/search-index.json' : null,
+    searchIndexUrl: config.search?.enabled ? (config.search.indexPath ?? '/search-index.json') : null,
     tagUrl,
     headMeta: '',
   });
@@ -258,8 +259,20 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   if (config.seo?.robots !== false) {
     extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData) });
   }
+  let searchIndexStats = null;
   if (config.search?.enabled) {
-    extraFiles.push({ path: '/search-index.json', content: JSON.stringify(buildSearchIndex(sorted)) });
+    // 体积预算在这里守住：超预算默认抛错（构建失败），而不是发一个
+    // 巨大的索引给每个访客。允许配置里显式放宽（见 config.search.gzipBudget）。
+    const result = buildSearchIndexFile(sorted, {
+      gzipBudget: config.search.gzipBudget ?? undefined,
+      indexUrl: config.search.indexPath ?? '/search-index.json',
+      onBudgetExceeded: config.search.allowOverBudget
+        ? (info) => logger.warn(`搜索索引超出预算：gzip ${(info.gzip / 1024).toFixed(1)}KB > ${(info.budget / 1024).toFixed(1)}KB`)
+        : undefined,
+    });
+    extraFiles.push({ path: result.path, content: result.content });
+    searchIndexStats = result.stats;
+    logger.info(`搜索索引：${summarizeIndex(result.stats)}`);
   }
 
   // ── 7. 写盘 ────────────────────────────────────────────────────
@@ -302,6 +315,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   const stats = {
     elapsed: Date.now() - started,
+    searchIndex: searchIndexStats,
     posts: sorted.length,
     pages: rendered.length,
     drafts: drafts.length,

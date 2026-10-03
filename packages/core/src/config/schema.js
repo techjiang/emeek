@@ -13,6 +13,9 @@ const RULES = [
   { path: 'theme.darkMode', type: 'string', check: (v) => ['auto', 'light', 'dark', 'toggle'].includes(v) || '只能是 auto / light / dark / toggle' },
   { path: 'feed.limit', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
   { path: 'search.maxResults', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'search.suggest', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'search.gzipBudget', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数（字节）' },
+  { path: 'search.indexPath', type: 'string', check: (v) => v.startsWith('/') || '必须以 / 开头' },
   { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'custom'].includes(v) || '不支持的部署目标' },
   { path: 'plugins', type: 'array' },
 ];

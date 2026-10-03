@@ -50,7 +50,17 @@ export function defaultConfig() {
        */
       switcher: null,
     },
-    search: { enabled: true, fuzzy: true, maxResults: 10 },
+    /**
+     * 搜索配置。
+     *
+     * gzipBudget  索引 gzip 后的字节上限。超了默认让构建失败 ——
+     *             索引跟着页面下载，发一个几 MB 的索引给每个访客
+     *             与「搜索是增强」自相矛盾。要放宽就同时设 allowOverBudget。
+     * indexPath   索引发布路径。
+     * suggest     输入联想条数上限。
+     * fuzzy       对 ≥4 字 CJK 词元做编辑距离 1 展开。
+     */
+    search: { enabled: true, fuzzy: true, maxResults: 10, suggest: 8, indexPath: '/search-index.json', gzipBudget: 512000, allowOverBudget: false },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
     feed: { enabled: true, limit: 20 },
     perf: { lazyLoading: true, criticalCSS: true },
