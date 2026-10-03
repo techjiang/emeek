@@ -110,5 +110,61 @@
     "device": "mobile",
     "mode": "dark",
     "file": "docs/assets/themes/minimal-post-mobile-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "home",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-home-desktop-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "post",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-post-desktop-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "home",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-home-desktop-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "post",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-post-desktop-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "home",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-home-mobile-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "post",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-post-mobile-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "home",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-home-mobile-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "post",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-post-mobile-dark.png"
   }
 ]

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+</head>
+<body class="layout-tags">
+    {% include "header" %}
+    <main class="site-main">
+        <h1 class="page-title">{{ title }}</h1>
+        {% if singleGroup %}
+        <section class="post-list">
+            {% for post in singleGroup.posts %}{% include "card" %}{% endfor %}
+        </section>
+        {% else %}
+        <div class="tag-cloud">
+            {% for tag in tags %}
+            <a class="tag" href="{{ tag.url }}">{{ tag.name }} <span class="tag-count">{{ tag.count }}</span></a>
+            {% endfor %}
+        </div>
+        {% if tags.length == 0 %}<p class="empty">还没有标签。在文章 front-matter 里加 <code>tags: [标签]</code> 即可。</p>{% endif %}
+        {% endif %}
+    </main>
+    {% include "footer" %}
+</body>
+</html>

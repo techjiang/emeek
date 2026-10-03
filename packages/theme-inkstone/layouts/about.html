@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+</head>
+<body class="layout-about">
+    {% include "header" %}
+    <main class="site-main">
+        <h1 class="page-title">关于</h1>
+        <div class="prose">{{{ content }}}</div>
+    </main>
+    {% include "footer" %}
+</body>
+</html>
