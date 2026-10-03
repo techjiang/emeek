@@ -485,3 +485,43 @@ emeeek theme create my-theme --force  # 覆盖已存在的目录
 6. `emeeek dev --cwd examples/themes-demo` 看效果（改配置里的 `theme.name`）
 7. `node scripts/e2e/theme.mjs` + `node scripts/lighthouse-themes.mjs` 自检
 8. `node scripts/screenshots/capture.mjs mytheme` 出图（8 张，亮暗 × 桌面/移动 × 首页/文章页）
+
+## P3-1 交付清单
+
+主题系统（P3-1）的完整交付。三层能力：
+
+| 层 | 交付 | 位置 |
+| --- | --- | --- |
+| 规范与加载 | theme.json 规范 + 校验器 + 加载器 + 变量映射 | `packages/core/src/theme/`、`pipeline/render/theme.js` |
+| 4 套内置主题 | Aurora / Minimal / Inkstone / Magazine，版面两两不同 | `packages/theme-*/` |
+| 配置与工具 | 覆盖链 + Studio 面板 + `emeeek theme` CLI + 运行时切换 | `theme/override.js`、`cli/commands/theme.js`、`theme/switcher.js` |
+
+验收基线（全部可复现）：
+
+```
+$ npm test
+ℹ tests 866 / pass 866 / fail 0
+
+$ node scripts/e2e/theme.mjs
+ 28/28 通过
+
+$ node scripts/e2e/xss.mjs
+ 60/60 通过
+
+$ bash scripts/e2e/negative-check.sh
+ ── 25 条防线被守住，0 条没守住
+
+$ node scripts/lighthouse-themes.mjs
+ ✔ 全部 32 项 ≥ 90（32/32 全 100）
+
+$ node scripts/check-studio-bundle.mjs
+ 入口 360KB（预算 600KB）✔
+```
+
+（e2e 合计 96 条：xss 60 + draft-mobile 13 + dev-integration 7 + ai-panel 16。）
+
+### 三条不变量
+
+1. **主题是数据 + 模板，不是可执行代码** —— 模板引擎无任意 JS 执行，配置注入位置写死。
+2. **颜色/字体/布局的值只有一条来源** —— 主题 `theme.json` 的 config；引擎不提供默认颜色。
+3. **「可见」必须可测** —— 4 套主题两两可辨由「计算样式 ≥5 项」与「版面结构 ≥1 项」两层断言守住。
