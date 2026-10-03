@@ -41,6 +41,9 @@ export function compile(source) {
     let __locals = {};
     const __lookup = (name) => (name in __locals ? __locals[name] : __data[name]);
     const __scope = (next, body) => { const prev = __locals; __locals = { ...prev, ...next }; try { body(); } finally { __locals = prev; } };
+    // 未知过滤器返回原值：模板里写错一个名字不该让整站构建失败，
+    // 但也不能静默产出一个错误的形状 —— 所以只在「名字对但参数错」时由过滤器自己兜。
+    const __filter = (name, value, ...args) => (typeof __helpers[name] === 'function' ? __helpers[name](value, ...args) : value);
     ${declarations}
     ${body}
     return __out.join('');
@@ -59,7 +62,7 @@ function collectNames(source) {
   const found = [];
   // 只在模板标签内部扫描：直接对整份源码做引号剥离会误伤 HTML 属性，
   // 把 `lang="{{ site.language }}"` 里的表达式一起吃掉。
-  const tagRegex = /\{\{\{?([\s\S]*?)\}\}?\}|\{%\s*([^%]*?)\s*%\}/g;
+  const tagRegex = /\{#(?:[\s\S]*?)#\}|\{\{\{?([\s\S]*?)\}\}?\}|\{%\s*([^%]*?)\s*%\}/g;
   let match;
   while ((match = tagRegex.exec(String(source)))) {
     const expr = match[1] ?? match[2] ?? '';
@@ -73,6 +76,62 @@ function collectNames(source) {
     }
   }
   return found;
+}
+
+/**
+ * 管道过滤器 → 表达式前缀变换。
+ *
+ *   `posts | slice: 0, 2`  →  __filter('slice', posts, 0, 2)
+ *
+ * 为什么在「编译期」做而不是在运行时 split：表达式本身可能是
+ * `post.tags | len` 这种形式，运行时再解析就得再实现一遍表达式解析器。
+ * 这里只做一件事 —— 认出顶层（不在引号/括号里的）管道符并改写。
+ * 管道是「值 → 值」的函数调用，不是可执行代码，符合模板引擎的能力边界。
+ */
+function compileFilters(expr) {
+  if (!expr.includes('|')) return expr;
+  const parts = splitTopLevel(expr, '|');
+  if (parts.length < 2) return expr;
+  let out = parts[0].trim();
+  for (const raw of parts.slice(1)) {
+    const { name, args } = parseFilter(raw.trim());
+    if (!name) return expr;
+    out = `__filter(${JSON.stringify(name)}, ${out}${args ? `, ${args}` : ''})`;
+  }
+  return out;
+}
+
+/** 按分隔符切分，但跳过字符串字面量与括号内部。 */
+function splitTopLevel(source, delimiter) {
+  const parts = [];
+  let current = '';
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quote) {
+      current += ch;
+      if (ch === '\\') { current += source[i + 1] ?? ''; i += 1; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; current += ch; continue; }
+    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
+    if (ch === ')' || ch === ']' || ch === '}') depth -= 1;
+    if (ch === delimiter && depth === 0) { parts.push(current); current = ''; continue; }
+    current += ch;
+  }
+  parts.push(current);
+  return parts;
+}
+
+/** `slice: 0, 2` → { name: 'slice', args: '0, 2' }；无参形式 → args 为空串。 */
+function parseFilter(source) {
+  const colon = source.indexOf(':');
+  const name = ((colon === -1 ? source : source.slice(0, colon)).match(/^[A-Za-z_$][\w$]*/) ?? [''])[0];
+  if (!name) return { name: '', args: '' };
+  const args = colon === -1 ? '' : source.slice(colon + 1).trim();
+  return { name, args };
 }
 
 const helpers = {
@@ -89,19 +148,36 @@ const helpers = {
     const value = String(text ?? '');
     return value.length > limit ? `${value.slice(0, limit)}…` : value;
   },
+  /**
+   * 取子序列：`{{ posts | slice: 2 }}` / `{{ posts | slice: 0, 2 }}`。
+   *
+   * 为什么需要它：`{% for %}` 只有「从头开始」这一种遍历。
+   * 杂志式首页要的是「前 2 篇当封面文章，其余进网格」—— 没有切分，
+   * 主题只能把同一批文章渲染两遍（重复的标题在无障碍树里出现两次）。
+   * 引擎侧给一个语义最简单、看得懂的函数，比在主题模板里堆 if/loop.index 可靠。
+   */
+  slice: (value, start = 0, end) => {
+    const list = Array.isArray(value) ? value : [];
+    const from = Math.max(0, Number(start) || 0);
+    return end === undefined ? list.slice(from) : list.slice(from, Math.max(from, Number(end) || 0));
+  },
   json: (value) => JSON.stringify(value).replace(/</g, '\\u003c'),
 };
 
 function tokenize(source) {
   const tokens = [];
-  const regex = /\{\{\{([\s\S]*?)\}\}\}|\{\{([\s\S]*?)\}\}|\{%([\s\S]*?)%\}/g;
+  // {# … #} 是模板注释：它必须在这里被吃掉，不能落到 text token 里 ——
+  // 落到 text 就会原样出现在页面上（主题作者写注释是为了解释模板，
+  // 结果注释变成了正文，这是最难看的一种失败）。
+  // 放在与插值同一个正则里，是为了保证扫描顺序（否则 \{\{ 会先吃掉注释的开头）。
+  const regex = /\{#([\s\S]*?)#\}|\{\{\{([\s\S]*?)\}\}\}|\{\{([\s\S]*?)\}\}|\{%([\s\S]*?)%\}/g;
   let last = 0;
   let match;
   while ((match = regex.exec(source))) {
     if (match.index > last) tokens.push({ type: 'text', value: source.slice(last, match.index) });
-    if (match[1] !== undefined) tokens.push({ type: 'raw', value: match[1].trim() });
-    else if (match[2] !== undefined) tokens.push({ type: 'expr', value: match[2].trim() });
-    else tokens.push({ type: 'tag', value: match[3].trim() });
+    if (match[1] !== undefined) { /* 注释：丢弃 */ } else if (match[2] !== undefined) tokens.push({ type: 'raw', value: match[2].trim() });
+    else if (match[3] !== undefined) tokens.push({ type: 'expr', value: match[3].trim() });
+    else tokens.push({ type: 'tag', value: match[4].trim() });
     last = regex.lastIndex;
   }
   if (last < source.length) tokens.push({ type: 'text', value: source.slice(last) });
@@ -112,17 +188,18 @@ let seq = 0;
 
 function emit(token) {
   if (token.type === 'text') return `__push(${JSON.stringify(token.value)});`;
-  if (token.type === 'expr') return `__push(__esc(${token.value}));`;
-  if (token.type === 'raw') return `__push(${token.value});`;
+  if (token.type === 'expr') return `__push(__esc(${compileFilters(token.value)}));`;
+  if (token.type === 'raw') return `__push(${compileFilters(token.value)});`;
 
   const tag = token.value;
-  if (/^if\s/.test(tag)) return `if (${tag.slice(3)}) {`;
+  if (/^if\s/.test(tag)) return `if (${compileFilters(tag.slice(3))}) {`;
   // "else if " 恰好 8 个字符，slice(8) 才是条件表达式本身。
-  if (/^else\s+if\s/.test(tag)) return `} else if (${tag.slice(8)}) {`;
+  if (/^else\s+if\s/.test(tag)) return `} else if (${compileFilters(tag.slice(8))}) {`;
   if (tag === 'else') return '} else {';
   if (tag === 'endif' || tag === '/if') return '}';
   if (/^for\s+/.test(tag)) {
-    const [, decl, iterable] = /^for\s+([\s\S]+?)\s+in\s+([\s\S]+)$/.exec(tag);
+    const [, decl, rawIterable] = /^for\s+([\s\S]+?)\s+in\s+([\s\S]+)$/.exec(tag);
+    const iterable = compileFilters(rawIterable);
     const [first, second] = decl.split(',').map((s) => s.trim());
     seq += 1;
     const id = seq;

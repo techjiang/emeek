@@ -1,0 +1,167 @@
+{
+  "$schema": "https://emeeek.dev/schema/theme.json",
+  "name": "magazine",
+  "version": "1.0.0",
+  "author": "Emeek Team",
+  "description": "杂志质感 —— 大图 Hero、多栏网格、分类色带、标志性 Pull Quote。为图文混排设计：粗标题与精致排版并存，装饰服务于节奏而不是抢戏。",
+  "preview": "preview.png",
+  "entryLayout": "index",
+  "layouts": [
+    "index",
+    "post",
+    "archive",
+    "tags",
+    "about",
+    "404"
+  ],
+  "features": [
+    "dark-mode",
+    "light-mode",
+    "syntax-highlight",
+    "math",
+    "mermaid",
+    "toc",
+    "search",
+    "search-index",
+    "reading-progress",
+    "related-posts"
+  ],
+  "compatible": ">=1.0.0",
+  "config": {
+    "colors": {
+      "primary": {
+        "type": "color",
+        "default": "#1a1a1a",
+        "label": "标题色（墨黑）"
+      },
+      "accent": {
+        "type": "color",
+        "default": "#c1121f",
+        "label": "强调色（杂志红）"
+      },
+      "background": {
+        "type": "color",
+        "default": "#ffffff",
+        "label": "背景色"
+      },
+      "surface": {
+        "type": "color",
+        "default": "#fafafa",
+        "label": "卡片底色"
+      },
+      "text": {
+        "type": "color",
+        "default": "#1a1a1a",
+        "label": "正文色"
+      },
+      "muted": {
+        "type": "color",
+        "default": "#6b6b6b",
+        "label": "次要色"
+      },
+      "border": {
+        "type": "color",
+        "default": "#e5e5e5",
+        "label": "分隔线色"
+      },
+      "code": {
+        "type": "color",
+        "default": "#fafafa",
+        "label": "代码块底色"
+      }
+    },
+    "typography": {
+      "headingFont": {
+        "type": "font",
+        "default": "\"Playfair Display\", \"Noto Serif SC\", Georgia, serif",
+        "label": "标题字体"
+      },
+      "bodyFont": {
+        "type": "font",
+        "default": "\"Noto Sans SC\", \"Inter\", system-ui, sans-serif",
+        "label": "正文字体"
+      },
+      "codeFont": {
+        "type": "font",
+        "default": "\"JetBrains Mono\", Consolas, monospace",
+        "label": "代码字体"
+      },
+      "fontSize": {
+        "type": "number",
+        "default": 17,
+        "min": 12,
+        "max": 24,
+        "label": "正文字号"
+      },
+      "lineHeight": {
+        "type": "number",
+        "default": 1.85,
+        "min": 1.2,
+        "max": 2.4,
+        "label": "行高"
+      }
+    },
+    "layout": {
+      "maxWidth": {
+        "type": "number",
+        "default": 1120,
+        "min": 600,
+        "max": 1440,
+        "label": "内容最大宽度"
+      },
+      "sidebar": {
+        "type": "boolean",
+        "default": false,
+        "label": "显示侧边栏"
+      },
+      "toc": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示目录"
+      },
+      "footer": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示页脚"
+      }
+    },
+    "features": {
+      "darkMode": {
+        "type": "select",
+        "options": [
+          "auto",
+          "light",
+          "dark",
+          "toggle"
+        ],
+        "default": "auto",
+        "label": "明暗模式"
+      },
+      "readingProgress": {
+        "type": "boolean",
+        "default": true,
+        "label": "阅读进度条"
+      },
+      "syntaxHighlight": {
+        "type": "boolean",
+        "default": true,
+        "label": "代码高亮"
+      },
+      "math": {
+        "type": "boolean",
+        "default": true,
+        "label": "数学公式"
+      },
+      "mermaid": {
+        "type": "boolean",
+        "default": true,
+        "label": "图表"
+      },
+      "relatedPosts": {
+        "type": "boolean",
+        "default": true,
+        "label": "相关文章"
+      }
+    }
+  }
+}

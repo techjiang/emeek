@@ -1,0 +1,13 @@
+<footer class="site-footer">
+    <div class="footer-inner">
+        <p class="footer-brand">{{ site.title }}</p>
+        <p>© {{ year }} {{ site.author }}</p>
+        <p class="footer-meta">
+            Emeek 出品
+            {% if config.feed.enabled != false %}<span class="dot">·</span><a href="/rss.xml">RSS</a>{% endif %}
+            {% if config.seo.sitemap != false %}<span class="dot">·</span><a href="/sitemap.xml">Sitemap</a>{% endif %}
+        </p>
+    </div>
+    {{{ themeFooterExtra }}}
+</footer>
+{% if themeJS %}<script>{{{ themeJS }}}</script>{% endif %}

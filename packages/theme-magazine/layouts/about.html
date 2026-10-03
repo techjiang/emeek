@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+</head>
+<body class="layout-about">
+    {% include "header" %}
+    <main class="site-main">
+        <div class="section-head">
+            <span class="section-number" aria-hidden="true">00</span>
+            <h1 class="section-title">关于本刊</h1>
+        </div>
+        <div class="prose">{{{ content }}}</div>
+    </main>
+    {% include "footer" %}
+</body>
+</html>

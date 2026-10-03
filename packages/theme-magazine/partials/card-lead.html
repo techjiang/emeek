@@ -1,0 +1,21 @@
+{# 头条卡：横向大图 + 大号标题，占满整行。
+   它与 .post-card 共用配色与分类色带，只换排列方向 —— 杂志的头条
+   不是「更大的卡片」，是「另一种版面」。 #}
+<article class="post-card post-card--lead post-card--wide{% if post.pinned %} card-pinned{% endif %}" data-category="{{ post.leadCategory }}">
+    <a class="post-card-link" href="{{ post.url }}">
+        <div class="card-thumb{% if !post.cover %} card-thumb--placeholder{% endif %}">
+            {% if post.cover %}<img src="{{ post.cover }}" alt="" loading="eager" decoding="async" width="1280" height="720" />{% endif %}
+        </div>
+        <div class="card-body">
+            {% if post.category %}<p class="card-category">{{ post.category }}</p>{% endif %}
+            <h3 class="card-title">{% if post.pinned %}<span class="pin-mark" aria-label="置顶">FEATURED</span>{% endif %}{{ post.title }}</h3>
+            {% if post.description %}<p class="card-excerpt">{{ post.description }}</p>{% endif %}
+            <div class="card-meta">
+                <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
+                <span class="dot">·</span>
+                <span>{{ post.readingTime }} 分钟</span>
+                {% if post.tags.length %}<span class="dot">·</span><span>{{ post.tags[0] }}</span>{% endif %}
+            </div>
+        </div>
+    </a>
+</article>

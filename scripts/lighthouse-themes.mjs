@@ -22,7 +22,7 @@ const PORT = Number(process.env.PORT ?? 8231);
 const THRESHOLD = Number(process.env.THEME_LH_THRESHOLD ?? 90);
 
 const requested = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-const THEMES = requested.length ? requested : ['aurora', 'minimal'];
+const THEMES = requested.length ? requested : ['aurora', 'minimal', 'inkstone', 'magazine'];
 
 const PAGES = [
   ['首页', '/index.html'],

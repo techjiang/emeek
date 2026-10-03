@@ -267,6 +267,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     extraFiles,
     theme,
     config,
+    cwd,
     onProgress: (current, total) => onProgress?.(current, total),
   });
 
@@ -309,6 +310,18 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   return stats;
 }
 
+/**
+ * 卡片数据的稳定形状。
+ *
+ * `category` / `leadCategory` 是给主题**做样式钩子**的两个字段，不是新概念：
+ *   category      分类的原始展示名（「设计」）
+ *   leadCategory  分类的 slug（「设计」→ `设置` 同款规则），可直接进 HTML 属性
+ * 之前主题想按分类上色只能自己在模板里 slugify —— 模板里没有那个函数，
+ * 于是「分类色带」这类需求就退化成「所有卡片同一个颜色」。字段放在这里，
+ * 主题只需要 `data-category="{{ post.leadCategory }}"`。
+ * 没有分类时给 `default`：CSS 的 `[data-category="..."]` 覆盖不到空串，
+ * 留空会让「有分类」和「无分类」的卡片意外撞成同一套样式。
+ */
 function toCard(post) {
   return {
     title: post.title,
@@ -319,6 +332,8 @@ function toCard(post) {
     tags: post.tags,
     tagLinks: post.tagLinks ?? post.tags.map((t) => ({ name: t, url: `/tags/${encodeURIComponent(slugifyTag(t))}.html` })),
     categories: post.categories,
+    category: post.categories?.[0] ?? null,
+    leadCategory: post.categories?.[0] ? slugifyTag(post.categories[0]) : 'default',
     readingTime: post.readingTime,
     wordCount: post.wordCount,
     pinned: post.pinned,

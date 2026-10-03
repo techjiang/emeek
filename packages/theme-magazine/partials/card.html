@@ -1,0 +1,21 @@
+{# 文章卡片。
+   分类色带走 data-category → CSS border-top；缩略图优先用封面图，
+   没有封面时不贴占位图，交给 .card-thumb--placeholder 的 CSS 渐变。 #}
+<article class="post-card{% if post.pinned %} card-pinned{% endif %}{% if post.lead %} post-card--lead{% endif %}" data-category="{{ post.leadCategory }}">
+    <a class="post-card-link" href="{{ post.url }}">
+        <div class="card-thumb{% if !post.cover %} card-thumb--placeholder{% endif %}">
+            {% if post.cover %}<img src="{{ post.cover }}" alt="" loading="lazy" decoding="async" width="640" height="360" />{% endif %}
+        </div>
+        <div class="card-body">
+            {% if post.category %}<p class="card-category">{{ post.category }}</p>{% endif %}
+            <h3 class="card-title">{% if post.pinned %}<span class="pin-mark" aria-label="置顶">FEATURED</span>{% endif %}{{ post.title }}</h3>
+            {% if post.description %}<p class="card-excerpt">{{ post.description }}</p>{% endif %}
+            <div class="card-meta">
+                <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
+                <span class="dot">·</span>
+                <span>{{ post.readingTime }} 分钟</span>
+                {% if post.tags.length %}<span class="dot">·</span><span>{{ post.tags[0] }}</span>{% endif %}
+            </div>
+        </div>
+    </a>
+</article>

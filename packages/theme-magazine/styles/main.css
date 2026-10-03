@@ -1,0 +1,765 @@
+/* Emeek · Magazine —— 杂志质感。
+
+   设计立场：杂志感来自**版面的纪律**，不来自「每个元素都放最大」。
+   粗标题旁边必须有安静的小字，大图旁边必须有克制的网格 ——
+   对比才叫节奏，全大声喊只是噪音。
+
+   变量职责（接 P3-1a 契约，见 core/theme/vars.js）：
+     本文件的 :root 只提供「亮色（日刊）」默认配色，
+     用户可配置项由 theme.json 的 config 生成 :root 覆盖块，
+     那块排在本文之后（同权重 :root，后写生效）。
+     ⚠️ 所以本文件里的配色值必须与 theme.json 的 config 默认值逐项一致 ——
+        不一致就意味着 CSS 里精挑的颜色被 config 默认值悄悄盖掉。
+        这条由 tests/theme/magazine.test.js 钉死。
+
+   量度：正文 46rem（阅读舒适区）与整页 70rem（网格/Hero 的舞台）分离。
+        杂志的「宽」是版面的宽，不是正文行长 —— 正文永远不该拉满 1120px。 */
+
+:root {
+  /* ── 亮色：日刊。白纸 + 一个高饱和红，靠留白和网格撑住，不靠渐变堆。 ── */
+  --bg: #ffffff;
+  --bg-soft: #fafafa;
+  --bg-card: #fafafa;
+  --bg-hero: #1f3a5f;
+  --bg-code: #fafafa;
+
+  /* 文字三级：墨黑 / 次级 / 弱化。全部按最不利底色（--bg-hero）过 AA。 */
+  --text: #1a1a1a;          /* 15.3:1 on hero */
+  --text-secondary: #555555; /*  6.5:1 on hero */
+  --text-dim: #6b6b6b;      /*  4.7:1 on hero，5.4:1 on 卡片 —— 两处都过 AA */
+
+  --primary: #1a1a1a;       /* 标题 */
+  --accent: #c1121f;        /* 杂志红。原 #e63946 在卡片底上只有 4.0:1，
+                               压深到 #c1121f 得 6.0:1 —— 「看着对」到「真的可读」。 */
+  --accent-2: #2a6f97;      /* 钢蓝。原 #457b9d 在卡片底上 4.4:1，差一点点。 */
+  --hero-end: #12213a;      /* Hero 渐变收尾：比 --accent-2 更深，
+                               白字全程 ≥10:1（装饰性渐变也要服从可读性） */
+  --accent-soft: rgba(193, 18, 31, 0.08);
+  --border: #e5e5e5;
+  --rule: #d4d4d4;
+
+  /* 分类色带：装饰性标识（非文本），3:1 即可读作「色块」。
+     但 #2a9d8f / #e9c46a 在纯白上只有 3.3 / 1.7:1 —— 太飘，压深成印刷墨色。 */
+  --cat-tech: #2a6f97;
+  --cat-life: #c1121f;
+  --cat-reading: #0f6d63;
+  --cat-travel: #b8860b;
+  --cat-default: #c1121f;
+
+  /* 章节大号数字：版面纹理。取大字号的 AA 线（3:1）——
+     低于这条线它在 85px 时就是一团看不见的脏点，谈不上「设计」。
+     它仍是背景层（压在标题后、z-index 更低），但至少存在得理直气壮。 */
+  --numeral: #949494;
+  /* 归档年份：是内容不是装饰。--numeral 只有 1.22:1，读不了；
+     这档棕红在白纸上 5.6:1，既压得住版面又过 AA。 */
+  --numeral-text: #8a6d3b;
+
+  --font-heading: "Playfair Display", "Noto Serif SC", Georgia, serif;
+  --font-body: "Noto Sans SC", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --font-size-base: 17px;
+  --line-height-base: 1.85;
+
+  --max-width: 70rem;       /* 整页舞台（Hero / 网格） */
+  --measure: 46rem;         /* 正文行长 —— 拉满 70rem 会读不动 */
+  --radius: 4px;
+  --space: 1.6rem;
+  --section-gap: 4rem;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.16);
+  color-scheme: light;
+}
+
+/* ── 暗色：夜刊。不是把日刊反过来 ——
+   白纸变黑纸之后，红必须提亮（#c1121f 在黑底上只有 3:1），
+   钢蓝要提得更亮才不闷。底色是墨黑而非纯黑，纯黑 + 白字 = 闪光弹。 */
+html[data-theme="dark"] {
+  --bg: #111111;
+  --bg-soft: #1a1a1a;
+  --bg-card: #1a1a1a;
+  --bg-hero: #16233a;
+  --bg-code: #1a1a1a;
+
+  --text: #f0f0f0;          /* 16.6:1 */
+  --text-secondary: #bbbbbb; /*  9.8:1 */
+  --text-dim: #8e8e8e;      /*  4.9:1 on hero，5.3:1 on 卡片 */
+
+  --primary: #f5f5f5;
+  --accent: #ff6b6b;        /* 夜刊的红：提亮到 5.7:1（卡片底上） */
+  --accent-2: #8ecae6;      /* 8.9:1 */
+  --hero-end: #0d1728;
+  --accent-soft: rgba(255, 107, 107, 0.12);
+  --border: #2a2a2a;
+  --rule: #333333;
+
+  --cat-tech: #8ecae6;
+  --cat-life: #ff6b6b;
+  --cat-reading: #6ed3c4;
+  --cat-travel: #e9c46a;
+  --cat-default: #ff6b6b;
+
+  --numeral: #666666;        /* 暗底上 3.3:1，与亮色同一档水准 */
+  --numeral-text: #c9a86a;   /* 暗底上 7.4:1 */
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+/* 无 JS 兜底：首帧脚本没跑、属性仍是 auto 时跟随系统。 */
+@media (prefers-color-scheme: dark) {
+  html[data-theme-mode="auto"]:not([data-theme="light"]) {
+    --bg: #111111;
+    --bg-soft: #1a1a1a;
+    --bg-card: #1a1a1a;
+    --bg-hero: #16233a;
+    --bg-code: #1a1a1a;
+    --text: #f0f0f0;
+    --text-secondary: #bbbbbb;
+    --text-dim: #8e8e8e;
+    --primary: #f5f5f5;
+    --accent: #ff6b6b;
+    --accent-2: #8ecae6;
+    --accent-soft: rgba(255, 107, 107, 0.12);
+    --border: #2a2a2a;
+    --rule: #333333;
+    --cat-tech: #8ecae6;
+    --cat-life: #ff6b6b;
+    --cat-reading: #6ed3c4;
+    --cat-travel: #e9c46a;
+    --cat-default: #ff6b6b;
+    --numeral: #666666;
+    --numeral-text: #c9a86a;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 0.18em; }
+
+/* ── 头部：刊头。细分隔线 + 大字距刊名，不做毛玻璃（那是 Aurora 的语言）。 ── */
+.site-header {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  max-width: var(--max-width); margin: 0 auto; padding: 0.9rem 2rem;
+  display: flex; align-items: center; gap: 1.5rem;
+}
+.brand { display: flex; align-items: baseline; gap: 0.6rem; }
+.brand-mark {
+  font-family: var(--font-heading); font-weight: 900; font-size: 1.35rem;
+  color: var(--bg); background: var(--accent);
+  padding: 0.05rem 0.42rem 0.12rem; border-radius: 2px; line-height: 1.1;
+}
+.brand-text {
+  font-family: var(--font-heading); font-weight: 700;
+  font-size: 1.1rem; letter-spacing: 0.03em; color: var(--primary);
+}
+.site-nav { display: flex; gap: 1.4rem; margin-left: auto; font-size: 0.9rem; }
+.site-nav a {
+  color: var(--text-secondary); letter-spacing: 0.06em;
+  text-transform: uppercase; font-size: 0.78rem; font-weight: 600;
+}
+.site-nav a:hover { color: var(--accent); text-decoration: none; }
+.header-actions { display: flex; gap: 0.5rem; }
+.icon-button {
+  width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border); border-radius: 50%;
+  color: var(--text-secondary); cursor: pointer; font-size: 0.9rem; line-height: 1;
+}
+.icon-button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 搜索面板 */
+.search-panel {
+  max-width: var(--max-width); margin: 0 auto; padding: 0 2rem 1.2rem;
+}
+.search-panel input {
+  width: 100%; padding: 0.7rem 1rem; font-size: 0.95rem; font-family: var(--font-body);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-soft); color: var(--text);
+}
+.search-panel input:focus { outline: 2px solid var(--accent-2); outline-offset: -1px; }
+.search-results { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.search-results a {
+  display: block; padding: 0.7rem 0.9rem; border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); background: var(--bg-card);
+}
+.search-results a:hover { border-color: var(--accent-2); text-decoration: none; }
+.search-results small { color: var(--text-dim); }
+.search-results mark { background: var(--accent-soft); color: var(--accent); }
+.search-empty { color: var(--text-dim); font-size: 0.9rem; }
+
+.site-main { max-width: var(--max-width); margin: 0 auto; padding: 2.5rem 2rem 4rem; }
+
+/* ══════════════════════════════════════════════════════════
+   Hero —— 杂志封面区。
+   无图片时也要立得住：渐变 + 噪点 + 压在下缘的大标题。
+   噪音用内联 SVG feTurbulence，不引入任何栅格文件。
+   ══════════════════════════════════════════════════════════ */
+.hero {
+  position: relative;
+  min-height: 55vh;
+  display: flex;
+  align-items: flex-end;
+  padding: 3rem 2.5rem 2.6rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--bg-hero) 0%, var(--hero-end) 100%);
+  border-radius: var(--radius);
+  margin-bottom: var(--section-gap);
+}
+/* 噪点：把纯渐变变成「纸张/印刷网点」，这是杂志感和网页感的分界线。 */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.08;
+  pointer-events: none;
+}
+/* 底部压暗：保证白字在任何一档渐变色上都立得住。 */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.38) 100%);
+  pointer-events: none;
+}
+.hero-inner { position: relative; z-index: 1; max-width: 46rem; }
+.hero-kicker {
+  margin: 0 0 0.9rem;
+  font-family: var(--font-body); font-weight: 700;
+  font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase;
+  color: #ffffff;
+}
+.hero-kicker::after {
+  content: ''; display: block; width: 3.2rem; height: 3px;
+  margin-top: 0.55rem; background: #ffffff;
+}
+.hero-title {
+  margin: 0 0 0.9rem;
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+.hero-sub {
+  margin: 0; max-width: 34rem;
+  color: #ffffff; font-size: 1rem; line-height: 1.7;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pull Quote —— 本主题的标志性元素。
+   大引号 + 斜体衬线 + 左边框 + 钢蓝正文。
+   做得不好整个主题就立不住，所以它值得一堆专项样式：
+   引号要压在框外、字距要放开、行高不能塌。
+   ══════════════════════════════════════════════════════════ */
+.prose .pull-quote,
+.pull-quote {
+  position: relative;
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-size: 1.8em;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--accent-2);
+  border-left: 4px solid var(--accent);
+  padding: 0.15em 0 0.15em 1.5em;
+  margin: 2.5em 0;
+  max-width: 40rem;
+  text-wrap: balance;
+}
+/* 大引号：Playfair 的弯引号本身就是装饰，不需要贴图。 */
+.pull-quote::before {
+  content: '\201C';
+  position: absolute;
+  top: -0.32em;
+  left: 0.44em;
+  font-size: 3em;
+  line-height: 1;
+  color: var(--accent);
+  font-style: normal;
+  opacity: 0.9;
+}
+.pull-quote p { margin: 0; }
+.pull-quote cite {
+  display: block; margin-top: 0.6em;
+  font-family: var(--font-body); font-style: normal;
+  font-size: 0.42em; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* 引用块（blockquote）与 pull-quote 是两种东西：
+   前者是「引别人的话」，后者是「本刊的观点」。样式必须分开，否则版面失语。 */
+.prose blockquote {
+  margin: 2em 0; padding: 0 0 0 1.4em;
+  border-left: 3px solid var(--accent-2);
+  color: var(--text-secondary); font-style: normal;
+}
+.prose blockquote p:last-child { margin-bottom: 0; }
+
+/* ══════════════════════════════════════════════════════════
+   章节数字装饰 —— 大号衬线数字压在大标题后面，纯 CSS text。
+   ══════════════════════════════════════════════════════════ */
+.section-head { position: relative; margin-bottom: 1.8rem; }
+.section-number {
+  position: absolute;
+  z-index: 0;
+  top: -0.52em;
+  left: -0.08em;
+  font-family: var(--font-heading);
+  font-size: 5em;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--numeral);
+  user-select: none;
+  pointer-events: none;
+}
+.section-title {
+  position: relative; z-index: 1;
+  margin: 0;
+  padding-top: 0.1em;
+  font-family: var(--font-heading);
+  font-size: 1.6rem; font-weight: 700; letter-spacing: -0.005em;
+  color: var(--primary);
+}
+.section-label {
+  font-family: var(--font-body);
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--text-dim); margin: 0 0 1.2rem;
+}
+
+/* ══════════════════════════════════════════════════════════
+   封面文章版面：头条一行 + 侧栏一篇。
+   杂志的头条不是「更大的卡片」，是「另一种版面」—— 横向大图占 2/3，
+   右侧一篇竖卡。两者都进 .post-grid 的话，版面就没有主次了。
+   ══════════════════════════════════════════════════════════ */
+.lead-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: stretch;
+}
+.lead-side { display: flex; flex-direction: column; gap: 2rem; }
+.lead-side .post-card { flex: 1; }
+
+/* 头条横排：图左文右，图占一半。小屏自动竖回来（见媒体查询）。 */
+.post-card--wide .post-card-link {
+  flex-direction: row;
+  align-items: stretch;
+}
+.post-card--wide .card-thumb { flex: 1 1 50%; aspect-ratio: auto; min-height: 0; }
+.post-card--wide .card-body { flex: 1 1 50%; padding: 1.8rem 1.9rem; justify-content: center; }
+.post-card--wide .card-title { font-size: 1.9rem; line-height: 1.18; }
+.post-card--wide .card-excerpt { font-size: 0.98rem; flex: 0 1 auto; margin-bottom: 1.2rem; }
+
+/* ══════════════════════════════════════════════════════════
+   文章卡片网格 —— 2~3 栏自适应。
+   最小栏宽 20rem：1120px 舞台正好 3 栏，768 视口落到 2 栏，390 视口单栏。
+   ══════════════════════════════════════════════════════════ */
+.index-section { margin-top: var(--section-gap); }
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 2rem;
+}
+.post-grid.featured { grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); }
+
+.post-card {
+  display: flex; flex-direction: column;
+  background: var(--bg-card);
+  border-top: 3px solid var(--cat-color, var(--cat-default));
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.post-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.post-card-link { display: flex; flex-direction: column; flex: 1; color: inherit; }
+.post-card-link:hover { text-decoration: none; }
+
+/* 缩略图位：无图时用 CSS 渐变兜底（.card-thumb--placeholder），零栅格。 */
+.card-thumb {
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, var(--bg-hero), var(--cat-color, var(--accent-2)));
+  position: relative;
+  overflow: hidden;
+}
+.card-thumb::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.1;
+}
+.card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; position: relative; z-index: 1; }
+.card-thumb--placeholder::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--bg-hero), transparent 60%);
+}
+
+.card-body { padding: 1.3rem 1.4rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
+.card-category {
+  font-family: var(--font-body); font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 0.6rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.card-category::before {
+  content: ''; width: 1.6rem; height: 3px;
+  background: var(--cat-color, var(--accent)); flex-shrink: 0;
+}
+.card-title {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-heading); font-weight: 700;
+  font-size: 1.3rem; line-height: 1.28; letter-spacing: -0.005em;
+  color: var(--primary);
+  transition: color 0.15s;
+}
+.post-card:hover .card-title { color: var(--accent); }
+.post-card--lead .card-title { font-size: 1.7rem; }
+.card-excerpt {
+  margin: 0 0 1rem; color: var(--text-secondary);
+  font-size: 0.94rem; line-height: 1.65;
+  flex: 1;
+}
+.card-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  font-size: 0.78rem; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.card-pinned { border-top-color: var(--accent); }
+.pin-mark { color: var(--accent); font-size: 0.7rem; letter-spacing: 0.14em; margin-right: 0.35rem; }
+
+/* 分类色带：CSS border-top 按 data-category 上色，不贴图。 */
+.post-card[data-category="tech"] { --cat-color: var(--cat-tech); }
+.post-card[data-category="life"] { --cat-color: var(--cat-life); }
+.post-card[data-category="reading"] { --cat-color: var(--cat-reading); }
+.post-card[data-category="travel"] { --cat-color: var(--cat-travel); }
+
+/* 标签：杂志里的小字标注，方角、无底色的克制写法 */
+.tag {
+  font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-secondary); border: 1px solid var(--border);
+  padding: 0.16rem 0.5rem; border-radius: 2px;
+}
+.tag:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.tag-cloud { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.tag-cloud.compact .tag { font-size: 0.68rem; }
+.tag-count { color: var(--text-dim); }
+
+/* ── 文章页 ── */
+.post-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3rem;
+}
+@media (min-width: 70rem) {
+  .post-layout { grid-template-columns: minmax(0, var(--measure)) 15rem; }
+}
+.post-header { margin-bottom: 2.2rem; }
+.post-kicker {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 0.9rem;
+  display: flex; align-items: center; gap: 0.7rem;
+}
+.post-kicker::before { content: ''; width: 2rem; height: 3px; background: var(--accent); }
+.post-title {
+  margin: 0 0 1rem;
+  font-family: var(--font-heading); font-weight: 900;
+  font-size: clamp(1.9rem, 4.2vw, 2.9rem); line-height: 1.14;
+  letter-spacing: -0.015em;
+  color: var(--primary);
+}
+.post-meta {
+  display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center;
+  font-size: 0.82rem; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  padding-top: 0.9rem; border-top: 1px solid var(--border);
+}
+.post-tags { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+.dot { color: var(--border); }
+
+/* 封面图：无图时由 CSS 渐变兜底 */
+.post-cover {
+  aspect-ratio: 21 / 9; margin-bottom: 2.4rem;
+  background: linear-gradient(135deg, var(--bg-hero), var(--accent-2));
+  border-radius: var(--radius); overflow: hidden;
+}
+.post-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── 正文排版：杂志的正文靠节奏，不靠装饰 ── */
+.prose { font-size: 1.02rem; max-width: var(--measure); }
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-family: var(--font-heading); font-weight: 700; color: var(--primary);
+  line-height: 1.25; letter-spacing: -0.01em;
+  margin: 2.9rem 0 1rem; scroll-margin-top: 5rem;
+}
+/* 章节数字：给前三级标题自动编号的头一层「大号」感 ——
+   只用 CSS 伪元素，不动 HTML，也不影响锚点文本。 */
+.prose h2 { font-size: 1.75rem; counter-increment: sec; }
+.prose h2::after {
+  content: '';
+  display: block; width: 2.6rem; height: 3px;
+  margin-top: 0.7rem; background: var(--accent);
+}
+.prose h3 { font-size: 1.2rem; color: var(--text-secondary); }
+.prose h4 { font-size: 1rem; letter-spacing: 0.02em; }
+.prose p { margin: 0 0 1.25rem; }
+.prose ul, .prose ol { padding-left: 1.4rem; margin: 0 0 1.25rem; }
+.prose li { margin: 0.35rem 0; }
+.prose li::marker { color: var(--accent); font-weight: 700; }
+.prose li.task { list-style: none; margin-left: -1.4rem; }
+.prose li.task input[type='checkbox'] { margin-right: 0.5rem; }
+p a:not(.wiki-link--missing):not(.button):not(.page-link),
+li a:not(.wiki-link--missing) {
+  text-decoration: underline; text-underline-offset: 0.18em; text-decoration-thickness: 1px;
+}
+.prose hr { border: none; height: 1px; margin: 3rem 0; background: var(--border); }
+.prose img { max-width: 100%; height: auto; border-radius: var(--radius); }
+.prose code {
+  font-family: var(--font-mono); font-size: 0.86em;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  padding: 0.1em 0.36em; border-radius: 3px;
+}
+.prose mark { background: var(--accent-soft); color: var(--accent); padding: 0 0.2em; }
+.prose .anchor { opacity: 0; margin-left: 0.4rem; color: var(--text-dim); font-weight: 400; text-decoration: none; }
+.prose h2:hover .anchor, .prose h3:hover .anchor { opacity: 1; }
+.wiki-link--missing { border-bottom: 1px dashed var(--text-dim); cursor: help; }
+
+/* ── 表格：杂志风。表头做「实心色条 + 衬线字」，这是杂志表格的招牌。 ── */
+.table-wrap { overflow-x: auto; margin: 2rem 0; }
+.prose table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.prose th {
+  background: var(--text); color: var(--bg);
+  font-family: var(--font-heading); font-weight: 700;
+  text-align: left; padding: 0.85em 1em; white-space: nowrap;
+}
+.prose td { border-bottom: 1px solid var(--border); padding: 0.8em 1em; }
+.prose tbody tr:hover { background: var(--bg-soft); }
+
+/* ── 代码块：白卡片 + 彩色左边框（杂志的「抽言框」写法） ── */
+.code-block { position: relative; margin: 2rem 0; }
+.code-block pre {
+  margin: 0; padding: 1.15rem 1.2rem;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent-2);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-size: 0.85rem; line-height: 1.7;
+}
+.code-block code { background: none; border: none; padding: 0; font-family: var(--font-mono); }
+.code-lang {
+  position: absolute; top: 0.6rem; right: 0.9rem;
+  font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.code-copy {
+  position: absolute; top: 0.4rem; right: 0.75rem;
+  font-size: 0.7rem; padding: 0.15rem 0.5rem;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-secondary);
+  border-radius: 3px; cursor: pointer;
+}
+.code-copy:hover { border-color: var(--accent); color: var(--accent); }
+/* 高亮：两套独立设计。亮色是「印刷油墨」，暗色是「夜刊荧光」。 */
+.tok-comment { color: #6b6b6b; font-style: italic; }
+.tok-string { color: #1a7f4b; }
+.tok-number { color: #a15c00; }
+.tok-keyword { color: #7c3aed; font-weight: 600; }
+.tok-function { color: #1d4ed8; }
+.tok-property { color: #b91c1c; }
+.tok-punctuation { color: var(--text-secondary); }
+html[data-theme="dark"] .tok-comment { color: #a0a0a0; }
+html[data-theme="dark"] .tok-string { color: #81c995; }
+html[data-theme="dark"] .tok-number { color: #f0b072; }
+html[data-theme="dark"] .tok-keyword { color: #c792ea; }
+html[data-theme="dark"] .tok-function { color: #82aaff; }
+html[data-theme="dark"] .tok-property { color: #ff8a80; }
+
+/* ── 目录 ── */
+.toc {
+  background: var(--bg-soft); border-left: 3px solid var(--accent-2);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 1.1rem 1.4rem; margin-bottom: 2.2rem;
+}
+.toc-title {
+  margin: 0 0 0.6rem; font-family: var(--font-body);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.toc ul, .sidebar-toc { list-style: none; padding: 0; margin: 0; }
+.toc li { margin: 0.3rem 0; font-size: 0.9rem; }
+.toc-level-3, .sidebar-toc .toc-level-3 { padding-left: 1rem; }
+
+/* ── 侧边栏 ── */
+.sidebar { font-size: 0.9rem; display: flex; flex-direction: column; gap: 1.5rem; }
+.sidebar-block { margin-bottom: 0.5rem; }
+.sidebar-title {
+  font-family: var(--font-body); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--text-dim); margin: 0 0 0.75rem;
+  padding-bottom: 0.45rem; border-bottom: 2px solid var(--accent);
+}
+.sidebar-toc { position: sticky; top: 5rem; max-height: calc(100vh - 7rem); overflow-y: auto; }
+.sidebar-toc li { margin: 0.35rem 0; }
+.sidebar-toc a { color: var(--text-secondary); }
+.sidebar-toc a:hover, .sidebar-toc a.active { color: var(--accent); text-decoration: none; }
+
+/* ── 阅读进度：一道红条，压在最上 ── */
+.reading-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 40; pointer-events: none; }
+.reading-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
+
+/* ── 归档：年份做大号衬线装饰 ── */
+.archive-year { margin-bottom: 3rem; }
+.archive-year h2 {
+  font-family: var(--font-heading); font-size: 2.2rem; font-weight: 900;
+  letter-spacing: -0.02em; color: var(--numeral-text);
+  margin: 0 0 1rem;
+}
+.archive-list { list-style: none; padding: 0; margin: 0; }
+.archive-list li {
+  display: flex; gap: 1rem; align-items: baseline;
+  padding: 0.55rem 0; border-bottom: 1px solid var(--border);
+}
+.archive-list time { color: var(--text-dim); font-size: 0.82rem; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.archive-list a { color: var(--text); font-family: var(--font-heading); font-size: 1.05rem; }
+.archive-list a:hover { color: var(--accent); }
+
+/* ── 相关文章 ── */
+.related { margin-top: 3.5rem; padding-top: 1.6rem; border-top: 1px solid var(--border); max-width: var(--measure); }
+.related-list { list-style: none; padding: 0; }
+.related-list li {
+  display: flex; justify-content: space-between; gap: 1rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+}
+.related-list time { color: var(--text-dim); font-size: 0.82rem; flex-shrink: 0; }
+
+/* ── 分页 / 按钮 ── */
+.pagination {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; margin-top: 3.5rem; padding-top: 1.6rem; border-top: 1px solid var(--border);
+}
+.page-link {
+  padding: 0.45rem 1rem; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 0.88rem; color: var(--text-secondary);
+}
+.page-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.page-link.disabled { opacity: 0.4; pointer-events: none; }
+.page-info { color: var(--text-dim); font-size: 0.82rem; }
+.button {
+  display: inline-block; padding: 0.55rem 1.4rem; border-radius: var(--radius);
+  background: var(--accent); color: #ffffff;
+  font-size: 0.9rem; font-weight: 600; letter-spacing: 0.04em;
+}
+.button:hover { text-decoration: none; filter: brightness(1.1); }
+.error-code {
+  font-family: var(--font-heading); font-size: 6rem; font-weight: 900;
+  margin: 0; line-height: 1; color: var(--numeral-text); letter-spacing: -0.03em;
+}
+.center { text-align: center; padding: 5rem 1.5rem; }
+
+.to-top {
+  position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 20;
+  width: 2.5rem; height: 2.5rem; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-secondary);
+  cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.to-top.visible { opacity: 1; pointer-events: auto; }
+.to-top:hover { border-color: var(--accent); color: var(--accent); }
+
+.empty { color: var(--text-dim); padding: 3rem 0; text-align: center; }
+
+/* ── 页脚：刊尾，双侧刊号式排版 ── */
+.site-footer {
+  border-top: 3px solid var(--text); margin-top: 5rem;
+  padding: 2.2rem 2rem 2.6rem;
+}
+.footer-inner {
+  max-width: var(--max-width); margin: 0 auto;
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; align-items: baseline;
+  color: var(--text-dim); font-size: 0.82rem;
+}
+.footer-brand {
+  font-family: var(--font-heading); font-weight: 900; font-size: 1rem;
+  color: var(--text); letter-spacing: 0.02em;
+}
+.footer-inner p { margin: 0; }
+.footer-meta { margin-left: auto; display: flex; gap: 0.6rem; align-items: baseline; }
+.footer-meta a { color: var(--text-secondary); }
+
+@media print {
+  .site-header, .site-footer, .sidebar, .to-top, .reading-progress, .related, .comments { display: none; }
+  body { background: #fff; color: #000; }
+  .hero::before, .hero::after, .card-thumb::after { display: none; }
+  .post-layout { display: block; }
+}
+
+/* ── 中屏（768 附近）：头条竖排、网格收到两栏、Hero 降高 ── */
+@media (max-width: 60rem) {
+  .site-main { padding: 2rem 1.5rem 3rem; }
+  .header-inner { padding: 0.85rem 1.5rem; }
+  .hero { min-height: 46vh; padding: 2.4rem 1.8rem 2rem; }
+  .hero-title { font-size: clamp(1.8rem, 5.5vw, 2.7rem); }
+  .pull-quote { font-size: 1.5em; }
+  .section-number { font-size: 3.8em; }
+  .post-layout { gap: 2rem; }
+  /* 60rem 以下 2fr/1fr 会挤成两条细缝，直接改成上下摞。 */
+  .lead-grid { grid-template-columns: minmax(0, 1fr); }
+  .post-card--wide .post-card-link { flex-direction: column; }
+  .post-card--wide .card-thumb { flex: none; aspect-ratio: 16 / 9; min-height: 0; }
+  .post-card--wide .card-body { flex: none; padding: 1.4rem 1.5rem 1.6rem; }
+  .post-card--wide .card-title { font-size: 1.55rem; }
+}
+
+/* ── 小屏（390）：单栏 + 收紧一切，但字号不缩水（缩字是伪响应式） ── */
+@media (max-width: 34rem) {
+  .header-inner { padding: 0.7rem 1rem; gap: 0.6rem; flex-wrap: wrap; }
+  .brand-text { white-space: nowrap; font-size: 1rem; }
+  .site-nav { margin-left: 0; gap: 0.9rem; flex-wrap: wrap; width: 100%; order: 3; }
+  .site-nav a { white-space: nowrap; }
+  .header-actions { margin-left: auto; }
+  .search-panel { padding: 0 1rem 1rem; }
+  .site-main { padding: 1.6rem 1rem 2.5rem; }
+  .hero {
+    min-height: 42vh; padding: 1.8rem 1.2rem 1.5rem;
+    border-radius: 0; margin-left: -1rem; margin-right: -1rem;
+  }
+  .hero-title { font-size: clamp(1.65rem, 7.5vw, 2.1rem); }
+  .hero-sub { font-size: 0.92rem; }
+  .post-grid, .post-grid.featured { grid-template-columns: 1fr; gap: 1.5rem; }
+  .post-title { letter-spacing: -0.01em; }
+  /* Pull Quote 在大号字下会把左边框挤到视口外，收紧缩进与引号位置 */
+  .prose .pull-quote, .pull-quote {
+    font-size: 1.28em; padding-left: 1.1em; margin: 2em 0;
+  }
+  .pull-quote::before { left: 0.2em; }
+  .section-number { font-size: 3em; top: -0.28em; }
+  .footer-inner { flex-direction: column; }
+  .footer-meta { margin-left: 0; }
+  .archive-year h2 { font-size: 1.7rem; }
+}

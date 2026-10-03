@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const DEMO = path.join(ROOT, 'examples/themes-demo');
-const TARGETS = ['aurora', 'minimal'];
+const TARGETS = ['aurora', 'minimal', 'inkstone', 'magazine'];
 
 function withTheme(name, fn) {
   const file = path.join(DEMO, 'emeeek.config.js');

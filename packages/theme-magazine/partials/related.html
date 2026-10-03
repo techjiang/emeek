@@ -1,0 +1,10 @@
+{% if related.length %}
+<section class="related">
+    <p class="section-label">延伸阅读</p>
+    <ul class="related-list">
+        {% for item in related %}
+        <li><a href="{{ item.url }}">{{ item.title }}</a> <time datetime="{{ item.date }}">{{ item.dateFormatted }}</time></li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}

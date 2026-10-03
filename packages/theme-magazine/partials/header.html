@@ -1,0 +1,23 @@
+<header class="site-header">
+    <div class="header-inner">
+        <a class="brand" href="/">
+            <span class="brand-mark" aria-hidden="true">M</span>
+            <span class="brand-text">{{ site.title }}</span>
+        </a>
+        <nav class="site-nav" aria-label="主导航">
+            {% for item in nav %}
+            <a href="{{ item.url }}">{{ item.title }}</a>
+            {% endfor %}
+        </nav>
+        <div class="header-actions">
+            {% if searchIndexUrl %}<button class="icon-button" id="search-toggle" type="button" aria-label="搜索">⌕</button>{% endif %}
+            <button class="icon-button" id="theme-toggle" type="button" aria-label="切换明暗">◐</button>
+        </div>
+    </div>
+    {% if searchIndexUrl %}
+    <div class="search-panel" id="search-panel" hidden>
+        <input type="search" id="search-input" placeholder="搜索文章…" autocomplete="off" aria-label="搜索文章" />
+        <div class="search-results" id="search-results"></div>
+    </div>
+    {% endif %}
+</header>
