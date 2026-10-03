@@ -244,6 +244,68 @@ export default {
 「不允许通过主题配置注入 `<script>`」与 S2-3b 的 XSS 标准一致。
 模块：[`packages/core/src/theme/inject.js`](../packages/core/src/theme/inject.js)。
 
+### 覆盖链与校验
+
+配置值沿四层合并，后者覆盖前者：
+
+```
+1. 主题 theme.json 的 config 默认值
+2. emeeek.config.js 的 theme.colors / typography / layout / features
+3. 运行时用户偏好（Studio 面板 / 页面 localStorage）
+4. emeeek dev 热更新即时生效
+```
+
+第 2、3 层在加载主题时统一过 [`packages/core/src/theme/override.js`](../packages/core/src/theme/override.js)
+校验：每一项都必须对得上主题声明的描述符（`type` / `min` / `max` / `options`）。
+
+- 合法值被规范化接受
+- 越界数字被**夹紧**到边界（不拒绝，但也不放行）
+- 拼错的键、类型不符的值被**明确拒绝**并给出原因 —— 不静默丢弃
+
+> 这条是 Inkstone 教训的延伸：`config 默认值 = CSS 实际颜色` 防的是「配置悄悄盖掉 CSS」；
+> 覆盖链校验防的是「用户改了却不生效，且没人说为什么」。
+
+### Studio 主题配置面板
+
+`emeeek dev` 起 Studio 后，工具栏的「🎨」按钮打开面板：
+
+- 控件类型完全由主题描述符决定（`color` → 取色器，`number` → 滑块，`boolean` → 开关，`select` → 下拉）
+- 改一项 → 页面即时预览（写进预览 iframe 的 `:root` 变量块）
+- 「恢复默认」清掉本机偏好
+- 被拒的值当场列出原因，不静默失效
+
+偏好存在浏览器 `localStorage`（键 `emeeek:theme-prefs`），**不进构建产物**。
+面板依赖 Studio 服务端的 `/__studio/theme/config` 与 `/__studio/theme/override`
+两个接口；没有服务端时面板不显示（不做「面板在但改不动」的假界面）。
+
+### 运行时主题切换按钮（站点内）
+
+站点可以挂一个右下角的切换浮层。默认**关闭**；在 `theme.switcher` 里开启：
+
+```javascript
+theme: {
+  name: 'minimal',
+  switcher: {
+    enabled: true,
+    position: 'bottom-right',        // 或 'bottom-left'
+    darkToggle: true,                // 是否提供亮暗切换
+    themes: [
+      { name: 'minimal', label: '极简', url: '/' },
+      { name: 'magazine', label: '杂志', url: '/magazine/' },
+      { name: 'inkstone', label: '水墨' },   // 无 url → 灰态「仅此站」
+    ],
+  },
+}
+```
+
+- 每项 `url` 必须是**真实存在**的另一套主题产物；没有 `url` 的主题标「仅此站」灰态，
+  **不给点了没反应的死链接**
+- 亮暗切换与站点既有的 `emeeek-theme` 契约共用（localStorage 持久化）
+- 无 JS 时 `<noscript>` 隐藏整个浮层（不留死按钮）
+- 主题名 / label / url 都过转义，配置里塞 `<script>` 不会变成注入
+
+模块：[`packages/core/src/theme/switcher.js`](../packages/core/src/theme/switcher.js)。
+
 ## 暗色 / 亮色模式
 
 ### 策略
@@ -392,6 +454,25 @@ theme: { name: 'aurora' }         // 内置
 CSS 超过 24KB 的主题（Magazine）会把样式退回外链 `/assets/theme.css`，
 而 `file://` 下 `/assets/...` 会指向文件系统根目录、样式 404 ——
 截图会拍到没有样式的裸 HTML（亮暗两版还会逐字节相同）。
+
+## CLI
+
+```bash
+emeeek theme list                     # 列出可用主题（项目内 themes/ + 内置），当前主题标 ●
+emeeek theme list --json              # 机器可读
+emeeek theme switch aurora            # 切换主题（写入 emeeek.config.js）
+emeeek theme switch inkstone --dark   # 切换 + 强制暗色
+emeeek theme preview magazine         # 切换并起预览服务器（等价于切到该主题跑 dev）
+emeeek theme create my-theme          # 从模板生成一套自定义主题骨架
+emeeek theme create my-theme --force  # 覆盖已存在的目录
+```
+
+`theme list` 与 `switch` 都按当前 `--cwd` 的项目解析：先看项目内 `themes/`，
+再看内置。`switch` 只改 `theme.name`（和 `--dark` 时的 `darkMode`），
+配置文件里的注释与其它字段原样保留 —— 它是 JS 模块，不做「解析再序列化」。
+
+`theme create` 生成的骨架开箱即可构建（`layouts/index.html` + `layouts/post.html` +
+标准 partials），`theme.json` 的 config 默认值与 `styles/main.css` 里的变量一致。
 
 ## 从零写一套主题
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { compile } from './liquid.js';
 import { validateThemeMeta } from '../../theme/spec.js';
 import { resolveThemeConfig, buildThemeVariables, buildFeatureAttributes } from '../../theme/vars.js';
+import { normalizeOverrides, mergeOverrides } from '../../theme/override.js';
 import { sanitizeCss, sanitizeInjection, buildNoFlashScript } from '../../theme/inject.js';
 
 // 内置主题随 core 一起分发（monorepo 里就是 packages/theme-*）。
@@ -18,7 +19,7 @@ export const BUILTIN_THEMES = ['minimal', 'aurora', 'inkstone', 'magazine'];
  * 主题解析顺序：显式路径 > 项目内 themes/<name> > packages/theme-<name> > 内置主题。
  * 内置主题随 core 一起分发，因此「什么都不配」也能构建 —— 零配置原则的落点之一。
  */
-export async function loadTheme(cwd, config) {
+export async function loadTheme(cwd, config, options = {}) {
   const candidates = [];
   const themeName = config.theme?.name ?? 'minimal';
   const themeConfig = config.theme ?? {};
@@ -33,8 +34,9 @@ export async function loadTheme(cwd, config) {
   candidates.push(path.join(PACKAGES_DIR, `theme-${themeName}`));
   if (themeName === 'minimal') candidates.push(BUILTIN_DIR);
 
+  const themeConfigRuntime = options.runtime ?? {};
   for (const dir of candidates) {
-    if (await exists(path.join(dir, 'theme.json'))) return loadThemeDir(dir, { themeConfig });
+    if (await exists(path.join(dir, 'theme.json'))) return loadThemeDir(dir, { themeConfig, themeConfigRuntime });
   }
   throw new Error(
     `找不到主题「${themeName}」。已尝试：\n${candidates.map((c) => `  - ${c}`).join('\n')}\n` +
@@ -42,7 +44,7 @@ export async function loadTheme(cwd, config) {
   );
 }
 
-async function loadThemeDir(dir, { themeConfig } = {}) {
+async function loadThemeDir(dir, { themeConfig, themeConfigRuntime } = {}) {
   const meta = JSON.parse(await fs.readFile(path.join(dir, 'theme.json'), 'utf8'));
 
   // 规范校验：内置/用户主题都在这里过一遍。errors 抛错，warnings 交给调用方。
@@ -78,7 +80,15 @@ async function loadThemeDir(dir, { themeConfig } = {}) {
   }
 
   // 配置解析：声明默认值 ← 用户覆盖值。这是「同一主题、不同站点长得不一样」的入口。
-  const config = resolveThemeConfig(meta, themeConfig ?? {});
+  //
+  // 先过一遍 normalizeOverrides：把拼错/越界/类型不符的键挑出来记成 warning，
+  // 而不是让它们静默失效。`themeConfigRuntime`（运行时偏好）若给了，优先级最高。
+  const userOverrides = mergeOverrides(themeConfig ?? {}, themeConfigRuntime ?? {});
+  const { values: normalized, rejected } = normalizeOverrides(meta, userOverrides);
+  for (const item of rejected) {
+    warnings.push({ path: `config.${item.key}`, message: item.reason });
+  }
+  const config = resolveThemeConfig(meta, { ...(themeConfig ?? {}), ...groupByDot(normalized) });
   const variables = buildThemeVariables(meta, config);
 
   // 布局缺失时回退到入口布局，让主题可以只实现它关心的页面。
@@ -141,6 +151,17 @@ async function listFiles(dir, acc = []) {
 
 async function exists(target) {
   try { await fs.access(target); return true; } catch { return false; }
+}
+
+/** 扁平点号路径的键值表 → 嵌套覆盖对象。 */
+function groupByDot(flat) {
+  const out = {};
+  for (const [key, value] of Object.entries(flat ?? {})) {
+    const [group, name] = key.split('.');
+    if (!name) continue;
+    (out[group] ??= {})[name] = value;
+  }
+  return out;
 }
 
 export { BUILTIN_DIR };

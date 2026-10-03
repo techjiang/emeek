@@ -188,5 +188,27 @@ weaken "版面结构签名（列数恒为 0）" \
   "s|  return parts.length;|  return 0; // weakened|" \
   'node --test packages/core/tests/theme/layouts.test.js'
 
+# 23. 自定义配置覆盖链：让 normalizeOverrides 不再校验（全部放行）。
+#
+# 「配置面板能改但不能改坏」是 feature D 的底线。削弱校验后断言必须红。
+weaken "自定义配置校验（normalizeOverrides 全放行）" \
+  packages/core/src/theme/override.js \
+  "s|      const desc = descriptors|      const desc = { type: 'string' }, _orig = descriptors|" \
+  'node --test packages/core/tests/theme/override.test.js'
+
+# 24. 切换按钮禁用：拔掉 noscript 兜底与属性转义。
+#
+# 无 JS 时按钮必须消失（不留死浮层）；label 必须转义（不产生注入）。
+weaken "切换按钮 label 转义（escapeHtml 直通）" \
+  packages/core/src/theme/switcher.js \
+  "s|function escapeHtml(text) {|function escapeHtml(text) { return String(text ?? ''); // weakened\nfunction _unused(text) {|" \
+  'node --test packages/core/tests/theme/switcher.test.js packages/core/tests/theme/integration.test.js'
+
+# 25. 主题注册表：让项目内同名主题不再覆盖内置（优先级退化）。
+weaken "项目内主题优先于内置（改成内置覆盖项目）" \
+  packages/core/src/theme/registry.js \
+  "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
+  'node --test packages/core/tests/theme/registry.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1
