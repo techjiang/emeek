@@ -210,5 +210,149 @@ weaken "项目内主题优先于内置（改成内置覆盖项目）" \
   "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
   'node --test packages/core/tests/theme/registry.test.js'
 
+# ── P3-2a 搜索层防线 ──────────────────────────────────────────────
+#
+# 26. 标题命中必须被查：让 AND 只看 words，不看 titleIndex。
+#
+# 这是真实踩过的坑：标题含「博客」但正文不含的文章，只查 words 表永远
+# 搜不到。削弱后「标题命中提权」的断言必须红。
+weaken "标题命中纳入检索（AND 只查 words）" \
+  packages/core/src/search/query.js \
+  "s|      postingList(index, 'titleIndex', word),|      [],|" \
+  'node --test packages/core/tests/search/query.test.js'
+
+# 27. 索引感知查询：让 matchIndexedWords 不再从索引表认词。
+#
+# 词典未就绪时（前端首开），这是精确检索的唯一来源。削弱后
+# 「词典缺失仍走 AND」的断言必须红。
+weaken "索引感知查询（matchIndexedWords 失效）" \
+  packages/core/src/search/tokenizer.js \
+  "s|  const table = index?.words ?? {};|  const table = {}; // weakened|" \
+  'node --test packages/core/tests/search/tokenizer.test.js packages/core/tests/search/runtime.test.js'
+
+# 28. 代码块必须退出索引：让围栏检测永远为假。
+#
+# 否则示例代码里的词会污染检索结果 —— 搜「function」搜出一堆文章，
+# 页面上却没有这个词。削弱后「代码块不进索引」的断言必须红。
+weaken "代码块退出索引（围栏检测失效）" \
+  packages/core/src/search/plain-text.js \
+  "s|    if (FENCE.test(line)) {|    if (false) {|" \
+  'node --test packages/core/tests/search/plain-text.test.js'
+
+# 29. front-matter 必须剥离：让元数据留在正文里。
+#
+# 否则 draft: true 里的 true 能被搜出来。削弱后断言必须红。
+weaken "front-matter 剥离（元数据泄漏）" \
+  packages/core/src/search/plain-text.js \
+  "s|  text = text.replace(FRONTMATTER, '');|  // weakened|" \
+  'node --test packages/core/tests/search/plain-text.test.js'
+
+# 30. 索引版本头必须校验：让 parseIndex 不看版本。
+#
+# 前端拿到旧结构的索引应当降级，而不是跑出错误结果。
+weaken "索引版本校验（parseIndex 忽略 version）" \
+  packages/core/src/search/indexer.js \
+  "s|  if (parsed.version !== expectedVersion) return null;|  // weakened|" \
+  'node --test packages/core/tests/search/indexer.test.js'
+
+# 31. 体积预算必须守：让超预算不再失败。
+#
+# 索引跟着页面下载，超预算静默发布等于拖垮首屏。削弱后断言必须红。
+weaken "索引体积预算（超预算不抛错）" \
+  packages/core/src/search/site-index.js \
+  "s|  if (stats.overBudget) {|  if (false) {|" \
+  'node --test packages/core/tests/search/site-index.test.js'
+
+# 32. 浏览器入口必须零 node: 依赖：往 runtime 顶部塞一个 node: 引用。
+#
+# 这是浏览器打包的硬边界。本地 Node 测试全绿、打包时炸，
+# 是最难在 CI 里提前发现的一类问题，所以专门造一条负向。
+weaken "浏览器入口零 node: 依赖（runtime 顶层引入 node:fs）" \
+  packages/core/src/search/runtime.js \
+  "s|^import { analyze, matchIndexedWords } from './tokenizer.js';|import { readFileSync } from 'node:fs';\nimport { analyze, matchIndexedWords } from './tokenizer.js';|" \
+  'node scripts/check-search-browser-deps.mjs'
+
+# ── P3-2b 搜索页防线 ──────────────────────────────────────────────
+#
+# 33. 内置布局缺失必须报错：关掉 strict（回退到 index）。
+#
+# 主题没提供 search.html 时，搜索页会静默渲染成首页 —— 构建成功、
+# 页面看着正常、只是没有搜索框。这类失败最难在 CI 里发现，
+# 所以专门造一条负向确认 strict 真的在起作用。
+weaken "内置布局缺失报错（关掉 strict 回退）" \
+  packages/core/src/pipeline/render/theme.js \
+  "s|^  const layout = strict$|  const layout = false|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 34. 搜索页内联脚本必须用三花括号：改回转义输出。
+#
+# 转义后 `&` 变成 `&amp;`，内联脚本直接语法错误（浏览器报
+# Unexpected token）。这条守住「搜索页不会变成白板」。
+weaken "内联脚本不转义（改用 {{ searchScript }}）" \
+  packages/theme-minimal/layouts/search.html \
+  "s|<script>{{{ searchScript }}}</script>|<script>{{ searchScript }}</script>|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 35. header 只能有一个搜索入口：把内联面板加回来。
+#
+# 两套搜索实现必然分叉（内联那份要自己 fetch 索引、只能做子串 AND）。
+# 加回来后断言必须红。
+weaken "header 单一搜索入口（加回内联面板）" \
+  packages/theme-minimal/partials/header.html \
+  "s|<div class=\"header-actions\">|<div class=\"search-panel\" id=\"search-panel\"><input id=\"search-input\"></div><div class=\"header-actions\">|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 36. 搜索客户端里 runQuery 必须来自 matcher（占位符必须被替换）。
+#
+# 占位符没了却没人发现，会产出一个「runQuery is not defined」的页面。
+weaken "搜索客户端占位符替换（改成不替换）" \
+  packages/core/src/search/ui/index.js \
+  "s|  cached = shell.replace(PLACEHOLDER, indent(stripModuleSyntax(matcher)));|  cached = shell;|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# 37. 搜索页样式必须逐主题适配：让某主题的搜索 CSS 空掉。
+#
+# 「4 套主题的搜索页都要好看」如果退化成「共用一套样式」，
+# 两两可辨的断言会红。这条守的是「适配确实发生了」。
+weaken "搜索页逐主题适配（minimal 高亮规则改名）" \
+  packages/theme-minimal/styles/search.css \
+  "s|^\\.search-result mark {|.zzz-mark {|" \
+  'node --test packages/core/tests/search/page.test.js'
+
+# ── P3-2c Feed 防线 ──────────────────────────────────────────────
+#
+# 38. Atom updated 必须是 RFC 3339：改成 toUTCString（RFC 822）。
+#
+# Atom 验证器对这个格式是硬要求，而 toUTCString 得到的 RFC 822
+# 肉眼看着也「像个日期」。这条守的是「阅读器不会拒收」。
+weaken "Atom updated 用 RFC 3339（改成 toUTCString）" \
+  packages/core/src/feed/build.js \
+  "s|toISOString()|toUTCString()|g" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 39. feed 里的 XML 必须转义：把 escapeXml 改成恒等。
+#
+# 标题里的 & 或 < 会直接把 XML 弄坏，阅读器报解析错误。
+weaken "Feed XML 转义（escapeXml 恒等）" \
+  packages/core/src/feed/build.js \
+  "s|export function escapeXml(text) {|export function escapeXml(text) { return String(text ?? '');\nfunction _unused(text) {|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 40. CDATA 里的 ]]> 必须拆开：让 cdataSafe 变成恒等。
+#
+# 正文里出现 ]]>（写代码文档时常见）会让整个 feed 变成坏 XML。
+weaken "CDATA 转义 ]]>（cdataSafe 恒等）" \
+  packages/core/src/feed/build.js \
+  "s|^function cdataSafe(html) {|function cdataSafe(html) { return String(html ?? '');\nfunction _cdataUnused(html) {|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
+# 41. feed discovery 只能由 head partial 提供：把硬编码加回 layout。
+#
+# 硬编码那份不跟配置（写死 /rss.xml）、且只覆盖首页与文章页。
+weaken "Feed discovery 单一来源（layout 里加回硬编码）" \
+  packages/theme-minimal/layouts/index.html \
+  "s|{% include \"head\" %}|<link rel=\"alternate\" type=\"application/rss+xml\" href=\"/rss.xml\" />{% include \"head\" %}|" \
+  'node --test "packages/core/tests/feed/*.test.js"'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

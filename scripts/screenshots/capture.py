@@ -18,7 +18,14 @@ import browser  # noqa: E402
 
 VIEWPORTS = {"desktop": {"width": 1280, "height": 900}, "mobile": {"width": 390, "height": 844}}
 MODES = ["light", "dark"]
-PAGES = [("home", "/index.html"), ("post", "/posts/design-notes.html")]
+# (名字, 路径, 截图前的准备动作)
+# 搜索页必须先输入关键词才看得到结果 —— 空搜索页只有一句提示，
+# 拿它当「搜索页长什么样」的证据是没有说服力的。
+PAGES = [
+    ("home", "/index.html", None),
+    ("post", "/posts/design-notes.html", None),
+    ("search", "/search/", "search"),
+]
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -62,9 +69,13 @@ def main(config_file):
                         # 固定明暗：首帧脚本会读 localStorage，这里把它设成目标模式。
                         context.add_init_script(f"localStorage.setItem('emeeek-theme', '{mode}')")
                         page = context.new_page()
-                        for name, route in PAGES:
+                        for name, route, prepare in PAGES:
                             page.goto(origin + route)
                             page.wait_for_timeout(300)
+                            if prepare == "search":
+                                # 填一个站内确实存在的词，并等联想与结果都稳定。
+                                page.fill("#search-input", "设计")
+                                page.wait_for_timeout(500)
                             file = os.path.join(out, f"{theme}-{name}-{device}-{mode}.png")
                             page.screenshot(path=file, full_page=(device == "desktop"))
                             manifest.append({"theme": theme, "page": name, "device": device,

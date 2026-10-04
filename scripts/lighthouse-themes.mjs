@@ -30,6 +30,9 @@ const PAGES = [
   ['文章页', '/posts/design-notes.html'],
   ['归档页', '/archive.html'],
   ['标签页', '/tags.html'],
+  // 搜索页：内联了索引与客户端脚本，是最容易把 Performance 拉下来的页面 ——
+  // 不测它就等于没守「搜索页 4 套主题 Lighthouse ≥ 90」这条要求。
+  ['搜索页', '/search/index.html'],
 ];
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };

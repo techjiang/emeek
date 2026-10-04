@@ -6,7 +6,7 @@
   "description": "极光渐变暗色科技感 —— 毛玻璃卡片、发光边框、暗色为主，亮色为独立的极昼变体。",
   "preview": "preview.png",
   "entryLayout": "index",
-  "layouts": ["index", "post", "archive", "tags", "about", "404"],
+  "layouts": ["index", "post", "archive", "tags", "about", "404", "search"],
   "features": ["dark-mode", "light-mode", "syntax-highlight", "math", "mermaid", "toc", "search", "search-index", "reading-progress", "related-posts"],
   "compatible": ">=1.0.0",
   "config": {

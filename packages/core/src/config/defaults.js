@@ -50,9 +50,39 @@ export function defaultConfig() {
        */
       switcher: null,
     },
-    search: { enabled: true, fuzzy: true, maxResults: 10 },
+    /**
+     * 搜索配置。
+     *
+     * gzipBudget  索引 gzip 后的字节上限。超了默认让构建失败 ——
+     *             索引跟着页面下载，发一个几 MB 的索引给每个访客
+     *             与「搜索是增强」自相矛盾。要放宽就同时设 allowOverBudget。
+     * indexPath   索引发布路径。
+     * suggest     输入联想条数上限。
+     * fuzzy       对 ≥4 字 CJK 词元做编辑距离 1 展开。
+     */
+    search: {
+      enabled: true,
+      fuzzy: true,
+      maxResults: 10,
+      suggest: 8,
+      indexPath: '/search-index.json',
+      gzipBudget: 512000,
+      allowOverBudget: false,
+      /** 搜索页路径。目录形式（/search/）比 /search.html 更适合带查询参数。 */
+      pagePath: '/search/',
+      /** 索引内联上限（字节）。超过就走外链，避免所有页面都变胖。 */
+      inlineLimit: 65536,
+    },
     seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
-    feed: { enabled: true, limit: 20 },
+    /**
+     * Feed 配置。
+     *
+     * fullContent  false 时只发摘要（阅读器列表页用），true 时发正文全文。
+     *              全文会让 feed 体积大很多 —— 对「订阅」是好事，
+     *              对带宽不一定是。默认关。
+     * categories   只要这些分类的文章（空数组 = 全部）。
+     */
+    feed: { enabled: true, limit: 20, fullContent: false, categories: [] },
     perf: { lazyLoading: true, criticalCSS: true },
     plugins: [],
     deploy: { target: 'github-pages', customDomain: '' },

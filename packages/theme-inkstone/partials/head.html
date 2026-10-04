@@ -1,5 +1,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+{% for feed in feedLinks %}<link rel="alternate" type="{{ feed.type }}" href="{{ feed.href }}" title="{{ feed.title }}" />{% endfor %}
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
 <script>{{{ noFlashScript }}}</script>
 {{{ themeHeadExtra }}}

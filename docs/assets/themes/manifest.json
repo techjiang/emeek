@@ -56,6 +56,34 @@
     "file": "docs/assets/themes/aurora-post-mobile-light.png"
   },
   {
+    "theme": "aurora",
+    "page": "search",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/aurora-search-desktop-dark.png"
+  },
+  {
+    "theme": "aurora",
+    "page": "search",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/aurora-search-desktop-light.png"
+  },
+  {
+    "theme": "aurora",
+    "page": "search",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/aurora-search-mobile-dark.png"
+  },
+  {
+    "theme": "aurora",
+    "page": "search",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/aurora-search-mobile-light.png"
+  },
+  {
     "theme": "inkstone",
     "page": "home",
     "device": "desktop",
@@ -110,6 +138,34 @@
     "device": "mobile",
     "mode": "light",
     "file": "docs/assets/themes/inkstone-post-mobile-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "search",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-search-desktop-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "search",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-search-desktop-light.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "search",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/inkstone-search-mobile-dark.png"
+  },
+  {
+    "theme": "inkstone",
+    "page": "search",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/inkstone-search-mobile-light.png"
   },
   {
     "theme": "magazine",
@@ -168,6 +224,34 @@
     "file": "docs/assets/themes/magazine-post-mobile-light.png"
   },
   {
+    "theme": "magazine",
+    "page": "search",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-search-desktop-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "search",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-search-desktop-light.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "search",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/magazine-search-mobile-dark.png"
+  },
+  {
+    "theme": "magazine",
+    "page": "search",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/magazine-search-mobile-light.png"
+  },
+  {
     "theme": "minimal",
     "page": "home",
     "device": "desktop",
@@ -222,5 +306,33 @@
     "device": "mobile",
     "mode": "light",
     "file": "docs/assets/themes/minimal-post-mobile-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "search",
+    "device": "desktop",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-search-desktop-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "search",
+    "device": "desktop",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-search-desktop-light.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "search",
+    "device": "mobile",
+    "mode": "dark",
+    "file": "docs/assets/themes/minimal-search-mobile-dark.png"
+  },
+  {
+    "theme": "minimal",
+    "page": "search",
+    "device": "mobile",
+    "mode": "light",
+    "file": "docs/assets/themes/minimal-search-mobile-light.png"
   }
 ]

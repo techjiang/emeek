@@ -11,7 +11,10 @@
     "./markdown": "./src/pipeline/parse/markdown.js",
     "./render": "./src/pipeline/render/index.js",
     "./ai/browser": "./src/ai/browser.js",
-    "./ai": "./src/ai/index.js"
+    "./ai": "./src/ai/index.js",
+    "./search": "./src/search/browser.js",
+    "./search/browser": "./src/search/browser.js",
+    "./search/build": "./src/search/build.js"
   },
   "engines": {
     "node": ">=18"

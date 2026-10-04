@@ -7,7 +7,10 @@ import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
-import { buildJsonLd, renderHeadMeta, buildSitemap, buildRss, buildRobots, buildSearchIndex } from './transform/seo.js';
+import { buildJsonLd, renderHeadMeta, buildSitemap, buildRobots } from './transform/seo.js';
+import { buildRss, buildAtom } from '../feed/build.js';
+import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
+import { loadSearchClient } from '../search/ui/index.js';
 import { loadTheme, renderLayout } from './render/theme.js';
 import { buildInjections } from '../theme/inject.js';
 import { loadPlugins } from '../plugin/loader.js';
@@ -120,6 +123,27 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     post.tagLinks = post.tags.map((tag) => ({ name: tag, url: tagUrl(tag) }));
   }
 
+  // 搜索索引要在生成搜索页之前算好 —— 页面要么内联它、要么指向它的 URL。
+  // 顺序反了会得到一个「搜索页引用了一个还未生成的变量」的构建错误。
+  const extraFiles = [];
+  let searchIndexStats = null;
+  let searchIndexContent = null;
+  if (config.search?.enabled) {
+    // 体积预算在这里守住：超预算默认抛错（构建失败），而不是发一个
+    // 巨大的索引给每个访客。允许配置里显式放宽（见 config.search.gzipBudget）。
+    const result = buildSearchIndexFile(sorted, {
+      gzipBudget: config.search.gzipBudget ?? undefined,
+      indexUrl: config.search.indexPath ?? '/search-index.json',
+      onBudgetExceeded: config.search.allowOverBudget
+        ? (info) => logger.warn(`搜索索引超出预算：gzip ${(info.gzip / 1024).toFixed(1)}KB > ${(info.budget / 1024).toFixed(1)}KB`)
+        : undefined,
+    });
+    extraFiles.push({ path: result.path, content: result.content });
+    searchIndexContent = result.content;
+    searchIndexStats = result.stats;
+    logger.info(`搜索索引：${summarizeIndex(result.stats)}`);
+  }
+
   // ── 5. 渲染页面 ────────────────────────────────────────────────
   const pages = [];
   const common = () => ({
@@ -139,7 +163,24 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     themeSwitcher: injections.switcher?.html ?? '',
     themeSwitcherScript: injections.switcher?.script ?? '',
     noFlashScript: injections.noFlash,
-    searchIndexUrl: config.search?.enabled ? '/search-index.json' : null,
+    searchIndexUrl: config.search?.enabled ? (config.search.indexPath ?? '/search-index.json') : null,
+    // 搜索页地址。header 的搜索入口指向它，而不是再开一个内联面板 ——
+    // 两套搜索必然会分叉（内联那份只能做子串 AND，且要自己 fetch 索引）。
+    searchPageUrl: config.search?.enabled ? (config.search.pagePath ?? '/search/') : null,
+    // 搜索页数据（仅 search 布局用）。索引小就内联，省一次请求；
+    // 超过阈值走外链 —— 把几百 KB 的 JSON 塞进每个页面的 <script> 里
+    // 会让所有页面都变大，那正是「搜索是增强」不该有的代价。
+    // head 里的 feed discovery：<link rel="alternate"> 让浏览器/阅读器
+    // 自动发现订阅地址。少了它，读者只能靠猜 /rss.xml。
+    feedLinks: config.feed?.enabled !== false
+      ? [
+        { href: '/rss.xml', type: 'application/rss+xml', title: `${config.site.title} · RSS` },
+        { href: '/atom.xml', type: 'application/atom+xml', title: `${config.site.title} · Atom` },
+      ]
+      : [],
+    searchInlineIndex: null,
+    searchScript: null,
+    searchFacets: null,
     tagUrl,
     headMeta: '',
   });
@@ -152,6 +193,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     const url = index === 0 ? '/index.html' : `/page/${index + 1}.html`;
     pages.push({
       layout: 'index',
+      strict: true,
       path: index === 0 ? '/index.html' : `/page/${index + 1}.html`,
       data: {
         ...common(),
@@ -169,6 +211,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   for (const post of sorted) {
     pages.push({
       layout: 'post',
+      strict: true,
       path: post.url,
       data: {
         ...common(),
@@ -187,24 +230,53 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   pages.push({
     layout: 'archive',
+    strict: true,
     path: '/archive.html',
     data: { ...common(), type: 'website', title: '归档', description: '全部文章按时间排列', canonical: `${config.site.url}/archive.html`, groups: groupByYear(sorted) },
   });
   pages.push({
     layout: 'tags',
+    strict: true,
     path: '/tags.html',
     data: { ...common(), type: 'website', title: '标签', description: '按标签浏览文章', canonical: `${config.site.url}/tags.html`, tags: tags.sort((a, b) => b.count - a.count) },
   });
   pages.push({
     layout: 'about',
+    strict: true,
     path: '/about.html',
     data: { ...common(), type: 'website', title: '关于', description: `${config.site.title} 的关于页`, canonical: `${config.site.url}/about.html`, content: await renderAbout(cwd, config) },
   });
   pages.push({
     layout: '404',
+    strict: true,
     path: '/404.html',
     data: { ...common(), type: 'website', title: '页面不存在', canonical: `${config.site.url}/404.html`, description: '找不到这个页面' },
   });
+
+  // 搜索页。索引已在上一步算好 —— 这里只决定「内联还是外链」。
+  if (config.search?.enabled) {
+    const searchPath = config.search.pagePath ?? '/search/';
+    const inlineLimit = config.search.inlineLimit ?? 64 * 1024;
+    const canInline = searchIndexContent && searchIndexStats && searchIndexStats.raw <= inlineLimit;
+    pages.push({
+      layout: 'search',
+      strict: true,
+      path: searchPath.endsWith('/') ? `${searchPath}index.html` : searchPath,
+      data: {
+        ...common(),
+        type: 'website',
+        title: '搜索',
+        description: `在 ${config.site.title} 中搜索`,
+        canonical: `${config.site.url}${searchPath}`,
+        searchInlineIndex: canInline ? searchIndexContent : null,
+        searchScript: await loadSearchClient(),
+        searchFacets: {
+          categories: categories.map((c) => ({ value: c.name, count: c.count })).sort((a, b) => b.count - a.count),
+          tags: tags.map((t) => ({ value: t.name, count: t.count })).sort((a, b) => b.count - a.count),
+        },
+      },
+    });
+  }
 
   pages.push(...renderTaxonomyPages('tag', tags, config, common(), wikiIndex, imageResolver));
   pages.push(...renderTaxonomyPages('category', categories, config, common(), wikiIndex, imageResolver));
@@ -234,13 +306,12 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       page: { title: page.data.title, description: page.data.description, type: page.data.type, image: page.data.image, lang: page.data.lang },
       canonical: page.data.canonical,
     });
-    const html = renderLayout(theme, page.layout, page.data);
+    const html = renderLayout(theme, page.layout, page.data, { strict: page.strict === true });
     rendered.push({ ...page, html });
   }
   await hooks.run('onBeforeRender', { config, pages: rendered, posts, site: siteData });
 
   // ── 6. 附加文件 ────────────────────────────────────────────────
-  const extraFiles = [];
   if (config.seo?.sitemap !== false) {
     extraFiles.push({
       path: '/sitemap.xml',
@@ -253,15 +324,22 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     });
   }
   if (config.feed?.enabled !== false) {
-    extraFiles.push({ path: '/rss.xml', content: buildRss(siteData, sorted, { limit: config.feed?.limit ?? 20 }) });
+    const feedOptions = {
+      limit: config.feed?.limit ?? 20,
+      // fullContent 默认关：整站正文塞进 feed 会让文件巨大，
+      // 而多数阅读器本来也只显示摘要。要全文就显式开。
+      fullContent: config.feed?.fullContent === true,
+      categories: config.feed?.categories ?? [],
+    };
+    extraFiles.push({ path: '/rss.xml', content: buildRss(siteData, sorted, feedOptions) });
+    extraFiles.push({ path: '/atom.xml', content: buildAtom(siteData, sorted, feedOptions) });
+    const kept = sorted.filter((p) => !feedOptions.categories.length
+      || (p.categories ?? []).some((c) => feedOptions.categories.map((x) => String(x).toLowerCase()).includes(String(c).toLowerCase())));
+    logger.info(`Feed：RSS + Atom · ${Math.min(kept.length, feedOptions.limit)} 条${feedOptions.fullContent ? '（含全文）' : ''}`);
   }
   if (config.seo?.robots !== false) {
     extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData) });
   }
-  if (config.search?.enabled) {
-    extraFiles.push({ path: '/search-index.json', content: JSON.stringify(buildSearchIndex(sorted)) });
-  }
-
   // ── 7. 写盘 ────────────────────────────────────────────────────
   const outDir = path.resolve(cwd, config.output?.dir ?? 'dist');
   const manifest = await writeOutput({
@@ -302,6 +380,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   const stats = {
     elapsed: Date.now() - started,
+    searchIndex: searchIndexStats,
     posts: sorted.length,
     pages: rendered.length,
     drafts: drafts.length,
