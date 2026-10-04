@@ -5,7 +5,6 @@
 </head>
 <body class="layout-post">
     {% include "header" %}
-    <div class="reading-progress" aria-hidden="true"><span id="reading-bar"></span></div>
     <main class="site-main post-layout">
         <article class="post">
             <header class="post-header">
@@ -35,6 +34,7 @@
             {% include "related" %}
             {% include "comments" %}
         </article>
+        {% include "reading" %}
         {% include "sidebar" %}
     </main>
     <button class="to-top" id="to-top" type="button" aria-label="回到顶部">↑</button>

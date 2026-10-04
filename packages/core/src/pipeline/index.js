@@ -4,6 +4,7 @@ import { loadConfig, resolvePluginSpec } from '../config/loader.js';
 import { loadPosts } from './source/index.js';
 import { renderMarkdown } from './parse/markdown.js';
 import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
+import { buildReadingNav, renderReadingToc, renderReadingProgress, READING_CLIENT } from '../reading/index.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
@@ -78,6 +79,26 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   const siteData = { ...config.site };
   const imageResolver = createImageResolver({ baseUrl: config.site.url, assetBase: '/assets' });
 
+  /**
+   * 主题的长期版面事实，只算一次。
+   *
+   * 为什么要读布局源码而不是读 theme.json 的 `sidebar` 配置项：
+   * 那个配置项是**用户可覆盖的开关**（用户可以关掉侧边栏），
+   * 而我们要知道的是「布局里到底有没有 include sidebar 的位置」——
+   * 用户关掉侧边栏时，那片空间仍然存在（只是空的），目录不该因此
+   * 从侧栏跑到正文上方。
+   *
+   * 读源码做判据看起来粗糙，但它是**布局的事实**，不是我们的猜测；
+   * 而且判据（有没有 include "sidebar"）是可枚举的、不会随主题改版漂移。
+   */
+  const postLayoutSource = theme.layouts.get('post')?.source ?? '';
+  const layoutFacts = {
+    hasSidebar: /include\s+["']sidebar["']/.test(postLayoutSource),
+    // 主题是否**已经**自己渲染了目录（老主题在正文上方塞了 tocHtml）。
+    // 这种主题不该再拿到一份目录 —— 那就是重复渲染。
+    rendersOwnToc: /tocHtml/.test(postLayoutSource),
+  };
+
   // ── 3. 渲染 Markdown + 内容级转换 ──────────────────────────────
   const posts = [];
   const bar = progress('解析文章', published.length);
@@ -103,11 +124,34 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     const withAnchors = addAnchorLinks(decorated);
     const text = post.raw;
 
+    /**
+     * 长文导航的落位。
+     *
+     * P3-3c 之前这里有真实的重复渲染：`tocHtml`（Phase 1 的产物）
+     * 被塞在正文上方，而 P3-1 加的侧边栏又从 `toc` 重新渲染了一份 ——
+     * 同一份目录在 3 套主题的长文页上出现两次，内容与锚点完全一样。
+     *
+     * 现在由 buildReadingNav 决定**放一处**：
+     *   · 布局有侧栏位置 → 放侧栏（正文上方不再重复）
+     *   · 布局没有侧栏、但它自己写了 tocHtml → 保持原样（主题自治）
+     *   · 布局没有侧栏也没有 tocHtml → 引擎给正文上方那一份
+     */
+    const reading = buildReadingNav({
+      toc,
+      hasSidebar: layoutFacts.hasSidebar,
+      minItems: Number(config.theme?.tocMinItems ?? 3),
+    });
+
     const enriched = {
       ...post,
       html: withAnchors,
       toc,
-      tocHtml: renderToc(toc, '目录'),
+      readingNav: reading,
+      readingTocHtml: reading.placement === 'inline' ? renderReadingToc(reading) : '',
+      readingProgressHtml: renderReadingProgress(reading),
+      // 保留 tocHtml 给「自己会渲染目录」的主题（向后兼容，但只在
+      // 主题真的会用它时才产出内容）。
+      tocHtml: layoutFacts.rendersOwnToc ? renderToc(toc, '目录') : '',
       description: post.description ?? makeExcerpt(withAnchors),
       wordCount: countWords(text),
       readingTime: readingTime(text),
@@ -228,6 +272,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     pwa: pwaHeadData(config),
     // 评论客户端脚本。默认空 —— 只有文章页（真的有评论区的那几个）才会填。
     commentsScript: '',
+    // 长文导航。默认空 —— 只有文章页会填。给一个空对象而不是 undefined，
+    // 让「非文章页 include 了 reading partial」这种模板错误表现成
+    // 「什么都不渲染」而不是构建崩溃。
+    readingScript: '',
+    readingProgressHtml: '',
+    readingTocHtml: '',
+    readingNav: { items: [], placement: 'none', nested: false, showProgress: false },
   });
 
   // 首页（含分页）
@@ -289,6 +340,14 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
         // 评论区：外壳在构建期渲染（无 JS 读者也要有一句可读的话 +
         // 一个去 GitHub 的链接），内容在运行时由同一份 normalize 填。
         // 数据属性是浏览器端唯一的接缝。
+        // 长文导航脚本。只给**真的需要**它的页面 —— 短文章既没有目录
+        // 也没有进度条，塞一段什么都不干的脚本是纯浪费。
+        readingScript: post.readingNav.showProgress || post.readingNav.placement !== 'none' ? READING_CLIENT : '',
+        readingProgressHtml: post.readingProgressHtml,
+        readingTocHtml: post.readingTocHtml,
+        // 侧边栏 partial 读的是页面级的 readingNav（与 SEO 视图同一形状：
+        // 引擎算好的视图对象，主题只读不拼）。
+        readingNav: post.readingNav,
         // post 里有 issueNumber（github-issues 源自带，local 源可由
         // front-matter 的 `issue:` 指定）。两者都没有时 resolveCommentTarget
         // 返回 null —— 页面**完全不渲染评论区**，而不是渲染一个空壳。

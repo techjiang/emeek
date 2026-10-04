@@ -1,13 +1,15 @@
 <aside class="sidebar">
-    {% if post.toc.length %}
+    {% if readingNav.items.length %}
+    {% if readingNav.placement == 'sidebar' %}
     <nav class="sidebar-block toc-card" aria-label="文章目录">
-        <h3 class="sidebar-title">目录</h3>
-        <ul class="sidebar-toc">
-            {% for item in post.toc %}
-            <li class="toc-level-{{ item.level }}"><a href="#{{ item.id }}">{{ item.text }}</a></li>
+        <h3 class="sidebar-title">本文目录</h3>
+        <ol class="sidebar-toc">
+            {% for item in readingNav.items %}
+            <li class="toc-item toc-level-{{ item.level }}"><a href="#{{ item.id }}" data-heading="{{ item.id }}">{{ item.text }}</a></li>
             {% endfor %}
-        </ul>
+        </ol>
     </nav>
+    {% endif %}
     {% endif %}
     {% if allTags.length %}
     <div class="sidebar-block">

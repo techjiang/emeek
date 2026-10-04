@@ -73,17 +73,48 @@ export const CRITICAL_CSS_LIMIT = 24 * 1024;
 /**
  * 把样式表分成「内联」与「外链」两部分。
  *
- * 单独一个文件超限就外链那一个 —— 全部一起超限就全部外链的话，
- * 一个 26KB 的 search.css 会把 9KB 的 main.css 也一起踢出去，
- * 而 main.css 才是首屏真正要的那份。
+ * ── 判据是**总量**，不是单文件 ──
+ *
+ * 最初的实现是「单个文件超限就外链那一个」。它有一个明显的漏洞：
+ * 3 个 20KB 的文件谁都没超限，内联总量却是 60KB —— 而首屏 HTML
+ * 的膨胀来自总量，不是来自某一个文件。实测抓到了这个洞：
+ * Inkstone（29.9KB）、Magazine（39.9KB）总内联量远超阈值却全部通过。
+ *
+ * 所以现在按累计字节判断。但**顺序不能按文件名**：按字母序是
+ * comments → main → search，于是超限时被踢出去的是**排在后面的**
+ * ——Magazine 上就变成「首屏真正要的 main.css 走外链，而只在搜索页
+ * 才用得到的 search.css 被内联」。那与「关键 CSS」的目的正好相反：
+ * 首屏多一个 RTT，换来的是一个用不到的样式表提前到位。
+ *
+ * 判据改为**按用途优先级**：
+ *   1. main.*  —— 首屏奠基样式，必须在
+ *   2. 其余（comments / 主题自定义等）—— 首屏可能用到
+ *   3. search.* —— 只有搜索页需要，最后才考虑
+ *
+ * 同一优先级内保持传入顺序（稳定）。
  */
 export function splitCriticalStyles(styles, { limit = CRITICAL_CSS_LIMIT } = {}) {
+  const priority = (style) => {
+    const name = String(style.name ?? '');
+    if (/^main\./.test(name)) return 0;
+    if (/^search\./.test(name)) return 2;
+    return 1;
+  };
+  const ordered = styles
+    .map((style, index) => ({ style, index }))
+    .sort((a, b) => priority(a.style) - priority(b.style) || a.index - b.index)
+    .map((entry) => entry.style);
+
   const inline = [];
   const external = [];
-  for (const style of styles) {
+  let used = 0;
+  for (const style of ordered) {
     const bytes = Buffer.byteLength(style.content);
-    if (bytes > limit) external.push({ ...style, bytes });
-    else inline.push({ ...style, bytes });
+    if (used + bytes > limit) external.push({ ...style, bytes });
+    else {
+      inline.push({ ...style, bytes });
+      used += bytes;
+    }
   }
-  return { inline, external };
+  return { inline, external, inlineBytes: used };
 }

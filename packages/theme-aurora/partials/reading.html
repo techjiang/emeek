@@ -1,0 +1,12 @@
+{# 长文导航：进度条 + 目录。
+
+   进度条与目录的**内容**都由引擎算（core/reading/index.js），主题只摆放。
+   理由同 SEO：4 套主题各写一套「当前章节高亮」迟早会漂移，
+   而漂移的表现是「某套主题的目录点了没反应」，只有真去点的人能看到。
+
+   P3-3c 之前这里有重复渲染：正文上方一份 tocHtml、侧边栏又一份。
+   现在引擎算好 placement（sidebar / inline / none），
+   只有 inline 时这里才非空 —— 一份目录，一个位置。 #}
+{{{ readingProgressHtml }}}
+{{{ readingTocHtml }}}
+{% if readingScript %}<script>{{{ readingScript }}}</script>{% endif %}
