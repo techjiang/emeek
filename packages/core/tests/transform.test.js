@@ -113,6 +113,23 @@ test('decorateImages：alt 从文件名推导，并标记为推导值', () => {
   assert.match(html, /data-alt-inferred="true"/);
 });
 
+test('decorateImages：空 alt 必须被兜底替换 —— `![]()` 不是「作者写过了」', () => {
+  // Markdown 渲染器对 `![](...)` 会写出 alt=""，而空 alt 让图片对
+  // 屏幕阅读器与图片搜索**完全消失**。
+  // 只判断「有没有 alt 属性」会把这个空串当成作者的决定，
+  // 兜底永远不触发 —— 这是最初真实存在的缺陷。
+  const html = decorateImages('<img src="/assets/my-photo.png" alt="" />');
+  assert.doesNotMatch(html, /alt=""/);
+  assert.match(html, /alt="my photo"/);
+  assert.match(html, /data-alt-inferred="true"/);
+});
+
+test('decorateImages：仅空白的 alt 也算没写', () => {
+  const html = decorateImages('<img src="/assets/x.png" alt="   " />');
+  assert.doesNotMatch(html, /alt="   "/);
+  assert.match(html, /alt="x"/);
+});
+
 test('decorateImages：作者写了 alt 就完全不动它', () => {
   const html = decorateImages('<img src="x.png" alt="作者写的说明" />');
   assert.match(html, /alt="作者写的说明"/);

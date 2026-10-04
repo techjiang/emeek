@@ -12,5 +12,7 @@ export default {
     language: 'zh-CN',
   },
   content: { source: 'local', localDirs: ['posts'] },
+  // 主题由 e2e 逐套改写这一行来构建；默认用 minimal。
+  theme: { name: 'minimal', darkMode: 'auto' },
   comments: { provider: 'github-issues', repo: 'Meekdai/Gmeek', limit: 50 },
 };

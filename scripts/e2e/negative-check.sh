@@ -36,6 +36,41 @@ weaken() {
   mv "$file.bak" "$file"
 }
 
+
+# weaken_py <描述> <文件> <python 语句（s 是文件内容）> <测试命令>
+#
+# 复杂模式一律走这里。sed 在 `&&`、`||`、单引号、斜杠混在一起时
+# 需要转义三层，写出来谁都读不懂 —— 而且失配时只报「削弱没生效」，
+# 那种情况下这条负向验证本身就是假的，却不会有人注意到。
+#
+# 踩过的坑：`s@^        var kind = (error \&\& error.kind) \|\| 'error';$@...@`
+# 既没锚行首也没锚行尾，替换后原文本还留了半截，测试因此仍然是绿的。
+weaken_py() {
+  local label="$1" file="$2" expr="$3" cmd="$4"
+  cp "$file" "$file.bak"
+  python3 - "$file" "$expr" <<'PYEOF'
+import sys
+p, expr = sys.argv[1], sys.argv[2]
+s = open(p, encoding='utf-8').read()
+exec(expr)
+open(p, 'w', encoding='utf-8').write(s)
+PYEOF
+  if diff -q "$file" "$file.bak" >/dev/null; then
+    echo "  ✘ $label —— 削弱没生效（python 语句没改动文件），这条负向验证本身就是假的"
+    mv "$file.bak" "$file"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if eval "$cmd" >/dev/null 2>&1; then
+    echo "  ✘ $label —— 削弱之后仍然通过，说明这条防线没被守住"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  ✔ $label —— 削弱后测试变红（防线确实被守住）"
+    PASS=$((PASS + 1))
+  fi
+  mv "$file.bak" "$file"
+}
+
 echo "▸ 负向验证：逐条削弱防线，测试必须红"
 
 # 1. URL 消毒：让 sanitizeUrl 永远放行
@@ -435,9 +470,12 @@ weaken "首屏图 eager（改成全部 lazy）" \
 # 52. 图片 alt 必须有兜底：让 alt 变回空字符串。
 #
 # 空 alt 让图片对屏幕阅读器与图片搜索完全消失。
-weaken "图片 alt 兜底（改回空 alt）" \
+# 空 alt 兜底：把「有没有真实 alt」的判断改回「有没有 alt 属性」。
+# 这是最初的真实缺陷 —— Markdown 渲染器对 `![]()` 会写出 alt=""，
+# 只判断属性存在会把这个空串当「作者写过了」，兜底永远不触发。
+weaken "图片 alt 兜底（把空串当成作者写过了）" \
   packages/core/src/pipeline/transform/images.js \
-  "s|      next += \` alt=\"\${escapeAttr(derived)}\" data-alt-inferred=\"true\"\`;|      next += ' alt=\"\"';|" \
+  "s|const hasRealAlt = altMatch \&\& altMatch\[1\].trim() !== '';|const hasRealAlt = !!altMatch;|" \
   'node --test packages/core/tests/transform.test.js'
 
 # 53. 关于页的主标题必须来自正文，而不是硬编码的「关于」。
@@ -458,6 +496,63 @@ weaken "sitemap 与产物一致（不过滤 noindex）" \
   packages/core/src/pipeline/index.js \
   "s|      .filter((page) => !page.data.noindex)|      .filter(() => true) // weakened|" \
   'node --test packages/core/tests/seo/integration.test.js'
+
+
+# ── 评论系统 ────────────────────────────────────────────────────
+# 评论正文是**任意人写的**，所以 XSS 防线是这一块唯一的硬要求。
+echo ""
+echo "▸ 评论系统：正文转义 / 外链属性 / 失败分类"
+weaken "评论正文不转义（XSS 直通）" \
+  packages/core/src/comments/index.js \
+  's|  const escaped = escapeHtml(text);|  const escaped = text;|' \
+  'node --test packages/core/tests/comments/comments.test.js'
+
+weaken "外链不带 noopener（留着 window.opener 这条路）" \
+  packages/core/src/comments/index.js \
+  's|rel="noopener noreferrer nofollow"|rel="nofollow"|' \
+  'node --test packages/core/tests/comments/comments.test.js'
+
+weaken "空 alt 不兜底（把空串当作者写过了）" \
+  packages/core/src/pipeline/transform/images.js \
+  "s|const hasRealAlt = altMatch \&\& altMatch\[1\].trim() !== '';|const hasRealAlt = !!altMatch;|" \
+  'node --test packages/editor/tests/consistency.test.js'
+
+weaken "issue 非法值当 0（去请求 issue/0）" \
+  packages/core/src/pipeline/source/local-files.js \
+  's|return Number.isInteger(number) \&\& number > 0 ? number : null;|return Number.isInteger(number) ? number : null;|' \
+  'node --test packages/core/tests/comments/issue-frontmatter.test.js'
+
+# 用整数索引定位那一行再整行替换 —— 不跟引号/竖线较劲。
+weaken_py "失败状态不带 kind（四种失败长得一样）" \
+  packages/core/src/comments/client.js \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'error.kind' in L and 'var kind' in L]; lines[idx[0]] = '        var kind = 1;' if idx else None; s = chr(10).join(lines)" \
+  'node --test packages/core/tests/comments/ui.test.js'
+
+# ── 长文导航 ────────────────────────────────────────────────────
+echo ""
+echo "▸ 长文导航：落位决策 / 章节阈值 / 脚本两处落位"
+weaken "章节阈值失效（2 节也给目录）" \
+  packages/core/src/reading/index.js \
+  's|export const TOC_MIN_ITEMS = 3;|export const TOC_MIN_ITEMS = 0;|' \
+  'node --test packages/core/tests/reading/reading.test.js'
+
+weaken "客户端只认一种目录落位（另一种下高亮完全不工作）" \
+  packages/core/src/reading/index.js \
+  "s@querySelectorAll('.toc-list a\[data-heading\], .sidebar-toc a\[data-heading\]')@querySelectorAll('.toc-list a[data-heading]')@" \
+  'node --test packages/core/tests/reading/reading.test.js'
+
+weaken "脚本不等 DOM 就绪（侧栏目录还没解析出来）" \
+  packages/core/src/reading/index.js \
+  "s|if (document.readyState === 'loading') {|if (false) {|" \
+  'node --test packages/core/tests/reading/reading.test.js'
+
+# ── CSS 落位预算 ────────────────────────────────────────────────
+echo ""
+echo "▸ CSS 内联预算：总量判据 / 优先级顺序"
+weaken "预算按单文件判断（总量可无限膨胀）" \
+  packages/core/src/pipeline/render/asset-url.js \
+  's|if (used + bytes > limit) external.push({ ...style, bytes });|if (bytes > limit) external.push({ ...style, bytes });|' \
+  'node --test packages/core/tests/perf/assets.test.js'
 
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

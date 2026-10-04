@@ -99,8 +99,14 @@ export const COMMENTS_CLIENT = `(function () {
         render(items);
       })
       .catch(function (error) {
-        // 每一项都有明确的原因 —— 「评论加载失败」五个字对排查毫无帮助。
-        setStatus((error && error.message) || strings.error || '评论加载失败。', 'error');
+        // 用 error.kind 而不是固定的 'error'。
+        //
+        // 上面几处 throw 各自带了 kind（not-found / rate-limit / http / shape），
+        // 目的就是让**样式与测试**能区分它们。这里写死 'error' 会把这个区分
+        // 白白丢掉 —— 四种失败在 DOM 上长得一模一样。这个疏漏被 e2e 抓到了
+        // （断言 data-kind="not-found" 时拿到的是 "error"）。
+        var kind = (error && error.kind) || 'error';
+        setStatus((error && error.message) || strings.error || '评论加载失败。', kind);
       });
   }
 

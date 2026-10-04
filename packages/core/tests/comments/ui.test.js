@@ -45,6 +45,11 @@ test('客户端脚本自带失败分类（不同原因给不同提示，不是�
   const js = await loadCommentsClient();
   assert.match(js, /not-found/, 'Issue 被删/编号错 要与网络失败区分开');
   assert.match(js, /rate-limit/, '限流要与网络失败区分开');
+  // 分类**必须传到 DOM**上。只在 throw 里带 kind 是不够的 ——
+  // catch 里写死 'error' 会让四种失败在页面上长得一模一样，
+  // 那么分类就白做了。这个疏漏被真浏览器 e2e 抓到过。
+  assert.match(js, /var kind = \(error && error\.kind\)/, 'catch 里必须用 error.kind，不能写死');
+  assert.match(js, /setStatus\([^)]*kind\)/, 'kind 必须传给 setStatus');
 });
 
 test('客户端只用 innerHTML 插已 normalize 的正文', async () => {

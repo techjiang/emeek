@@ -28,7 +28,10 @@
     "e2e:theme": "node scripts/e2e/theme.mjs",
     "check:seo": "node scripts/check-seo.mjs",
     "check:perf": "node scripts/check-perf.mjs",
-    "check:perf:all": "node scripts/check-perf.mjs && node scripts/check-perf.mjs --site examples/themes-demo && node scripts/check-perf.mjs --pwa"
+    "check:perf:all": "node scripts/check-perf.mjs && node scripts/check-perf.mjs --site examples/themes-demo && node scripts/check-perf.mjs --pwa",
+    "e2e:comments": "node scripts/e2e/comments.mjs",
+    "e2e:reading": "node scripts/e2e/reading.mjs",
+    "e2e:pwa": "node scripts/e2e/pwa.mjs"
   },
   "engines": {
     "node": ">=18"

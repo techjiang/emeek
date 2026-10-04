@@ -129,8 +129,102 @@ seo: {
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `lazyLoading` | `true` | 图片加 `loading="lazy"` |
-| `criticalCSS` | `true` | CSS 小于 24 KB 时内联进 `<head>`，否则外链 |
+| `lazyLoading` | `true` | 首屏之外的图片加 `loading="lazy"` |
+| `criticalCSS` | `true` | 主题 CSS 内联进 `<head>`；超预算的走外链 |
+| `criticalCssLimit` | `24576` | **累计**内联上限（字节）。判据是总量，不是单文件 |
+| `prefetch` | `true` | 预取下一篇可能读的文章（只做文章页） |
+| `preconnect` | `true` | 站内 origin 的预连接 |
+| `responsiveImages` | `false` | 生成 `srcset`。**需要你提供候选集**（见下） |
+| `imageVariants` | `{}` | 已知的图片候选宽度，见下 |
+
+### 内联预算是累计的
+
+3 个 20 KB 的文件谁都没超限，内联总量却是 60 KB ——
+而首屏 HTML 的膨胀来自总量，不是来自某一个文件。所以按累计字节判断。
+
+超限时按**用途优先级**踢文件（`main.*` → 其余 → `search.*`），
+不按文件名顺序 —— 按字母序是 comments → main → search，
+于是超限时被踢出去的是排在后面的，结果变成「首屏要的 main.css 走外链，
+只在搜索页用的 search.css 被内联」，与关键 CSS 的目的正好相反。
+
+### 响应式图片需要你提供候选集
+
+```javascript
+perf: {
+  responsiveImages: true,
+  imageVariants: {
+    '/assets/cover.png': [{ width: 400 }, { width: 800 }],
+    '/assets/photo.jpg': [
+      { width: 400, url: '/assets/photo-400.webp' },   // 也可以显式给地址
+      { width: 1200, url: '/assets/photo-1200.webp' },
+    ],
+  },
+},
+```
+
+**只写你确实生成了的尺寸。** `srcset` 里出现的每个地址都会被浏览器请求 ——
+假 `srcset` 比没有 `srcset` 更糟，它把「一张图能显示」换成了
+「可能一张都显示不出来」。
+
+生成候选集超出本引擎范围（重编码需要 sharp 这类原生依赖，
+与核心包零依赖冲突）。这是「不做的事就不写进产物」的落点。
+
+## comments
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `provider` | `none` | `github-issues` / `none` |
+| `repo` | 跟随 `content.repo` | `owner/repo` |
+| `limit` | `50` | 评论条数上限 |
+| `reactions` | `true` | 显示 👍 / ❤️ 等 reaction |
+
+评论在**运行时**从 GitHub Issues API 取（匿名可读，限流 60 次/小时/IP）。
+内容在构建期不烘死 —— 来一条新评论不该要重建整站。
+
+不带 token 是刻意的：任何写进静态产物的 token 都是公开的。
+
+本地 Markdown 文章用 front-matter 的 `issue:` 挂到某个 Issue 上：
+
+```yaml
+---
+title: 标题
+issue: 42
+---
+```
+
+详见 [评论系统](comments.md)。
+
+## pwa
+
+**默认关闭。** Service Worker 是本仓库里唯一一个「装上之后还会继续影响
+后续访问」的东西 —— 页面上的 bug 刷新就没了，SW 的 bug 会让读者看到
+昨天甚至上周的页面，而我们修了也没用。
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `false` | 产出 manifest / sw.js / offline.html |
+| `themeColor` | `#ffffff` | 写进 manifest 与 `<meta name="theme-color">` |
+| `backgroundColor` | `#ffffff` | 启动画面背景 |
+| `display` | `standalone` | `standalone` / `minimal-ui` / `browser` / `fullscreen` |
+| `icons` | `{}` | `{ "192": "/assets/i192.png", "512": "...", maskable: "..." }` |
+| `precachePosts` | `5` | 预缓存的文章篇数 |
+| `offlinePath` | `/offline.html` | 离线回落页 |
+| `installPrompt` | `false` | 安装提示横幅 |
+
+`icons` **只声明确实存在的档位** —— manifest 里声明的每个图标都会在
+安装时被下载并校验，缺一个就是安装失败，而失败信息在控制台里很不显眼。
+
+详见 [PWA](pwa.md)。
+
+## reading
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `theme.tocMaxLevel` | `3` | 目录收录到几级标题 |
+| `theme.tocMinItems` | `3` | 少于此章节数就不给目录与进度条 |
+
+目录的落位（侧栏 / 正文上方 / 不给）由引擎根据布局决定，
+不在这里配 —— 见 [长文导航](reading.md)。
 
 ## plugins
 

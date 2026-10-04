@@ -216,6 +216,32 @@ export default { theme: { name: 'aurora' } };
 自定义 CSS / HTML 走白名单消毒，注入位置固定。颜色/字体/布局可在 `emeeek dev` 的
 Studio「主题配置」面板里实时调整，也可在页面挂一个运行时切换浮层 —— 详见 [主题文档](docs/themes.md)。
 
+## 评论与长文导航
+
+**评论由 GitHub Issues 驱动**，客户端渲染，4 套主题各有各的样子 ——
+不挂第三方 iframe，所以「零外部请求」这条约束保得住，主题也能完全控制外观。
+
+```javascript
+content: { source: 'github-issues', repo: 'yourname/blog' },
+comments: { provider: 'github-issues' },   // repo 自动跟随
+```
+
+本地 Markdown 文章用 front-matter 的 `issue: 42` 挂到某个 Issue 的讨论上 ——
+不想把草稿过程公开到 Issue 的人也能有评论区。
+
+正文只识别 `@提及` 与 `http(s)` 链接，其余全部转义（评论是任意人写的）。
+失败按原因分类：Issue 不存在 / 限流 / HTTP 错误，各有各的提示 ——
+一句「评论加载失败」对排查毫无帮助。
+
+**长文导航**：目录 / 锚点 / 阅读进度。目录只放一处（有侧栏时放侧栏，
+正文上方不重复），章节少于 3 节不给目录 —— 目录比它索引的内容还长的时候
+它是负担。滚动高亮用「最后一个已滚过判定线的章节」，不是窄带命中
+（窄带在章节稀疏时会一次都不命中，见 [reading.md](docs/reading.md)）。
+
+| Minimal | Aurora | Inkstone | Magazine |
+| --- | --- | --- | --- |
+| ![Minimal](docs/assets/comments/minimal-light.png) | ![Aurora](docs/assets/comments/aurora-light.png) | ![Inkstone](docs/assets/comments/inkstone-light.png) | ![Magazine](docs/assets/comments/magazine-light.png) |
+
 ## AI 能力（可选）
 
 **不配 API Key 也能用。** 摘要、标签、可读性、SEO 检查都有本地算法兜底，
@@ -253,8 +279,11 @@ SEO 分析             13.0ms   目标 < 30ms
 - [配置参考](docs/configuration.md)
 - [主题开发](docs/themes.md)
 - [插件开发](docs/plugins.md)
-- [性能基线](docs/performance.md)
+- [搜索](docs/search.md) · [订阅 Feed](docs/feed.md) · [SEO](docs/seo.md)
+- [评论系统](docs/comments.md) · [长文导航](docs/reading.md)
+- [性能基线](docs/performance.md) · [PWA](docs/pwa.md)
 - [编辑器（Emeek Studio）](docs/studio.md)
+- [决策记录](docs/decisions/README.md)
 
 ## 开发
 
@@ -263,15 +292,27 @@ SEO 分析             13.0ms   目标 < 30ms
 ```bash
 pnpm install
 
-pnpm test          # 470 个测试
-pnpm coverage      # 测试 + 覆盖率报告（行覆盖 93.76%）
-pnpm benchmark     # 本地 AI + 预览渲染基准
-pnpm check:studio-bundle   # 编辑器入口体积门禁
-pnpm build         # 构建 examples/minimal
-pnpm dev           # 本地预览示例站
-pnpm studio        # 打开编辑器（examples/minimal）
-pnpm lighthouse    # 性能基线（需本机有 Chromium）
-pnpm doctor        # 诊断示例站配置
+pnpm test              # 1281 个测试
+pnpm coverage          # 测试 + 覆盖率报告
+pnpm benchmark         # 本地 AI + 预览渲染基准
+
+# 门禁
+pnpm lighthouse        # 性能基线（需本机有 Chromium）
+pnpm lighthouse:themes # 4 套主题 × 桌面/移动
+pnpm check:seo         # SEO 自检（4 套主题逐页）
+pnpm check:perf:all    # 性能自检（基线站 / 带图站 / PWA 站）
+pnpm check:shortcuts   # 快捷键声明审计
+bash scripts/e2e/negative-check.sh   # 63 条防线逐条削弱，必须变红
+
+# 真浏览器 e2e
+pnpm e2e:comments      # 评论（含 XSS 防线）· 4 主题 × 16 项
+pnpm e2e:reading       # 长文导航 · 4 主题 × 10 项
+pnpm e2e:pwa           # PWA 注册 / 离线回落 / network-first
+
+pnpm build             # 构建 examples/minimal
+pnpm dev               # 本地预览示例站
+pnpm studio            # 打开编辑器（examples/minimal）
+pnpm doctor            # 诊断示例站配置
 ```
 
 也可以直接用 node 调用 CLI 源码，不需要全局安装：
@@ -280,7 +321,7 @@ pnpm doctor        # 诊断示例站配置
 node packages/cli/bin/emeeek.js build --cwd <项目目录>
 ```
 
-当前状态：470 个测试全绿，行覆盖率 93.76%，Lighthouse 四类全 100（8 种页面）。
+当前状态：1281 个测试全绿，Lighthouse 四类全 100（8 种页面 × 桌面/移动，404 页 SEO 见下）。
 
 ## Phase 现状
 
@@ -291,14 +332,18 @@ CLI、Actions 工作流、SEO 产物、测试与性能基线。
 本地 / Mock 四个 Provider、降级链、离线可用的摘要与可读性与 SEO 分析、
 提示词模板文件化。
 
-**Phase 2 Step 2 Step 1（S2-1：编辑器核心 + 预览）** 已完成：
-CodeMirror 6 集成、双栏实时预览、代码块高亮（36 种语言，按需加载）、
-预览一致性测试（预览与构建渲染等价）。
+**Phase 2 Step 2（Emeek Studio）** 已完成：CodeMirror 6 内核、
+双栏实时预览、36 种语言代码高亮、目录导航、自动补全、
+草稿自动保存（多标签页互不覆盖）、AI 面板与本地分析降级。
+
+**Phase 3** 已完成：主题系统 + 4 套内置主题、全文搜索（三类词元 + 策略链）、
+RSS/Atom、SEO 全量（sitemap / robots / JSON-LD / OG / canonical）、
+性能优化（关键 CSS / 资源提示 / 响应式图片）、PWA（默认关闭）、
+评论系统（GitHub Issues 驱动）、长文导航（目录 / 锚点 / 进度条）。
 
 尚未实现、且本仓库不做描述的能力：AI 面板的生成类功能（续写/改写，
-需要 API Key）、图片管理、主题市场、知识图谱、分析面板。
-AI 面板本期的定位是「框架 + 只读的本地分析」——
-点生成类按钮会明确报错，不会返回降级结果。
+需要 API Key）、图片管理（重编码）、主题市场、知识图谱、分析面板。
+AI 面板的生成类按钮会明确报错，不会返回降级结果。
 
 ## License
 

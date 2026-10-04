@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rewriteCssUrls, mapHref } from '../../src/pipeline/render/asset-url.js';
+import { rewriteCssUrls, mapHref, splitCriticalStyles } from '../../src/pipeline/render/asset-url.js';
 import { planStyles, injectAssets } from '../../src/pipeline/render/output.js';
 
 test('rewriteCssUrls：站内相对地址绝对化到 base', () => {
@@ -45,6 +45,33 @@ test('planStyles：小主题整份内联，不产生外链', () => {
   const plan = planStyles({ styles: [{ name: 'main.css', content: 'a{}' }] }, { perf: {} });
   assert.equal(plan.inline.length, 1);
   assert.equal(plan.external.length, 0);
+});
+
+test('预算按**总量**判断，不是单文件 —— 三个 20KB 谁都没超限但总量 60KB', () => {
+  // 这是实测抓到的洞：按单文件判断时 Inkstone（29.9KB）、
+  // Magazine（39.9KB）总内联量远超阈值却全部通过。
+  // 首屏 HTML 的膨胀来自总量，不是来自某一个文件。
+  const big = 'x'.repeat(20 * 1024);
+  const out = splitCriticalStyles(
+    [{ name: 'main.css', content: big }, { name: 'a.css', content: big }, { name: 'b.css', content: big }],
+    { limit: 24 * 1024 },
+  );
+  assert.equal(out.inline.length, 1, '只能内联一个 20KB 的文件（两个就 40KB 超限）');
+  assert.ok(out.inlineBytes <= 24 * 1024);
+});
+
+test('超限时按用途优先级踢文件：先保住 main.css', () => {
+  // 按字母序是 comments → main → search，于是超限时被踢出去的是
+  // **排在后面的** —— 实测结果变成「首屏要的 main.css 走外链，
+  // 只在搜索页用的 search.css 被内联」，与关键 CSS 的目的正好相反。
+  const out = splitCriticalStyles([
+    { name: 'comments.css', content: 'x'.repeat(4 * 1024) },
+    { name: 'main.css', content: 'x'.repeat(30 * 1024) },
+    { name: 'search.css', content: 'x'.repeat(4 * 1024) },
+  ], { limit: 24 * 1024 });
+  // main.css 单独就超限，必须走外链；但 comments/search 的顺序不能因此颠倒。
+  assert.deepEqual(out.external.map((s) => s.name), ['main.css']);
+  assert.deepEqual(out.inline.map((s) => s.name), ['comments.css', 'search.css']);
 });
 
 test('planStyles：超限的走外链，且合并成一个文件（避免 N 个请求）', () => {
