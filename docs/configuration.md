@@ -87,10 +87,32 @@ Issue 上除 `publish`/`draft`/`pin` 之外的标签会自动合并进文章标�
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `sitemap` | `true` | 生成 `sitemap.xml` |
-| `robots` | `true` | 生成 `robots.txt` |
+| `sitemap` | `true` | 生成 `sitemap.xml`（> 50000 条自动拆 index） |
+| `robots` | `true` | 生成 `robots.txt`；对象形式可追加规则 |
 | `openGraph` | `true` | 输出 og: / twitter: 标签 |
 | `structuredData` | `true` | 输出 JSON-LD |
+| `canonical` | `true` | 输出 `<link rel="canonical">` |
+| `defaultImage` | `null` | 文章无 `cover` 时的兜底社交卡片图 |
+| `authorUrl` | `null` | 结构化数据里的 `author.url` |
+
+默认全开 —— 「被搜索引擎找到」是博客的默认期待，不是需要额外开启的功能。
+
+每项独立开关：`structuredData: false` 只影响 JSON-LD，canonical 与 OG 照常输出。
+
+```js
+seo: {
+  defaultImage: '/assets/og-default.png',
+  authorUrl: 'https://docs.asoe.cn',
+  robots: {
+    disable: ['/drafts/', '/private/'],           // 追加 Disallow
+    custom: [{ userAgent: 'BadBot', disallow: ['/'] }],
+  },
+}
+```
+
+`robots.txt` 里 `/search/`、`/*?q=`、`/*?page=` 三条屏蔽**不可取消**：
+爬虫看到的搜索页是空壳（内容靠 JS 渲染），收录它只会产生重复内容。
+详见 [SEO](seo.md)。
 
 ## feed
 

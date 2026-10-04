@@ -154,8 +154,11 @@ describe('预览元数据', () => {
     const meta = previewMeta(read('basic.md'));
     // 默认 minLevel=2（与构建期的主题配置一致）：h1 不进目录
     assert.ok(meta.toc.length >= 2);
-    assert.ok(meta.toc.every((item) => item.level >= 2));
-    assert.equal(meta.toc.length, 2, 'basic.md 有 h2 与 h3 各一个');
+    assert.ok(meta.toc.every((item) => item.level >= 2), '目录不含 h1（h1 是页面主标题）');
+    // basic.md 的 `# 一级标题` 在正文里被降级成 h2（见 markdown.js 的 demoteH1），
+    // 所以目录是「一级标题 / 二级标题 / 三级标题」三项。
+    assert.equal(meta.toc.length, 3, 'basic.md 有三个标题，全部为 h2/h3');
+    assert.deepEqual(meta.toc.map((t) => t.level), [2, 2, 3]);
     assert.ok(meta.words > 0);
     assert.ok(meta.readingMinutes >= 1);
     assert.ok(meta.description.length > 0);

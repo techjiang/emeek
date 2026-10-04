@@ -2,9 +2,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdown, escapeHtml } from '../src/pipeline/parse/markdown.js';
 
-test('渲染标题并生成锚点 id', () => {
+test('渲染标题并生成锚点 id（正文 h1 降级为 h2）', () => {
+  // 页面主标题由布局输出为 <h1>（文章标题）。正文再出一个 <h1>，
+  // 一页就有两个 —— 搜索引擎分不清哪个是页面主题，
+  // 屏幕阅读器也会把文档大纲读成两棵树。所以正文 h1 降级。
   const html = renderMarkdown('# 你好 世界');
-  assert.match(html, /<h1 id="你好-世界">你好 世界<\/h1>/);
+  assert.match(html, /<h2 id="你好-世界">你好 世界<\/h2>/);
+  assert.doesNotMatch(html, /<h1\b/);
+});
+
+test('二级及以下标题层级不变', () => {
+  assert.match(renderMarkdown('## 二级'), /<h2 id="二级">/);
+  assert.match(renderMarkdown('### 三级'), /<h3 id="三级">/);
+  assert.match(renderMarkdown('#### 四级'), /<h4 id="四级">/);
+});
+
+test('demoteH1: false 时保留正文 h1（编辑器分块渲染用）', () => {
+  assert.match(renderMarkdown('# 标题', { demoteH1: false }), /<h1 id="标题">/);
 });
 
 test('重复标题的锚点 id 保持唯一', () => {

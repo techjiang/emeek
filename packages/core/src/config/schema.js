@@ -20,6 +20,11 @@ const RULES = [
   { path: 'search.indexPath', type: 'string', check: (v) => v.startsWith('/') || '必须以 / 开头' },
   { path: 'search.pagePath', type: 'string', check: (v) => v.startsWith('/') || '必须以 / 开头' },
   { path: 'search.inlineLimit', type: 'number', check: (v) => Number.isInteger(v) && v >= 0 || '必须是非负整数（字节）' },
+  { path: 'seo.sitemap', type: 'boolean' },
+  { path: 'seo.robots', check: (v) => typeof v === 'boolean' || (typeof v === 'object' && v !== null) || '只能是布尔值或对象' },
+  { path: 'seo.openGraph', type: 'boolean' },
+  { path: 'seo.structuredData', type: 'boolean' },
+  { path: 'seo.canonical', type: 'boolean' },
   { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'custom'].includes(v) || '不支持的部署目标' },
   { path: 'plugins', type: 'array' },
 ];

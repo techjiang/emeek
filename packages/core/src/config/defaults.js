@@ -73,7 +73,27 @@ export function defaultConfig() {
       /** 索引内联上限（字节）。超过就走外链，避免所有页面都变胖。 */
       inlineLimit: 65536,
     },
-    seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
+    /**
+     * SEO 配置。
+     *
+     * sitemap / robots / openGraph / structuredData / canonical
+     *             各自的总开关。关掉任何一项都会让对应产物消失 ——
+     *             但**默认全开**，因为「被搜索引擎找到」是博客的默认期待。
+     * defaultImage 站点级社交卡片兜底图（文章没写 cover 时用它）。
+     *             不设时文章页不输出 og:image —— 空 og:image 会让
+     *             部分平台抓到一张白图，比没有更糟。
+     * robots      false 整份不产出；对象形式支持 { disable, custom } 追加规则。
+     * authorUrl   作者主页（结构化数据里的 author.url）。
+     */
+    seo: {
+      sitemap: true,
+      robots: true,
+      openGraph: true,
+      structuredData: true,
+      canonical: true,
+      defaultImage: null,
+      authorUrl: null,
+    },
     /**
      * Feed 配置。
      *
