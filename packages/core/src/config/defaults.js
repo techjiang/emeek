@@ -55,7 +55,20 @@ export function defaultConfig() {
     feed: { enabled: true, limit: 20 },
     perf: { lazyLoading: true, criticalCSS: true },
     plugins: [],
-    deploy: { target: 'github-pages', customDomain: '' },
+    /**
+     * 部署配置。
+     *
+     * 默认 target 是 github-pages —— 它与 Gmeek 的「Issues 即 CMS」一脉相承：
+     * 仓库既是内容源也是托管地。其它平台通过 `emeeek deploy --target` 覆盖。
+     */
+    deploy: {
+      target: 'github-pages',
+      customDomain: '',
+      // 自定义域名就绪前先不做在线验证，避免每次部署都因 DNS 未生效而红。
+      verify: true,
+      // 部署后验证的关键路径；留空则用平台默认（首页 / sitemap / RSS）。
+      probes: [],
+    },
   };
 }
 

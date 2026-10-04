@@ -210,5 +210,39 @@ weaken "项目内主题优先于内置（改成内置覆盖项目）" \
   "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
   'node --test packages/core/tests/theme/registry.test.js'
 
+
+# ── 部署相关防线（P3-4a）──────────────────────────────────────
+# 部署是「发出去收不回」的动作。这几条防线漏了，用户会推一份坏产物上去。
+
+# 26. 部署前门禁：让 preflight 永远通过（等于不检查就发货）
+weaken "部署前门禁（preflight 恒通过）" \
+  packages/core/src/deploy/preflight.js \
+  's|^  let stat = null;|  return { ok: true, checks: [] }; // weakened|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 27. 部署配置幂等：内容一致也不跳过（每次都重写 → mtime 必变 → git 永远脏）
+weaken "部署配置幂等（跳过去掉）" \
+  packages/core/src/deploy/index.js \
+  's|    if (existing === content) {|    if (false) {|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 28. 部署后验证：只信 HTTP 200、不看内容 —— 静态托管的静默 404 会溜过去
+weaken "部署后验证（内容谓词直通）" \
+  packages/core/src/deploy/index.js \
+  's|const ok = response.ok && (probe.expect ? probe.expect(body) : true);|const ok = response.ok; // weakened|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 29. 参数校验：自托管必填项清空 —— 缺 host/path 也照跑，rsync 到空主机
+weaken "自托管必填参数（requires 清空）" \
+  packages/core/src/deploy/platforms.js \
+  's|requires: \["host", "path"\]|requires: []|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 30. rsync 幂等：去掉 --delete，远端会残留已删除的旧页面（漏删比漏传更隐蔽）
+weaken "rsync 幂等（--delete 去掉）" \
+  packages/core/src/deploy/platforms.js \
+  "s|'--delete', 'dist/'|'dist/'|" \
+  'node --test packages/core/tests/deploy/platforms.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

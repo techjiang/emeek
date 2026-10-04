@@ -1,0 +1,68 @@
+# 部署门禁：部署前的质量检查与「部署流程自测」。
+#
+# 与 build.yml 的区别：
+#   build.yml   负责「把 Emeek 自己这个仓库构建出的站点发布到 Pages」
+#   本文件       负责「确认 emeeek deploy 这条命令本身是好的」
+#
+# 部署工具自己没被测试过，就不该让用户拿它去发布自己的站点。
+name: Deploy 门禁
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-self-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: pnpm/action-setup@v4
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 部署模块单测
+        run: node --test "packages/core/tests/deploy/**/*.test.js" "packages/cli/tests/deploy.test.js"
+
+      # 示例站用 example.com 占位域名，会被部署前门禁拦下（那是它该做的）。
+      # 这里写一份可上线的临时配置，让六个平台的预演都跑完 happy path。
+      - name: 部署预演（六个平台都必须能生成配置）
+        run: |
+          set -e
+          cat > /tmp/deploy-demo.config.js <<'CFG'
+          export default {
+            site: { title: 'Deploy Demo', url: 'https://deploy-demo.techsauce.cn' },
+            content: { source: 'local', localDirs: ['posts'] },
+          };
+          CFG
+          cd examples/minimal
+          for t in github-pages cloudflare vercel netlify docker; do
+            EMEEEK_CONFIG=/tmp/deploy-demo.config.js node ../../packages/cli/bin/emeeek.js deploy --target "$t" --dry-run --no-verify >/dev/null
+            echo "  ok $t"
+          done
+          EMEEEK_CONFIG=/tmp/deploy-demo.config.js node ../../packages/cli/bin/emeeek.js deploy --target rsync \
+            --host root@example.com --path /var/www/blog --dry-run --no-verify >/dev/null
+          echo "  ok rsync"
+
+      # 预演不能留下痕迹：跑了六个平台的 --dry-run 之后，
+      # 工作区除了 dist/ 之外必须没有任何新增/改动文件。
+      - name: 预演不留痕（dry-run 不该写盘）
+        run: |
+          set -e
+          DIRTY=$(git status --porcelain -- . ':(exclude)examples/minimal/dist' | grep '^??' | grep -v '^?? examples/minimal/dist' || true)
+          if [ -n "$DIRTY" ]; then
+            echo "dry-run 产生了残留文件："
+            echo "$DIRTY"
+            exit 1
+          fi
+          echo "工作区干净，dry-run 未写盘"

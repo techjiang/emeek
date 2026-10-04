@@ -13,7 +13,10 @@ const RULES = [
   { path: 'theme.darkMode', type: 'string', check: (v) => ['auto', 'light', 'dark', 'toggle'].includes(v) || '只能是 auto / light / dark / toggle' },
   { path: 'feed.limit', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
   { path: 'search.maxResults', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
-  { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'custom'].includes(v) || '不支持的部署目标' },
+  { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'rsync', 'docker', 'custom'].includes(v) || '不支持的部署目标' },
+  { path: 'deploy.customDomain', type: 'string' },
+  { path: 'deploy.verify', type: 'boolean' },
+  { path: 'deploy.probes', type: 'array' },
   { path: 'plugins', type: 'array' },
 ];
 

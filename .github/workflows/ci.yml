@@ -104,6 +104,27 @@ jobs:
       - name: 构建示例站点
         run: node packages/cli/bin/emeeek.js build --cwd examples/minimal
 
+      # 部署预演：每个平台的配置文件都必须能生成。
+      # 示例站用的是 example.com 占位域名，会被部署前门禁拦下 —— 这正是它该做的。
+      # 所以这里写一份「可上线」的临时配置，让预演跑完整个 happy path。
+      - name: 部署预演（各平台配置必须能生成）
+        run: |
+          set -e
+          cat > /tmp/deploy-demo.config.js <<'CFG'
+          export default {
+            site: { title: 'Deploy Demo', url: 'https://deploy-demo.techsauce.cn' },
+            content: { source: 'local', localDirs: ['posts'] },
+          };
+          CFG
+          cd examples/minimal
+          for t in github-pages cloudflare vercel netlify docker; do
+            EMEEEK_CONFIG=/tmp/deploy-demo.config.js node ../../packages/cli/bin/emeeek.js deploy --target "$t" --dry-run --no-verify >/dev/null
+            echo "  ok $t"
+          done
+          EMEEEK_CONFIG=/tmp/deploy-demo.config.js node ../../packages/cli/bin/emeeek.js deploy --target rsync \
+            --host root@example.com --path /var/www/blog --dry-run --no-verify
+          echo "  ok rsync"
+
       - name: 校验产物完整性
         run: |
           set -e
