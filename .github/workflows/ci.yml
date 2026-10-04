@@ -132,3 +132,28 @@ jobs:
             test -f "examples/minimal/dist/$f" || { echo "缺失产物：$f"; exit 1; }
           done
           echo "全部关键产物就绪"
+
+      # 加速防线：指纹、预压缩、服务器片段必须在产物里。
+      # 「我们做了加速」不算，产物里有才算。
+      - name: 校验加速产物
+        run: |
+          set -e
+          D=examples/minimal/dist
+          test -f "$D/acceleration.json" || { echo "缺少 acceleration.json"; exit 1; }
+          test -f "$D/server/nginx.conf" || { echo "缺少 nginx 片段"; exit 1; }
+          test -f "$D/server/Caddyfile" || { echo "缺少 Caddyfile"; exit 1; }
+          test -n "$(find "$D" -name '*.a1b2c3d4.*' -o -regex '.*/[^/]*\.[0-9a-f]\{8\}\.[a-z0-9]*$' -print -quit)" || { echo "没有指纹资源"; exit 1; }
+          test -n "$(find "$D" -name '*.gz' -print -quit)" || { echo "没有 gzip 预压缩产物"; exit 1; }
+          test -n "$(find "$D" -name '*.br' -print -quit)" || { echo "没有 brotli 预压缩产物"; exit 1; }
+          echo "加速产物就绪"
+
+      # 负向验证：任何 CDN 凭据都不得出现在产物里。
+      - name: 校验产物不含凭据（负向验证）
+        run: bash scripts/e2e/check-no-secrets.sh examples/minimal/dist
+
+      - name: 负向验证（削弱防线 → 测试必须红）
+        run: bash scripts/e2e/negative-check.sh
+
+      # 加速端到端：构建产物、缓存头、幂等、凭据不泄露，全链路走一遍。
+      - name: 加速端到端验证
+        run: bash scripts/e2e/acceleration-check.sh

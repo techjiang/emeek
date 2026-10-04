@@ -18,6 +18,17 @@ const RULES = [
   { path: 'deploy.verify', type: 'boolean' },
   { path: 'deploy.probes', type: 'array' },
   { path: 'plugins', type: 'array' },
+  { path: 'cdn.enabled', type: 'boolean' },
+  {
+    path: 'cdn.provider',
+    type: 'string',
+    // null 表示「未配置 CDN」——允许，缺失不是错误。
+    check: (v) => v === null || v === undefined || ['cloudflare', 'aliyun', 'tencent', 'custom'].includes(v) || '不支持的 CDN 提供商（cloudflare / aliyun / tencent / custom）',
+  },
+  {
+    path: 'cdn.china.enabled',
+    type: 'boolean',
+  },
 ];
 
 export function validateConfig(config) {

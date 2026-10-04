@@ -119,8 +119,40 @@ plugins: [
 | --- | --- | --- |
 | `output.dir` | `dist` | 产物目录 |
 | `deploy.target` | `github-pages` | `github-pages` / `vercel` / `netlify` / `cloudflare` / `custom` |
+| `deploy.origins` | GitHub Pages + Vercel | 多源站列表，见下 |
+| `deploy.healthInterval` | `5m` | 源站健康检查间隔 |
 
-`deploy.target` 目前只用于配置校验与文档提示，实际部署由 CI 或你的托管平台完成。
+`deploy.target` 用于配置校验与文档提示，实际部署由 CI 或你的托管平台完成。
+
+`deploy.origins` 声明「同一份产物推送到哪些入口」，配合
+`emeek accelerate --fanout` 做幂等推送与故障转移：
+
+```javascript
+deploy: {
+  origins: [
+    { id: 'github-pages', role: 'primary' },
+    { id: 'vercel', role: 'mirror' },
+    { id: 'cloudflare-pages', role: 'mirror' },
+  ],
+}
+```
+
+## cdn（全球加速）
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `cdn.enabled` | `true` | 总开关。关掉则跳过指纹与预压缩 |
+| `cdn.provider` | `null` | `cloudflare` / `aliyun` / `tencent` / `custom` |
+| `cdn.fingerprint.enabled` | `true` | 资源内容哈希 |
+| `cdn.compression.enabled` | `true` | 生成 `.gz` / `.br` 预压缩产物 |
+| `cdn.server` | `true` | 生成 nginx / Caddy 片段 |
+| `cdn.china.enabled` | `false` | 中国大陆加速 |
+| `cdn.china.icp` | `false` | 加速域名是否已备案 |
+
+> **`cdn` 段里没有 API Key，也不应该有。**
+> 凭据从环境变量或 `.emeek/credentials` 读。写进配置会被构建拦住。
+
+完整说明见 [全球加速](acceleration.md)。
 
 ## 校验
 

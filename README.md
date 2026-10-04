@@ -39,6 +39,36 @@ npx emeeek build
 单个 HTML 17–23 KB（含内联 CSS 与 JS），**零外部网络请求**。
 复现：`node scripts/lighthouse.mjs`
 
+## 全球加速
+
+GitHub Pages 在中国大陆经常打不开 —— 这不是「慢一点」，是「用不了」。
+Emeek 把加速做进构建，默认就生效：
+
+```
+ℹ 加速：17 个资源已指纹 · 预压缩 27 个文件（gzip 67% 节省 / brotli 74% 节省）
+```
+
+| 机制 | 效果 |
+| --- | --- |
+| 资源指纹 | `theme.a1b2c3d4.css`，配合 `immutable` 长缓存 |
+| 预压缩 | 生成 `.gz` / `.br`，Nginx `gzip_static on` 直接发 |
+| 缓存策略 | 静态资源永久、HTML 5 分钟 + stale-while-revalidate、索引不缓存 |
+| 服务器片段 | 构建产出 `dist/server/nginx.conf` 与 `Caddyfile` |
+
+接入 CDN 一条命令：
+
+```bash
+emeek accelerate              # 配置向导（Cloudflare / 阿里云 / 腾讯云 / 自定义）
+emeek accelerate --test       # 实测各区域 TTFB
+emeek accelerate --purge      # 内容更新后刷新缓存
+emeek accelerate --warm       # 部署后预热
+```
+
+凭据走环境变量或 `.emeek/credentials`（`0600`），**绝不进配置文件与产物**。
+中国大陆专项：ICP 备案检查、Google Fonts 替代、中文字体子集化分片、图片 WebP。
+
+详见 [docs/acceleration.md](docs/acceleration.md)。
+
 ## 用 GitHub Issues 当 CMS
 
 改一行配置，文章就来自 Issue 了：

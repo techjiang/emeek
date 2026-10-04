@@ -14,5 +14,6 @@
 | [D4](0004-watch-and-plugin-scope.md) | 监听与插件范围收敛 | `packages/editor/src/studio/watcher.js`、`plugin-api.js` |
 | [D5](0005-shortcut-declaration.md) | 快捷键表是声明面 | `packages/editor/src/studio/shortcuts.js`、`scripts/check-shortcuts.mjs` |
 | [D6](0006-deploy-architecture.md) | 部署是一等公民 | `packages/core/src/deploy/`、`scripts/e2e/weaken.py` |
+| [D7](0007-global-acceleration.md) | 全球加速做进构建，而非做进部署 | `packages/core/src/accel/`、`packages/cli/src/commands/accelerate.js` |
 
 负向验证统一入口：`bash scripts/e2e/negative-check.sh`
