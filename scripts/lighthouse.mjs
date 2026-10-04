@@ -62,6 +62,36 @@ export const MOBILE_BASELINE = Object.freeze({
 
 export const MOBILE_THRESHOLD = 90;
 
+/**
+ * 不参与 SEO 评分的页面。
+ *
+ * 这不是「分数低就排除掉」—— 那正是门禁本该防止的事。这里必须说清楚为什么。
+ *
+ * 事实：Lighthouse 的 `is-crawlable` 审计对**被 noindex 或 robots.txt 屏蔽的
+ * 页面**记 0 分，于是整页 SEO 从 100 掉到 66。
+ *
+ * 而 404 页**恰恰应该**带 noindex —— 一个「页面不存在」的页面被搜索引擎收录，
+ * 是纯粹的错误结果：读者搜到它、点进来、发现什么都没有。这跟 P3-3a 在
+ * 搜索页上做的判断是同一条：在这两个页面上，「Lighthouse SEO = 100」与
+ * 「正确的 SEO」互相矛盾，后者才是我们要的。
+ *
+ * 所以这里不是把阈值调低（那会连带放过真回归），是把**这一项**从这两页摘掉，
+ * 并用一条更准确的断言守住它：check-seo.mjs 直接断言 404 与 /search/ 带
+ * noindex 且不在 sitemap 里；negative-check 里有一条削弱它会变红。
+ *
+ * 之前这个洞是真实存在的：P3-3a 给 404 加了 noindex（正确），
+ * 但这份基线脚本没跟着更新，于是「SEO 66」在 CI 里一直是红的而没人修 ——
+ * 一条长期红着的门禁等于没有门禁。
+ */
+const SEO_OPT_OUT = new Set([
+  '404 页', // 主动 noindex：收录一个「页面不存在」是纯粹的错误结果
+]);
+
+/** 页面是否走 SEO 豁免。豁免的是这一项，不是整页分数。 */
+export function isSeoExempt(label) {
+  return SEO_OPT_OUT.has(label);
+}
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
 
 async function main() {
@@ -81,12 +111,16 @@ async function main() {
       const report = await lighthouse(`http://localhost:${PORT}${url}`);
       const c = report.categories;
       const a = report.audits;
+      const seoScore = Math.round(c.seo.score * 100);
+      if (isSeoExempt(label) && seoScore < 100) {
+        console.log(` \u001b[2m(SEO ${seoScore} 豁免：noindex 是刻意策略，见脚本顶部 SEO_OPT_OUT)\u001b[0m`);
+      }
       rows.push([
         label,
         Math.round(c.performance.score * 100),
         Math.round(c.accessibility.score * 100),
         Math.round(c['best-practices'].score * 100),
-        Math.round(c.seo.score * 100),
+        isSeoExempt(label) ? '—(豁免)' : seoScore,
         a['first-contentful-paint'].displayValue,
         a['largest-contentful-paint'].displayValue,
         a['cumulative-layout-shift'].displayValue,
@@ -104,7 +138,7 @@ async function main() {
         Math.round(c.performance.score * 100),
         Math.round(c.accessibility.score * 100),
         Math.round(c['best-practices'].score * 100),
-        Math.round(c.seo.score * 100),
+        isSeoExempt(label) ? '—(豁免)' : Math.round(c.seo.score * 100),
         report.audits['first-contentful-paint'].displayValue,
         report.audits['largest-contentful-paint'].displayValue,
       ]);
@@ -123,8 +157,18 @@ async function main() {
   console.log('| --- | --- | --- | --- | --- | --- | --- |');
   for (const row of mobileRows) console.log(`| ${row.join(' | ')} |`);
 
-  const worst = Math.min(...rows.flatMap((r) => r.slice(1, 5)));
-  const worstMobile = Math.min(...mobileRows.flatMap((r) => r.slice(1, 5)));
+  // 豁免项是字符串 '—(豁免)'，直接 Math.min 会得到 NaN —— 那会让下面
+  // 两个 `worst < 阈值` 的判断永远为 false，门禁静默失效。
+  // 所以先只取数值项。豁免项由 check-seo.mjs 用更准确的断言守着（见脚本顶部）。
+  const numeric = (list) => list.flatMap((r) => r.slice(1, 5)).filter((v) => typeof v === 'number');
+  const desktopScores = numeric(rows);
+  const mobileScores = numeric(mobileRows);
+  if (!desktopScores.length || !mobileScores.length) {
+    console.error('✖ 没有拿到任何可比较的分数（豁免项过滤后为空），门禁无法判断');
+    process.exitCode = 1;
+  }
+  const worst = Math.min(...desktopScores);
+  const worstMobile = Math.min(...mobileScores);
   console.log(`\n桌面最低分：${worst}（阈值 95）`);
   console.log(`移动最低分：${worstMobile}（阈值 ${MOBILE_THRESHOLD}）`);
 

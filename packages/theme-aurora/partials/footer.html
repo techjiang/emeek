@@ -14,3 +14,7 @@
 {% if themeJS %}<script>{{{ themeJS }}}</script>{% endif %}
 {{{ themeSwitcherScript }}}
 {% include "jsonld" %}
+{# Service Worker 注册：放在 body 末尾，注册本身在 load 之后跑。
+   它与页面渲染无关，抢占首屏带宽没有任何收益。 #}
+{% if pwa %}<script>{{{ pwa.registerScript }}}</script>{% endif %}
+{% if pwa %}{% if pwa.installScript %}<script>{{{ pwa.installScript }}}</script>{% endif %}{% endif %}

@@ -1,0 +1,9 @@
+{# PWA 声明：manifest 链接 + 主题色。
+   地址与主题色都由引擎算（见 core/pipeline/pwa/），主题只摆放 ——
+   4 份手写的 manifest 链接迟早有一份漏了 basePath 前缀（子路径部署即 404），
+   而 manifest 404 不会让页面看起来有任何异常，只会让 PWA 功能默默失效。 #}
+{% if pwa %}
+<link rel="manifest" href="{{ pwa.manifestUrl }}" />
+<meta name="theme-color" content="{{ pwa.themeColor }}" />
+<script>{{{ pwa.displayModeScript }}}</script>
+{% endif %}

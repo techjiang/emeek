@@ -35,29 +35,56 @@ export const EAGER_IMAGE_COUNT = 1;
  *     区分「作者写了 alt」与「引擎猜的 alt」。
  *  3. `decoding="async"` 让图片解码不阻塞主线程。
  */
-export function decorateImages(html, { lazy = true, eagerCount = EAGER_IMAGE_COUNT } = {}) {
+export function decorateImages(html, { lazy = true, eagerCount = EAGER_IMAGE_COUNT, responsive = false, variantsBySrc = {}, dimensionsBySrc = {} } = {}) {
   let index = 0;
   return html.replace(/<img\b([^>]*?)\/?>/g, (full, attrs) => {
     const isEager = index < eagerCount;
     index += 1;
     let next = attrs;
 
-    if (!/\bdecoding=/.test(next)) next += ' decoding="async"';
-    if (isEager) {
-      // 首屏图：显式声明不懒加载，并抬高抓取优先级。
-      if (!/\bloading=/.test(next)) next += ' loading="eager"';
-      if (!/\bfetchpriority=/.test(next)) next += ' fetchpriority="high"';
-    } else if (lazy && !/\bloading=/.test(next)) {
-      next += ' loading="lazy"';
+    // 响应式属性**在最前面**处理：它可能要补 width/height/srcset，
+    // 而 alt 兜底与 loading 判断都在后面，互不干扰但顺序要固定（产物可复现）。
+    if (responsive || Object.keys(dimensionsBySrc).length) {
+      next = decorateResponsive(next, { responsive, variantsBySrc, dimensionsBySrc });
     }
 
-    if (!/\balt=/.test(next)) {
+    if (!/\bdecoding=/.test(next)) next += ' decoding="async"';
+
+    // `loading` 必须**改写**而不是「没有才补」。
+    // Markdown 渲染器一律先写上 loading="lazy"（它不知道哪张是首屏图），
+    // 于是首屏图会同时拿到 loading="lazy" 与 fetchpriority="high" ——
+    // 两个属性互相矛盾，浏览器按 lazy 处理，**LCP 反而更慢**。
+    // 这个组合曾经真实存在于产物里，而且看起来「属性都齐了」。
+    const desiredLoading = isEager ? 'eager' : (lazy ? 'lazy' : null);
+    if (desiredLoading) {
+      next = /\bloading="/.test(next)
+        ? next.replace(/\bloading="[^"]*"/, `loading="${desiredLoading}"`)
+        : `${next} loading="${desiredLoading}"`;
+    }
+
+    if (isEager && !/\bfetchpriority=/.test(next)) next += ' fetchpriority="high"';
+
+    // `alt` 同理：Markdown 渲染器对 `![](...)` 会写出 `alt=""`，
+    // 而空 alt 让图片对屏幕阅读器与图片搜索**完全消失**。
+    // 只判断「有没有 alt 属性」会把这个空串当成「作者写过了」，兜底永远不触发。
+    const altMatch = /\balt="([^"]*)"/.exec(next);
+    const hasRealAlt = altMatch && altMatch[1].trim() !== '';
+    if (!hasRealAlt) {
       const derived = deriveAlt(next);
-      next += ` alt="${escapeAttr(derived)}" data-alt-inferred="true"`;
+      // 作者写了空 alt 也算「作者的决定」吗？不算 —— `![]()` 的空 alt 通常是
+      // 忘了写，极少是「这是装饰图，故意留空」。装饰图的正确写法是
+      // `role="presentation"`，而不是一个裸的空 alt。所以这里一律替换，
+      // 并用 data-alt-inferred 标出「这是引擎推的，不是作者写的」。
+      next = altMatch
+        ? next.replace(/\balt="[^"]*"/, `alt="${escapeAttr(derived)}"`)
+        : `${next} alt="${escapeAttr(derived)}"`;
+      next += ' data-alt-inferred="true"';
     }
     return `<img${next} />`;
   });
 }
+
+import { decorateResponsive } from './responsive.js';
 
 /**
  * 从图片地址推一个可读的 alt。
