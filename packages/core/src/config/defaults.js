@@ -68,6 +68,35 @@ export function defaultConfig() {
       verify: true,
       // 部署后验证的关键路径；留空则用平台默认（首页 / sitemap / RSS）。
       probes: [],
+      /**
+       * 多源站：同一份产物推到多处，DNS 层做故障转移。
+       * role: primary 是主站；其余为镜像，主站不健康时接管。
+       * 配合 `emeek accelerate --fanout` 做幂等推送。
+       */
+      origins: [
+        { id: 'github-pages', role: 'primary' },
+        { id: 'vercel', role: 'mirror' },
+      ],
+      healthInterval: '5m',
+    },
+    /**
+     * 全球加速（P3-4b-accel）。默认全开 —— 指纹与预压缩对任何托管都有益，
+     * 且不依赖任何外部服务。CDN 相关的项配了 provider 才生效。
+     *
+     * 注意：这里**永远不放凭据**。API Key 从环境变量或
+     * ~/.emeek/credentials 读（见 accel/credentials.js）。
+     */
+    cdn: {
+      enabled: true,
+      provider: null,          // cloudflare | aliyun | tencent | custom
+      fingerprint: { enabled: true },
+      compression: { enabled: true },
+      server: true,            // 生成 nginx/Caddy 片段
+      cacheRules: {
+        static: { ttl: '30d', immutable: true },
+        html: { ttl: '5m', staleWhileRevalidate: '1h' },
+      },
+      china: { enabled: false, provider: null, domain: '', icp: false },
     },
   };
 }

@@ -22,8 +22,10 @@ import { logger, progress } from '../util/logger.js';
  */
 export async function build({ cwd = process.cwd(), configPath, onProgress } = {}) {
   const started = Date.now();
-  const { config, errors, warnings, configPath: resolved } = await loadConfig(cwd);
-  if (configPath) process.env.EMEEEK_CONFIG = configPath;
+  // 显式 configPath 直接交给 loadConfig 解析，**不写进 process.env**。
+  // 写 env 的代价是进程级全局状态在测试之间泄漏：一个用例设过 EMEEEK_CONFIG
+  // 之后，后续所有用例都会被它劫持，且症状是「配置看起来没生效」而非报错。
+  const { config, errors, warnings, configPath: resolved } = await loadConfig(cwd, { configPath });
 
   if (errors.length) {
     const message = errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n');
@@ -271,6 +273,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     theme,
     config,
     cwd,
+    posts: sorted,
     onProgress: (current, total) => onProgress?.(current, total),
   });
 

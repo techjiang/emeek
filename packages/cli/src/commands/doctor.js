@@ -1,6 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { loadConfig, loadTheme, loadPosts, logger } from '@emeeek/core';
+import {
+  loadConfig,
+  loadTheme,
+  loadPosts,
+  logger,
+  validateCdnConfig,
+  checkIcp,
+  loadCredentials,
+} from '@emeeek/core';
 
 /**
  * 自检。目标是把「构建时才发现的错误」提前到一条命令里，
@@ -101,6 +109,10 @@ export async function doctor({ cwd, flags }) {
     // 8. site.url 与部署目标
     check('站点地址', config.site.url !== 'https://example.com', config.site.url, '改成真实域名，否则 sitemap 与 RSS 里的链接不可用');
 
+    // 10. 全球加速。放在 doctor 而不是只在构建日志里，是因为这几项失败的表现是
+    // 「能构建、能部署、但中国大陆打不开」——用户不会去翻构建日志找原因。
+    await checkAcceleration(root, config, check);
+
     /**
      * 9. 插件：加载成功与被拒的各列一行。
      *
@@ -133,6 +145,73 @@ export async function doctor({ cwd, flags }) {
     process.exitCode = 1;
   }
   return results;
+}
+
+/**
+ * 加速自检。
+ *
+ * 放在 doctor 里而不是只在构建日志里，是因为这几项失败的表现是
+ * 「站点能构建、能部署、但中国大陆打不开」——用户不会去翻构建日志。
+ */
+async function checkAcceleration(root, config, check) {
+  const cdn = config.cdn ?? {};
+  if (cdn.enabled === false) {
+    check('全球加速', true, '已关闭（cdn.enabled = false）', null);
+    return;
+  }
+
+  const fingerprint = cdn.fingerprint?.enabled !== false;
+  const compression = cdn.compression?.enabled !== true ? cdn.compression?.enabled !== false : true;
+  check('资源指纹', fingerprint, fingerprint ? '已开启（静态资源长期缓存可用）' : '已关闭，静态资源只能短缓存', '删除 cdn.fingerprint.enabled = false');
+
+  const accelManifest = await readJson(path.join(root, config.output?.dir ?? 'dist', 'acceleration.json'));
+  if (accelManifest?.compression) {
+    const { count, gzipRatio, brotliRatio } = accelManifest.compression;
+    check('预压缩产物', count > 0,
+      `${count} 个文件（gzip 省 ${Math.round((1 - gzipRatio) * 100)}% / brotli 省 ${Math.round((1 - brotliRatio) * 100)}%）`,
+      compression ? null : '重新构建以生成预压缩产物');
+  } else if (compression) {
+    check('预压缩产物', true, '尚未构建，构建时生成', null);
+  }
+
+  const { errors, warnings } = validateCdnConfig(cdn);
+  for (const e of errors) check('CDN 配置', false, `${e.path}: ${e.message}`, '凭据必须走环境变量或 .emeek/credentials');
+  for (const w of warnings) check('CDN 配置', true, w.message, null);
+
+  if (!cdn.provider) {
+    check('CDN 接入', true, '未配置（降级加速仍然生效）', '需要中国大陆秒开时运行 emeeek accelerate');
+  } else {
+    const { missing } = await loadCredentials(cdn.provider, { cwd: root });
+    if (missing.length) {
+      check('CDN 凭据', false, `缺少 ${missing.map((m) => m.env).join(' / ')}`, '用环境变量提供，或运行 emeeek accelerate 写入凭据文件');
+    } else {
+      check('CDN 凭据', true, '已就绪（来自环境变量或凭据文件）', null);
+    }
+  }
+
+  const icp = checkIcp({ cdn, site: config.site });
+  if (icp.enabled) {
+    for (const blocker of icp.blockers) {
+      check('中国大陆加速', false, blocker.message, '备案完成并配置大陆加速域名后再启用');
+    }
+    check('中国大陆加速', icp.blockers.length === 0, icp.blockers.length ? '前置条件未满足' : `已启用（${icp.icp.provider} · ${icp.icp.domain}）`, null);
+  }
+
+  const blocked = accelManifest?.blockedHosts ?? [];
+  if (blocked.length) {
+    check('国内可达性', false, `产物引用了 ${blocked.map((b) => b.host).join(' / ')}`,
+      blocked[0].suggestion?.replaceWith ?? '替换为自有 CDN 或系统字体回退');
+  } else if (accelManifest) {
+    check('国内可达性', true, '无国内不可达的外部引用', null);
+  }
+}
+
+async function readJson(file) {
+  try {
+    return JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 async function isDirectory(target) {

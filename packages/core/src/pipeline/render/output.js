@@ -1,17 +1,21 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { logger, progress } from '../../util/logger.js';
+import { accelerate, applyAcceleration } from '../../accel/index.js';
 
 /**
  * 写盘阶段。所有 HTML 在写之前统一做一次压缩与关键 CSS 内联，
  * 避免每个页面各自处理一遍。产物清单回传给调用方，便于 CLI 汇报体积。
  */
-export async function writeOutput({ outDir, pages, extraFiles, theme, config, cwd, onProgress }) {
+export async function writeOutput({ outDir, pages, extraFiles, theme, config, cwd, posts = [], onProgress }) {
   await fs.rm(outDir, { recursive: true, force: true });
   await fs.mkdir(outDir, { recursive: true });
 
   const manifest = { files: [], html: 0, totalBytes: 0 };
   const bar = progress('写入页面', pages.length);
+  // 加速管线需要「最终字节」的 HTML 做引用改写，所以这里留一份。
+  // 取写盘后的内容而不是 page.html：内联 CSS 会改变 head，改写必须基于最终形态。
+  const htmlForAccel = [];
 
   // theme 对象在整个进程里复用（一次构建一个主题），所以外链标记必须先清空，
   // 否则上一次留下的会污染这一次。清在这里、写在第 30 行之后，责任单一。
@@ -26,6 +30,7 @@ export async function writeOutput({ outDir, pages, extraFiles, theme, config, cw
     const target = path.join(outDir, page.path);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, html, 'utf8');
+    htmlForAccel.push({ path: page.path, content: html });
     manifest.files.push({ path: page.path, bytes: Buffer.byteLength(html) });
     manifest.html += Buffer.byteLength(html);
     manifest.totalBytes += Buffer.byteLength(html);
@@ -78,7 +83,124 @@ export async function writeOutput({ outDir, pages, extraFiles, theme, config, cw
   }
 
   manifest.avgHtmlBytes = Math.round(manifest.html / Math.max(1, pages.length));
+
+  // ── 加速管线 ───────────────────────────────────────────────
+  // 放在最后：它消费的是已经压好、已经完整的产物。
+  const accelAssets = await collectAccelAssets(outDir, manifest, extraFiles);
+  // 站点自己的内容资源（封面图等）保持原路径：它们的 URL 会被写进
+  // front-matter、RSS、search-index.json —— 那些位置不在 HTML 改写范围内，
+  // 改文件名等于制造 404。见 docs/decisions/0007。
+  const stableAssets = await collectStableAssets(outDir, cwd, config, theme);
+  const accel = await accelerate({
+    outDir,
+    files: accelAssets,
+    html: htmlForAccel,
+    config,
+    cdn: config.cdn,
+    stableAssets,
+    // posts 用于中文字体子集规划：要算「文章里到底出现了哪些字」，
+    // 只能拿到渲染后的正文与标题，不能靠猜。
+    posts,
+    onProgress: (n) => onProgress?.(n, accelAssets.length),
+  });
+  if (accel.enabled) {
+    const applied = await applyAcceleration(outDir, accel);
+    manifest.acceleration = {
+      fingerprint: accel.fingerprint.assets.length,
+      renamed: applied.renamed,
+      precompressed: accel.compression?.summary?.count ?? 0,
+      gzipRatio: accel.compression?.summary?.gzipRatio ?? null,
+      brotliRatio: accel.compression?.summary?.brotliRatio ?? null,
+      provider: accel.cdn?.provider ?? null,
+      tree: applied.tree,
+    };
+    manifest.files = rebuildFileList(applied.tree.files ?? {});
+    manifest.precompressedBytes = estimatePrecompressedBytes(accel.compression?.variants ?? []);
+    logger.info(
+      `加速：${accel.fingerprint.assets.length} 个资源已指纹 · 预压缩 ${accel.compression?.summary?.count ?? 0} 个文件` +
+        (accel.compression?.summary ? `（gzip ${pct(accel.compression.summary.gzipRatio)} / brotli ${pct(accel.compression.summary.brotliRatio)}）` : '')
+    );
+  }
+  manifest.accel = accel;
   return manifest;
+}
+
+function pct(ratio) {
+  return ratio == null ? 'n/a' : `${Math.round((1 - ratio) * 100)}% 节省`;
+}
+
+/** 从磁盘读回产物字节 —— 加速要基于写盘后的真实内容算哈希。 */
+async function collectAccelAssets(outDir, manifest, extraFiles) {
+  const assets = [];
+  const seen = new Set();
+  const push = async (rel) => {
+    if (seen.has(rel)) return;
+    seen.add(rel);
+    const full = path.join(outDir, rel);
+    try {
+      assets.push({ path: `/${rel.split(path.sep).join('/')}`, content: await fs.readFile(full) });
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      const extra = extraFiles.find((f) => f.path === `/${rel}`);
+      if (extra) assets.push({ path: extra.path, content: extra.content });
+    }
+  };
+  for (const file of manifest.files) await push(file.path.replace(/^\//, ''));
+  for (const file of extraFiles) await push(file.path.replace(/^\//, ''));
+  // 主题静态资源（favicon 等）也要指纹，否则改一次图标全站缓存失效。
+  for (const file of await walkFiles(path.join(outDir, 'assets'))) {
+    await push(path.relative(outDir, file));
+  }
+  return assets;
+}
+
+/**
+ * 收集「路径必须稳定」的资源，指纹环节会跳过它们。
+ *
+ * 判据是「它的 URL 会不会出现在 HTML 之外」：
+ * 封面图会进 front-matter（作者手写）、RSS 的 enclosure、search-index.json，
+ * 这三处都不经过 HTML 引用改写。给它加指纹 = 这三处全部指向不存在的文件。
+ */
+async function collectStableAssets(outDir, cwd, config, theme) {
+  const stable = new Set();
+  if (!cwd) return stable;
+  for (const dir of config?.content?.assetDirs ?? ['assets']) {
+    const source = path.resolve(cwd, dir);
+    if (source === path.resolve(theme.dir)) continue;
+    for (const file of await walkFiles(source)) {
+      stable.add(`/${path.join('assets', path.relative(source, file)).split(path.sep).join('/')}`);
+    }
+  }
+  return stable;
+}
+
+async function walkFiles(dir, acc = []) {
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return acc;
+    throw error;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) await walkFiles(full, acc);
+    else acc.push(full);
+  }
+  return acc;
+}
+
+function rebuildFileList(files) {
+  return Object.keys(files)
+    .sort()
+    .map((rel) => ({ path: `/${rel}`, hash: files[rel] }));
+}
+
+/** 预压缩额外产物体积（每个文件多出 .gz + .br 两份）。 */
+function estimatePrecompressedBytes(variants) {
+  let bytes = 0;
+  for (const v of variants) bytes += v.gzipSize + v.brotliSize;
+  return bytes;
 }
 
 /**

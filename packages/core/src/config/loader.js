@@ -11,8 +11,8 @@ const CONFIG_FILES = ['emeeek.config.js', 'emeeek.config.mjs', 'emeeek.config.js
  * 按优先级加载配置：EMEEEK_CONFIG 环境变量 > 目录内约定文件名 > 纯默认值。
  * 找不到配置文件不是错误 —— 零配置必须能跑起来。
  */
-export async function loadConfig(cwd = process.cwd()) {
-  const found = resolveConfigPath(cwd);
+export async function loadConfig(cwd = process.cwd(), { configPath } = {}) {
+  const found = configPath ? path.resolve(cwd, configPath) : resolveConfigPath(cwd);
   let userConfig = {};
   if (found) {
     userConfig = await readConfigFile(found);

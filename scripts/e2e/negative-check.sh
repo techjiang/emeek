@@ -244,5 +244,55 @@ weaken "rsync 幂等（--delete 去掉）" \
   "s|'--delete', 'dist/'|'dist/'|" \
   'node --test packages/core/tests/deploy/platforms.test.js'
 
+# ── 全球加速（P3-4b-accel）──────────────────────────────────────
+
+# 31. 指纹恒等：内容变了文件名却不变 → 长缓存会一直发旧版本
+weaken "资源指纹（fingerprintPath 恒等）" \
+  packages/core/src/accel/fingerprint.js \
+  's|^export function fingerprintPath(filePath, content) {|export function fingerprintPath(filePath, content) { return filePath; // weakened|' \
+  'node --test packages/core/tests/accel/fingerprint.test.js'
+
+# 32. 缓存头：未指纹资源也发 immutable → 用户永久看不到更新
+weaken "缓存头（未指纹资源也给 immutable）" \
+  packages/core/src/accel/cache-headers.js \
+  's|^  if (fingerprinted) return CACHE_CLASS.IMMUTABLE;|  return CACHE_CLASS.IMMUTABLE; // weakened|' \
+  'node --test packages/core/tests/accel/cache-headers.test.js'
+
+# 33. 预压缩类型白名单失效 → 图片被「压缩」，产物反而变大
+weaken "预压缩（可压缩类型白名单失效）" \
+  packages/core/src/accel/compress.js \
+  's|^  if (!COMPRESSIBLE.includes(ext)) return false;|  if (false) return false; // weakened|' \
+  'node --test packages/core/tests/accel/compress.test.js'
+
+# 34. 凭据：允许 secret 写进配置文件 → API Key 随仓库泄露
+weaken "CDN 凭据（secret 允许写进配置）" \
+  packages/core/src/accel/providers.js \
+  's|^    if (field.secret |    if (false) {|' \
+  'node --test packages/core/tests/accel/providers.test.js'
+
+# 35. ICP 备案检查失效 → 未备案域名在国内静默不通
+weaken "ICP 备案（未备案不再拦）" \
+  packages/core/src/accel/china.js \
+  's|^  if (!icp) {|  if (false) { // weakened|' \
+  'node --test packages/core/tests/accel/china.test.js'
+
+# 36. 国内不可达域名扫描失效 → Google Fonts 悄悄进产物，国内首屏卡死
+weaken "国内不可达域名扫描（恒返回空）" \
+  packages/core/src/accel/china.js \
+  's|^export function scanBlockedHosts(html, { hosts = BLOCKED_HOSTS } = {}) {|export function scanBlockedHosts(html, { hosts = BLOCKED_HOSTS } = {}) { return []; // weakened|' \
+  'node --test packages/core/tests/accel/china.test.js'
+
+# 37. 多源站幂等判据失效 → 每次推送都误判成「有变化」，CDN 全量刷新
+weaken "多源站幂等（diffTrees 恒判有变化）" \
+  packages/core/src/accel/origins.js \
+  's|^    identical: added.length + removed.length + changed.length === 0,|    identical: false, // weakened|' \
+  'node --test packages/core/tests/accel/origins.test.js'
+
+# 38. 内容谓词失效 → 200 + 404 页面也算「健康」，故障转移形同虚设
+weaken "健康检查内容谓词（恒通过）" \
+  packages/core/src/accel/latency.js \
+  's|^  const predicateOk = typeof expect === .function. \&\& !error ? Boolean(expect(body)) : true;|  const predicateOk = true; // weakened|' \
+  'node --test packages/core/tests/accel/latency.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

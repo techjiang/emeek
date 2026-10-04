@@ -11,6 +11,26 @@ export { decorateImages, createImageResolver } from './pipeline/transform/images
 export { buildWikiLinkIndex, resolveWikiLink } from './pipeline/transform/links.js';
 export { renderArticle } from './pipeline/index.js';
 export { makeExcerpt, readingTime, countWords } from './pipeline/transform/excerpt.js';
+// ── 全球加速（P3-4b-accel）─────────────────────────────────────
+export {
+  accelerate,
+  applyAcceleration,
+  buildAssetMap,
+  rewriteHtmlReferences,
+  contentHash,
+  fingerprintPath,
+  shouldFingerprint,
+  FINGERPRINT_EXTENSIONS,
+} from './accel/index.js';
+export { cacheHeaders, classifyCache, buildHeaderManifest, CACHE_CLASS } from './accel/cache-headers.js';
+export { precompress, compressVariants, shouldCompress } from './accel/compress.js';
+export { PROVIDERS, PROVIDER_IDS, getProvider, validateCdnConfig, readCredentialsFromEnv } from './accel/providers.js';
+export { loadCredentials, saveCredentials, parseCredentials, serializeCredentials, ensureGitignored } from './accel/credentials.js';
+export { checkIcp, scanBlockedHosts, planFontSubset, toRanges, analyzeImages, buildLocalFontFace, BLOCKED_HOSTS, CHINA_ALTERNATIVES } from './accel/china.js';
+export { selectPreloadTargets, renderPreloadTags, buildEarlyHintsHeader, renderNginxSnippet, renderCaddySnippet } from './accel/hints.js';
+export { hashTree, diffTrees, planFanout, buildHealthChecks, decideActiveOrigin } from './accel/origins.js';
+export { createCdnClient, buildPurgeTargets, buildWarmTargets } from './accel/cdn-client.js';
+export { probe, measure, compareLatency, median, PROBE_REGIONS } from './accel/latency.js';
 export { loadTheme } from './pipeline/render/theme.js';
 export { normalizeOverrides, mergeOverrides } from './theme/override.js';
 export { listBuiltinThemes, listAvailableThemes } from './theme/registry.js';

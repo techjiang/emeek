@@ -9,6 +9,7 @@ import { newPost } from './commands/new.js';
 import { themeCommand } from './commands/theme.js';
 import { deploy } from './commands/deploy.js';
 import { drafts } from './commands/drafts.js';
+import { accelerate } from './commands/accelerate.js';
 
 const VERSION = '0.1.0';
 
@@ -23,6 +24,7 @@ const COMMANDS = {
   theme: { run: themeCommand, desc: '查看 / 切换 / 创建主题' },
   deploy: { run: deploy, desc: '构建并部署到目标平台' },
   drafts: { run: drafts, desc: '列出草稿与定时发布的文章' },
+  accelerate: { run: accelerate, desc: '全球加速：CDN 集成 / 资源指纹 / 缓存策略 / 刷新预热' },
 };
 
 const HELP = `
@@ -41,6 +43,7 @@ Emeek v${VERSION} —— 基于 Gmeek 理念的下一代知识站引擎
   drafts   列出草稿与定时发布
   doctor   诊断配置与依赖
   clean    清理 dist/
+  accelerate 全球加速（配置向导 / --test / --purge / --warm / --fanout）
 
 选项:
   --cwd <dir>   指定项目目录（默认当前目录）
@@ -55,6 +58,15 @@ deploy 选项:
   --no-verify       跳过部署后的在线验证
   --host --path     自托管（rsync）必填
   --url <地址>      验证时使用的地址（默认 site.url）
+
+accelerate 选项:
+  （无）            配置向导：选 CDN → 填凭据 → 写配置
+  --test            实测加速效果（多区域 TTFB 对比）
+  --purge           刷新 CDN 缓存
+  --warm            预热 CDN
+  --fanout          多源站推送规划（幂等）
+  --plan            加速规划（字体子集分片 / 图片建议）
+  --dry-run         只列出将刷新的 URL，不发请求
 
 示例:
   emeeek init my-blog
