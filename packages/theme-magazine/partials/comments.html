@@ -1,3 +1,9 @@
-{% if config.comments && config.comments.provider && config.comments.provider != 'none' %}
-<section class="comments" data-provider="{{ config.comments.provider }}"></section>
-{% endif %}
+{# 评论区（GitHub Issues 驱动）。
+   外壳由引擎渲染（pipeline → renderCommentsShell），这里只摆放 ——
+   理由同 SEO：4 份手写的外壳一定会漂移，而漂移的表现是
+   「某一套主题的评论永远加载不出来」，只有真去点的人才看得到。
+
+   数据属性（data-comments-*）是浏览器端唯一的接缝。
+   客户端脚本只在这一页真的配了评论区时才有内容。 #}
+{{{ commentsHtml }}}
+{% if commentsScript %}<script>{{{ commentsScript }}}</script>{% endif %}

@@ -2,11 +2,14 @@
 <html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
 <head>
     {% include "head" %}
-    <link rel="alternate" type="application/rss+xml" title="{{ site.title }}" href="/rss.xml" />
 </head>
 <body class="layout-index">
     {% include "header" %}
     <main class="site-main">
+        {# 首页主标题。极简主题首页没有大 hero —— 但语义上**必须有一个主标题**：
+           它是搜索引擎与屏幕阅读器判断「这个页面在讲什么」的第一依据。
+           视觉上藏起来（.visually-hidden），文档大纲上必须在。 #}
+        <h1 class="visually-hidden">{{ site.title }}</h1>
         {% if pinned.length %}
         <section class="pinned-section">
             <h2 class="section-label">置顶</h2>

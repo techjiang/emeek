@@ -6,7 +6,7 @@
   "description": "极简黑白，排版为王。默认主题，零依赖、无外部字体请求、无阴影无装饰。",
   "preview": "preview.png",
   "entryLayout": "index",
-  "layouts": ["index", "post", "archive", "tags", "about", "404"],
+  "layouts": ["index", "post", "archive", "tags", "about", "404", "search"],
   "features": ["dark-mode", "light-mode", "syntax-highlight", "toc", "search", "search-index"],
   "compatible": ">=1.0.0",
   "config": {

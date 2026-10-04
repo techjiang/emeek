@@ -1,0 +1,40 @@
+/* Minimal 评论区 —— 排版优先。无卡片、无阴影、无圆角，只用一条细线与留白分隔。
+   与搜索页同一套变量，所以换主题配色时评论区自动跟随。 */
+
+.comments { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border); }
+
+.comments-title { font-size: 1.05rem; font-weight: 600; margin: 0 0 1rem; color: var(--primary); }
+
+.comments-status { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 1rem; }
+.comments-status[data-kind="error"] { color: #b91c1c; }
+[data-theme="dark"] .comments-status[data-kind="error"] { color: #fca5a5; }
+
+.comments-list { list-style: none; margin: 0 0 1.5rem; padding: 0; }
+
+.c-item { padding: 1rem 0; border-bottom: 1px solid var(--border); }
+.c-item:last-child { border-bottom: 0; }
+
+.c-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.c-avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+.c-author { font-weight: 600; font-size: 0.9rem; color: var(--primary); text-decoration: none; }
+.c-author:hover { text-decoration: underline; }
+/* 作者标记：与正文链接一样靠下划线而非仅靠颜色区分（色觉障碍可用性）。 */
+.c-badge {
+  font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 3px;
+  border: 1px solid var(--border); color: var(--text-dim);
+}
+.c-time { font-size: 0.8rem; color: var(--text-dim); margin-left: auto; }
+
+.c-body { font-size: 0.94rem; color: var(--text); }
+.c-body p { margin: 0 0 0.6rem; }
+.c-body p:last-child { margin-bottom: 0; }
+.c-mention, .c-link { color: var(--accent); text-decoration: underline; }
+
+.c-reactions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.c-reaction { font-size: 0.78rem; padding: 0.1rem 0.45rem; border: 1px solid var(--border); border-radius: 10px; color: var(--text-dim); }
+
+.c-permalink { display: inline-block; margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-dim); }
+
+.comments-cta { font-size: 0.88rem; margin: 0; }
+.comments-cta a { color: var(--accent); text-decoration: underline; }
+.comments-cta-note { color: var(--text-dim); font-size: 0.82rem; }

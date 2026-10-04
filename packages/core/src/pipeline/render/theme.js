@@ -64,7 +64,19 @@ async function loadThemeDir(dir, { themeConfig, themeConfigRuntime } = {}) {
     const source = await fs.readFile(file, 'utf8');
     partials.set(path.basename(file, '.html'), { source, compiled: compile(source), file });
   }
-  for (const file of await listFiles(path.join(dir, 'styles'))) {
+  /**
+   * 样式表按**文件名排序**拼接 —— 顺序是确定的，且与文件系统返回顺序无关。
+   *
+   * 为什么要显式 sort：`readdir` 的顺序在语义上不保证（不同文件系统、
+   * 不同 Node 版本可能不同）。不排序时「同一份主题在本地与 CI 上产出
+   * 不同的 CSS 顺序」是可能的，而 CSS 顺序决定了同权重规则谁生效 ——
+   * 表现成「本地看着对、线上看着错」，且极难往回查。
+   *
+   * 约定：`main.css` 是基底，`<模块>.css`（如 comments.css / search.css）
+   * 按字母序叠加。同权重覆盖要靠**选择器特异性**，不能靠文件顺序 ——
+   * 靠顺序的样式在别人改个文件名之后就会悄悄失效。
+   */
+  for (const file of (await listFiles(path.join(dir, 'styles'))).sort()) {
     if (file.endsWith('.css')) styles.push({ name: path.basename(file), content: await fs.readFile(file, 'utf8') });
   }
   for (const file of await listFiles(path.join(dir, 'scripts'))) {
@@ -112,8 +124,15 @@ async function loadThemeDir(dir, { themeConfig, themeConfigRuntime } = {}) {
  * 反过来的话，{% for post in posts %}{% include "card" %} 里的 post
  * 会取到页面级的同名变量，卡片就永远显示同一篇文章。
  */
-export function renderLayout(theme, layoutName, data) {
-  const layout = theme.layouts.get(layoutName) ?? theme.layouts.get(theme.entry) ?? theme.layouts.get('index');
+export function renderLayout(theme, layoutName, data, { strict = false } = {}) {
+  // 回退链（找不到就退到 entry / index）对「插件声明的自定义布局」是必要的
+  // 便利，但对**引擎自己要求必须存在的布局**（如 search）是危险的：
+  // 主题没提供 search.html 时，搜索页会静默渲染成首页 —— 构建报成功、
+  // 页面也长得像模像样，只是没有搜索框。这类失败最难在 CI 里发现。
+  // 所以引擎内置布局走 strict，缺了直接抛。
+  const layout = strict
+    ? theme.layouts.get(layoutName)
+    : theme.layouts.get(layoutName) ?? theme.layouts.get(theme.entry) ?? theme.layouts.get('index');
   if (!layout) throw new Error(`主题 ${theme.meta.name} 里找不到布局 ${layoutName}`);
 
   return layout.compiled({

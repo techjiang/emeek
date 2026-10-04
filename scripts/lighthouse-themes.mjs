@@ -30,7 +30,34 @@ const PAGES = [
   ['文章页', '/posts/design-notes.html'],
   ['归档页', '/archive.html'],
   ['标签页', '/tags.html'],
+  // 搜索页：内联了索引与客户端脚本，是最容易把 Performance 拉下来的页面 ——
+  // 不测它就等于没守「搜索页 4 套主题 Lighthouse ≥ 90」这条要求。
+  //
+  // 但它的 **SEO 分豁免**，理由见下面 SEO_OPT_OUT —— 那 34 分不是缺陷，
+  // 是 robots.txt 里「搜索页不该被收录」这条正确策略的副作用。
+  ['搜索页', '/search/index.html'],
 ];
+
+/**
+ * 不参与 SEO 评分的页面。
+ *
+ * 这里必须解释清楚，否则看起来就像「分数低就把它排除掉」——
+ * 那正是这条门禁本该防止的事。
+ *
+ * 事实：Lighthouse 的 `is-crawlable` 审计对**被 robots.txt 屏蔽的页面**
+ * 记 0 分，于是整页 SEO 掉到 66。而 /search/ 恰恰是**应该**被屏蔽的：
+ * 它的内容是 JS 渲染出来的空壳，收录它只会产生重复内容并稀释权重。
+ * 换句话说 —— 在这一个页面上，「Lighthouse SEO = 100」与「正确的 SEO」
+ * 是互相矛盾的两个目标，而后者才是我们真正要的。
+ *
+ * 所以不是放宽阈值（那会连带放过真的回归），是把这一项从这一页摘掉，
+ * 并用一条专门的断言守住「/search/ 确实被屏蔽」（见
+ * scripts/check-seo.mjs 的 checkRobots 与 negative-check.sh 第 46 条）。
+ * 等效的检查仍然存在，只是换了更准确的形式。
+ */
+const SEO_OPT_OUT = new Set([
+  '搜索页', // robots.txt 主动屏蔽，Lighthouse 的 is-crawlable 必然 0 分
+]);
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
 
@@ -95,8 +122,9 @@ async function main() {
             best: Math.round(report.categories['best-practices'].score * 100),
             seo: Math.round(report.categories.seo.score * 100),
           };
-          summary.push({ theme, device: mobile ? 'mobile' : 'desktop', page: label, ...scores });
-          console.log(` perf ${scores.perf} / a11y ${scores.a11y} / bp ${scores.best} / seo ${scores.seo}`);
+          const exempt = SEO_OPT_OUT.has(label);
+          summary.push({ theme, device: mobile ? 'mobile' : 'desktop', page: label, ...scores, exempt });
+          console.log(` perf ${scores.perf} / a11y ${scores.a11y} / bp ${scores.best} / seo ${scores.seo}${exempt ? '（SEO 豁免：主动屏蔽收录）' : ''}`);
         }
       }
     } finally {
@@ -107,10 +135,16 @@ async function main() {
   console.log('\n| 主题 | 设备 | 页面 | Performance | Accessibility | Best Practices | SEO |');
   console.log('| --- | --- | --- | --- | --- | --- | --- |');
   for (const row of summary) {
-    console.log(`| ${row.theme} | ${row.device} | ${row.page} | ${row.perf} | ${row.a11y} | ${row.best} | ${row.seo} |`);
+    // 豁免项在表里标出来，不藏起来 —— 一张「全 100」的表如果靠静默略过
+    // 低分项得来，那它就没有价值。
+    const seo = row.exempt ? `${row.seo}（豁免）` : String(row.seo);
+    console.log(`| ${row.theme} | ${row.device} | ${row.page} | ${row.perf} | ${row.a11y} | ${row.best} | ${seo} |`);
   }
 
-  const failures = summary.filter((r) => Math.min(r.perf, r.a11y, r.best, r.seo) < THRESHOLD);
+  const failures = summary.filter((r) => {
+    const scores = [r.perf, r.a11y, r.best, ...(r.exempt ? [] : [r.seo])];
+    return Math.min(...scores) < THRESHOLD;
+  });
   if (failures.length) {
     console.error(`\n✖ ${failures.length} 项低于阈值 ${THRESHOLD}：`);
     for (const f of failures) console.error(`  ${f.theme} ${f.device} ${f.page}: perf ${f.perf} a11y ${f.a11y} bp ${f.best} seo ${f.seo}`);

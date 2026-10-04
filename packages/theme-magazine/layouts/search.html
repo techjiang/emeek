@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+    {% if searchInlineIndex %}<script type="application/json" id="search-index-data">{{{ searchInlineIndex }}}</script>{% endif %}
+</head>
+<body class="layout-search">
+    {% include "header" %}
+    <main class="site-main search-shell">
+        <div class="section-head">
+            <span class="section-number" aria-hidden="true">?</span>
+            <h1 class="section-title">检索</h1>
+        </div>
+        <p class="search-hero-sub">像翻旧刊一样，找那一页。</p>
+
+        {# 无 JS 兜底：form 直接 GET。有脚本时被 preventDefault，结果本地算。 #}
+        <form id="search-form" class="search-form" action="/search/" method="get" role="search">
+            <label class="visually-hidden" for="search-input">搜索关键词</label>
+            <input id="search-input" class="search-input" type="search" name="q"
+                   placeholder="搜索文章…" autocomplete="off" autofocus
+                   role="combobox" aria-autocomplete="list" aria-controls="search-suggest" aria-expanded="false">
+            <button type="submit" class="search-submit">搜索</button>
+            <ul id="search-suggest" class="search-suggest" role="listbox" hidden></ul>
+        </form>
+
+        <section class="search-history" id="search-history" aria-label="搜索历史"></section>
+
+        <details class="search-filters" open>
+            <summary>筛选</summary>
+            <div class="filter-grid">
+                <label>分类
+                    <select id="filter-category">
+                        <option value="">全部</option>
+                        {% for c in searchFacets.categories %}<option value="{{ c.value }}">{{ c.value }}（{{ c.count }}）</option>{% endfor %}
+                    </select>
+                </label>
+                <label>标签
+                    <select id="filter-tag">
+                        <option value="">全部</option>
+                        {% for t in searchFacets.tags %}<option value="{{ t.value }}">{{ t.value }}（{{ t.count }}）</option>{% endfor %}
+                    </select>
+                </label>
+                <label>起始日期<input id="filter-from" type="date"></label>
+                <label>结束日期<input id="filter-to" type="date"></label>
+                <label>排序
+                    <select id="filter-sort">
+                        <option value="relevance">相关度</option>
+                        <option value="date">最新</option>
+                        <option value="oldest">最旧</option>
+                    </select>
+                </label>
+            </div>
+        </details>
+
+        <p id="search-count" class="search-count" aria-live="polite"></p>
+        <div id="search-results" class="search-results search-grid">
+            <p class="search-hint">输入关键词开始搜索。</p>
+        </div>
+    </main>
+    {% include "footer" %}
+    <script>
+      window.__EMEEEK_SEARCH_INDEX__ = null;
+      (function () {
+        var el = document.getElementById('search-index-data');
+        if (el) { try { window.__EMEEEK_SEARCH_INDEX__ = JSON.parse(el.textContent); } catch (e) {} }
+      })();
+    </script>
+    <script>{{{ searchScript }}}</script>
+</body>
+</html>

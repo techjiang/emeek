@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { logger, progress } from '../../util/logger.js';
+import { rewriteCssUrls, splitCriticalStyles, CRITICAL_CSS_LIMIT } from './asset-url.js';
+import { collectPreconnect, renderResourceHints } from '../transform/hints.js';
 import { accelerate, applyAcceleration } from '../../accel/index.js';
 
 /**
- * 写盘阶段。所有 HTML 在写之前统一做一次压缩与关键 CSS 内联，
+ * 写盘阶段。所有 HTML 在写之前统一做一次压缩、CSS 落位与资源提示注入，
  * 避免每个页面各自处理一遍。产物清单回传给调用方，便于 CLI 汇报体积。
  */
 export async function writeOutput({ outDir, pages, extraFiles, theme, config, cwd, posts = [], onProgress }) {
@@ -18,15 +20,16 @@ export async function writeOutput({ outDir, pages, extraFiles, theme, config, cw
   const htmlForAccel = [];
 
   // theme 对象在整个进程里复用（一次构建一个主题），所以外链标记必须先清空，
-  // 否则上一次留下的会污染这一次。清在这里、写在第 30 行之后，责任单一。
+  // 否则上一次留下的会污染这一次。清在这里、写在下面，责任单一。
   delete theme.__externalCss;
-  delete theme.__externalCssUrl;
+
+  const cssPlan = planStyles(theme, config);
+  cssPlan.vars = theme.__varsOverride ?? '';
+  const headExtra = buildHeadExtra(cssPlan, config);
 
   for (const page of pages) {
     let html = finalizeHtml(page.html, config);
-    if (config.perf?.criticalCSS !== false) {
-      html = inlineCriticalCss(html, theme);
-    }
+    html = injectAssets(html, { cssPlan, headExtra });
     const target = path.join(outDir, page.path);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, html, 'utf8');
@@ -38,16 +41,12 @@ export async function writeOutput({ outDir, pages, extraFiles, theme, config, cw
   }
   bar.done();
 
-  // 主题 CSS 走外链时必须真的落盘。inlineCriticalCss 会在体积超阈值时
-  // 改成 <link href="/assets/theme.css">，此前这条路径没有任何地方写文件 ——
+  // 外链样式表必须真的落盘。此前这条路径没有任何地方写文件 ——
   // 主题一旦超过 24 KB 就会得到一个 404 的样式表，页面裸奔且构建照报成功。
   // 阈值以内的主题（Inkstone 21 KB 等）走不到这里，所以这个洞一直没被发现。
-  // 只在本轮真的产出过外链时才写。跑之前先清掉上一轮的残留：theme 对象是
-  // 跨构建复用的，留着会让「另一个站点、阈值以内」的场景凭空多出一份 CSS。
-  if (theme.__externalCss) {
-    const cssPath = '/assets/theme.css';
-    extraFiles.push({ path: cssPath, content: theme.__externalCss });
-    theme.__externalCssUrl = cssPath;
+  for (const style of cssPlan.external) {
+    extraFiles.push({ path: style.publicPath, content: rewriteCssUrls(style.content, { base: cssPlan.base }) });
+    theme.__externalCss = true;
   }
 
   for (const file of extraFiles) {
@@ -83,6 +82,11 @@ export async function writeOutput({ outDir, pages, extraFiles, theme, config, cw
   }
 
   manifest.avgHtmlBytes = Math.round(manifest.html / Math.max(1, pages.length));
+  manifest.criticalCss = {
+    inlineBytes: cssPlan.inline.reduce((sum, s) => sum + s.bytes, 0),
+    external: cssPlan.external.map((s) => ({ path: s.publicPath, bytes: s.bytes })),
+    limit: cssPlan.limit,
+  };
 
   // ── 加速管线 ───────────────────────────────────────────────
   // 放在最后：它消费的是已经压好、已经完整的产物。
@@ -204,6 +208,75 @@ function estimatePrecompressedBytes(variants) {
 }
 
 /**
+ * 决定主题 CSS 的落位：内联还是外链。
+ *
+ * 选择的关键 CSS 在 `/head` 之前落位；超阈值的那几份走外链落到 `/assets/`。
+ * 这里**不做关键路径推断** —— 理由写在 asset-url.js 的 CRITICAL_CSS_LIMIT 上，
+ * 一句话：猜错首屏样式的代价（无样式内容闪一下）远大于多内联几 KB。
+ */
+export function planStyles(theme, config) {
+  const base = String(config?.site?.basePath ?? '').replace(/\/+$/, '');
+  const enabled = config?.perf?.criticalCSS !== false;
+  const limit = Number(config?.perf?.criticalCssLimit ?? CRITICAL_CSS_LIMIT);
+
+  if (!enabled) {
+    // 关掉内联就整份外链：合成一个文件，而不是每个 CSS 一个请求。
+    return {
+      base,
+      limit,
+      vars: '',
+      inline: [],
+      external: [{ name: 'theme.css', publicPath: '/assets/theme.css', content: theme.styles.map((s) => s.content).join('\n'), bytes: 0 }],
+    };
+  }
+
+  const { inline, external } = splitCriticalStyles(theme.styles, { limit });
+  // 主题可能把样式拆成 3 个文件（main / typography / print），
+  // 每个都单独外链就是 3 个请求。合成一份是纯收益：它们总是一起用。
+  const merged = external.length
+    ? [{ name: 'theme.css', publicPath: '/assets/theme.css', content: external.map((s) => s.content).join('\n'), bytes: external.reduce((sum, s) => sum + s.bytes, 0) }]
+    : [];
+  return { base, limit, vars: '', inline, external: merged };
+}
+
+/**
+ * `<head>` 尾部要注入的东西：资源提示 + 外链样式 + 变量覆盖。
+ *
+ * 顺序是硬约束，写在这里而不是散在模板里：
+ *   1. 变量覆盖块（themeVars）必须排在**内联主题 CSS 之后** —— 两者选择器
+ *      都是同权重的 `:root`，谁后写谁生效。放前面会被主题 CSS 里那套内置
+ *      默认值盖掉，于是「用户改了主色却不生效」。
+ *   2. 内联 CSS 必须排在主题 CSS 之前，否则主题默认值会盖掉变量覆盖。
+ */
+function buildHeadExtra(cssPlan, config) {
+  const preconnect = collectPreconnect([config?.site?.url], { siteUrl: config?.site?.url });
+  const hintParts = [];
+  if (config?.perf?.preconnect !== false) {
+    hintParts.push(renderResourceHints({ preconnect }));
+  }
+  if (cssPlan.external.length) {
+    hintParts.push(cssPlan.external.map((s) => `<link rel="stylesheet" href="${s.publicPath}" />`).join('\n'));
+  }
+  return hintParts.filter(Boolean).join('\n');
+}
+
+/** 把 CSS 与 head 附加内容落进页面。 */
+export function injectAssets(html, { cssPlan, headExtra }) {
+  const blocks = [];
+  if (cssPlan.inline.length) {
+    const css = cssPlan.inline.map((s) => rewriteCssUrls(s.content, { base: cssPlan.base })).join('\n');
+    blocks.push(`<style>${css}</style>`);
+  }
+  if (headExtra) blocks.push(headExtra);
+  // 变量覆盖块（themeVarsOverride / customCSS）必须排在**最后** ——
+  // 它与主题 CSS 的选择器同权重，谁后写谁生效。放前面就会出现
+  // 「用户改了主色却不生效」，而且从产物里很难看出是谁盖的。
+  if (cssPlan.vars) blocks.push(cssPlan.vars);
+  if (!blocks.length) return html;
+  return html.replace('</head>', `${blocks.join('\n')}\n</head>`);
+}
+
+/**
  * HTML 压缩：只做安全变换（去注释、折叠缩进）。刻意不压缩 <pre> 与 <code>
  * 内部 —— 那会破坏代码块里刻意保留的空白。
  */
@@ -224,23 +297,4 @@ export function finalizeHtml(html, config) {
   out = out.replace(/\n{2,}/g, '\n');
   out = out.replace(/\u0000BLK(\d+)\u0000/g, (_, idx) => blocks[Number(idx)]);
   return out.trim();
-}
-
-/**
- * 关键 CSS 内联。按整份样式表内联，是因为内置主题的 CSS 本身就小于
- * 一个 RTT 的收益阈值；主题 CSS 超过阈值时退回外链，避免首屏 HTML 膨胀。
- *
- * 变量覆盖块（themeVars）必须排在内联主题 CSS **之后** —— 两者选择器都是
- * 同权重的 :root，谁后写谁生效。放在前面会被主题 CSS 里那套内置默认值盖掉，
- * 于是「用户改了主色却不生效」。
- */
-function inlineCriticalCss(html, theme) {
-  const css = theme.styles.map((s) => s.content).join('\n');
-  const vars = theme.__varsOverride ?? '';
-  if (Buffer.byteLength(css) > 24 * 1024) {
-    // 交给写盘阶段落成 /assets/theme.css（见 writeOutput 里的 __externalCss）。
-    theme.__externalCss = css;
-    return html.replace('</head>', `<link rel="stylesheet" href="/assets/theme.css" />${vars}\n</head>`);
-  }
-  return html.replace('</head>', `<style>${css}</style>${vars}\n</head>`);
 }

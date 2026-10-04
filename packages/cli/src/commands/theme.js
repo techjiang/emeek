@@ -131,7 +131,7 @@ function TEMPLATE(name) {
       author: 'You',
       description: `${name} 主题`,
       entryLayout: 'index',
-      layouts: ['index', 'post'],
+      layouts: ['index', 'post', 'archive', 'tags', 'about', '404', 'search'],
       features: ['dark-mode', 'light-mode'],
       config: {
         colors: {
@@ -212,6 +212,104 @@ function TEMPLATE(name) {
         </article>
     </main>
     {% include "footer" %}
+</body>
+</html>
+`,
+    'layouts/archive.html': `<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>{% include "head" %}</head>
+<body class="layout-archive">
+    {% include "header" %}
+    <main class="site-main">
+        <h1>归档</h1>
+        {% for group in groups %}
+        <section>
+            <h2>{{ group.year }}</h2>
+            <ul>{% for post in group.posts %}<li><time datetime="{{ post.date }}">{{ post.dateFormatted }}</time> <a href="{{ post.url }}">{{ post.title }}</a></li>{% endfor %}</ul>
+        </section>
+        {% endfor %}
+    </main>
+    {% include "footer" %}
+</body>
+</html>
+`,
+    'layouts/tags.html': `<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>{% include "head" %}</head>
+<body class="layout-tags">
+    {% include "header" %}
+    <main class="site-main">
+        <h1>标签</h1>
+        <div class="tag-cloud">
+            {% for tag in tags %}<a class="tag" href="{{ tag.url }}">#{{ tag.name }} <span>{{ tag.count }}</span></a>{% endfor %}
+        </div>
+    </main>
+    {% include "footer" %}
+</body>
+</html>
+`,
+    'layouts/about.html': `<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>{% include "head" %}</head>
+<body class="layout-about">
+    {% include "header" %}
+    <main class="site-main">
+        <h1>关于</h1>
+        <div class="prose">{{{ content }}}</div>
+    </main>
+    {% include "footer" %}
+</body>
+</html>
+`,
+    'layouts/404.html': `<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>{% include "head" %}</head>
+<body class="layout-404">
+    {% include "header" %}
+    <main class="site-main">
+        <h1>404</h1>
+        <p>找不到这个页面。<a href="/">回首页</a></p>
+    </main>
+    {% include "footer" %}
+</body>
+</html>
+`,
+    'layouts/search.html': `<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+    {% if searchInlineIndex %}<script type="application/json" id="search-index-data">{{{ searchInlineIndex }}}</script>{% endif %}
+</head>
+<body class="layout-search">
+    {% include "header" %}
+    <main class="site-main">
+        <h1>搜索</h1>
+        {# 无 JS 兜底：form 直接 GET 到本页；有脚本时由脚本接管 #}
+        <form id="search-form" class="search-form" action="{{ searchPageUrl }}" method="get" role="search">
+            <input id="search-input" class="search-input" type="search" name="q" placeholder="搜索文章…" autocomplete="off" autofocus>
+            <button type="submit" class="search-submit">搜索</button>
+            <ul id="search-suggest" class="search-suggest" role="listbox" hidden></ul>
+        </form>
+        <div id="search-history" class="search-history"></div>
+        <details class="search-filters" open>
+            <summary>筛选</summary>
+            <div class="filter-grid">
+                <label>分类<select id="filter-category"><option value="">全部</option>{% for c in searchFacets.categories %}<option value="{{ c.value }}">{{ c.value }}（{{ c.count }}）</option>{% endfor %}</select></label>
+                <label>标签<select id="filter-tag"><option value="">全部</option>{% for t in searchFacets.tags %}<option value="{{ t.value }}">{{ t.value }}（{{ t.count }}）</option>{% endfor %}</select></label>
+                <label>起始日期<input id="filter-from" type="date"></label>
+                <label>结束日期<input id="filter-to" type="date"></label>
+                <label>排序<select id="filter-sort"><option value="relevance">相关度</option><option value="date">最新</option><option value="oldest">最旧</option></select></label>
+            </div>
+        </details>
+        <p id="search-count" class="search-count" aria-live="polite"></p>
+        <div id="search-results" class="search-results"><p class="search-hint">输入关键词开始搜索。</p></div>
+    </main>
+    {% include "footer" %}
+    <script>
+      window.__EMEEEK_SEARCH_INDEX__ = null;
+      (function () { var el = document.getElementById('search-index-data'); if (el) { try { window.__EMEEEK_SEARCH_INDEX__ = JSON.parse(el.textContent); } catch (e) {} } })();
+    </script>
+    <script>{{{ searchScript }}}</script>
 </body>
 </html>
 `,

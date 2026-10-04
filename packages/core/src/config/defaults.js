@@ -50,10 +50,115 @@ export function defaultConfig() {
        */
       switcher: null,
     },
-    search: { enabled: true, fuzzy: true, maxResults: 10 },
-    seo: { sitemap: true, robots: true, openGraph: true, structuredData: true, canonical: true },
-    feed: { enabled: true, limit: 20 },
-    perf: { lazyLoading: true, criticalCSS: true },
+    /**
+     * 搜索配置。
+     *
+     * gzipBudget  索引 gzip 后的字节上限。超了默认让构建失败 ——
+     *             索引跟着页面下载，发一个几 MB 的索引给每个访客
+     *             与「搜索是增强」自相矛盾。要放宽就同时设 allowOverBudget。
+     * indexPath   索引发布路径。
+     * suggest     输入联想条数上限。
+     * fuzzy       对 ≥4 字 CJK 词元做编辑距离 1 展开。
+     */
+    search: {
+      enabled: true,
+      fuzzy: true,
+      maxResults: 10,
+      suggest: 8,
+      indexPath: '/search-index.json',
+      gzipBudget: 512000,
+      allowOverBudget: false,
+      /** 搜索页路径。目录形式（/search/）比 /search.html 更适合带查询参数。 */
+      pagePath: '/search/',
+      /** 索引内联上限（字节）。超过就走外链，避免所有页面都变胖。 */
+      inlineLimit: 65536,
+    },
+    /**
+     * SEO 配置。
+     *
+     * sitemap / robots / openGraph / structuredData / canonical
+     *             各自的总开关。关掉任何一项都会让对应产物消失 ——
+     *             但**默认全开**，因为「被搜索引擎找到」是博客的默认期待。
+     * defaultImage 站点级社交卡片兜底图（文章没写 cover 时用它）。
+     *             不设时文章页不输出 og:image —— 空 og:image 会让
+     *             部分平台抓到一张白图，比没有更糟。
+     * robots      false 整份不产出；对象形式支持 { disable, custom } 追加规则。
+     * authorUrl   作者主页（结构化数据里的 author.url）。
+     */
+    seo: {
+      sitemap: true,
+      robots: true,
+      openGraph: true,
+      structuredData: true,
+      canonical: true,
+      defaultImage: null,
+      authorUrl: null,
+    },
+    /**
+     * Feed 配置。
+     *
+     * fullContent  false 时只发摘要（阅读器列表页用），true 时发正文全文。
+     *              全文会让 feed 体积大很多 —— 对「订阅」是好事，
+     *              对带宽不一定是。默认关。
+     * categories   只要这些分类的文章（空数组 = 全部）。
+     */
+    feed: { enabled: true, limit: 20, fullContent: false, categories: [] },
+    /**
+     * 性能配置。
+     *
+     * 每一项默认都打开「安全的那一侧」：
+     *  lazyLoading  首屏之外的图片懒加载。关掉只会在长文里多下几张图，没有场景需要关。
+     *  criticalCSS  主题 CSS 内联进 <head>。超过 criticalCssLimit 的那几份走外链。
+     *  prefetch     预取下一篇可能读的文章（只做文章页）。
+     *               关掉它的场景是「多页部署、流量敏感」—— 预取会让 PV 之外的带宽上升。
+     *  preconnect   站内 origin 的预连接。自托管单域时几乎无效，但无害。
+     *  responsiveImages
+     *               响应式图片。默认 **关** —— 它需要项目自己提供候选集
+     *               （见 imageVariants），没有候选集时生成 srcset 就是编造地址。
+     *               打开它必须同时给 imageVariants，否则构建会警告并跳过。
+     *  imageVariants
+     *               已知的图片候选宽度：{ '/assets/cover.png': [{ width: 400 }, { width: 800 }] }。
+     *               只写你**确实生成了**的尺寸，srcset 里出现的每个地址都会被请求。
+     *  criticalCssLimit
+     *               单个 CSS 文件的内联上限（字节）。超过就走外链。
+     */
+    perf: {
+      lazyLoading: true,
+      criticalCSS: true,
+      criticalCssLimit: 24 * 1024,
+      prefetch: true,
+      preconnect: true,
+      responsiveImages: false,
+      imageVariants: {},
+    },
+    /**
+     * PWA 配置。**默认关闭。**
+     *
+     * 为什么默认关：Service Worker 是本站里唯一「装上之后还会影响后续访问」
+     * 的东西 —— 页面上的 bug 刷新就没了，SW 的 bug 会让读者看到旧页面。
+     * 「零配置即可运行」的代价不该是「零配置就给访客装一个 SW」。
+     *
+     * 打开后产出三样东西：
+     *   /manifest.webmanifest  应用身份（名称 / 图标 / start_url）
+     *   /sw.js                 离线缓存（导航 network-first，静态资源 SWR）
+     *   /offline.html          断网回落页
+     *
+     * icons        项目自己提供的图标地址表：{ "192": "/assets/i192.png", "512": "...", maskable: "..." }。
+     *              只声明**确实存在**的档位 —— manifest 里的每个图标都会在安装时被校验。
+     * precachePosts 预缓存的文章篇数。默认 5。全站预缓存 = 给每个访客加一次全站下载。
+     * offlinePath  离线页地址。
+     * installPrompt 安装提示横幅。默认关 —— 第一次访问就弹安装横幅是最常被抱怨的 Web 行为。
+     */
+    pwa: {
+      enabled: false,
+      themeColor: '#ffffff',
+      backgroundColor: '#ffffff',
+      display: 'standalone',
+      icons: {},
+      precachePosts: 5,
+      offlinePath: '/offline.html',
+      installPrompt: false,
+    },
     plugins: [],
     /**
      * 部署配置。

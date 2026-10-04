@@ -13,10 +13,10 @@ import { sanitizeUrl } from './sanitize-url.js';
 import { sanitizeHtml } from './sanitize-html.js';
 
 export function renderMarkdown(src, options = {}) {
-  const { allowHtml = false, resolveImage = (url) => url, resolveLink = (url) => url, headingIds = new Map(), wikiLink } = options;
+  const { allowHtml = false, resolveImage = (url) => url, resolveLink = (url) => url, headingIds = new Map(), wikiLink, demoteH1 = true } = options;
   const text = String(src).replace(/\r\n?/g, '\n');
   const ctx = {
-    allowHtml, resolveImage, resolveLink, headingIds, wikiLink,
+    allowHtml, resolveImage, resolveLink, headingIds, wikiLink, demoteH1,
     headingSeq: new Map(), footnotes: new Map(), footnoteOrder: [],
     // 脚注 id 前缀取内容指纹而不是随机数。
     // 随机数让同一个输入两次渲染产出不同 HTML —— 构建、预览、增量渲染、
@@ -44,6 +44,20 @@ function renderBlocks(text, ctx) {
   const out = [];
   let footnotesHtml = '';
   let i = 0;
+  /**
+   * 正文里的一级标题降级为 h2。
+   *
+   * 两个理由，都不是审美：
+   *  1. 页面主标题（文章标题）由布局输出为 <h1>。正文再出一个 <h1>，
+   *     一页就有两个 —— 搜索引擎无法判断哪个是页面主题，
+   *     无障碍工具也会把文档大纲读成两棵树。
+   *  2. 笔记类内容经常在正文里重写一遍标题（front-matter 里已经有）。
+   *     这种情况下用户会看到同一个标题印两遍。
+   *
+   * 降级而不是删除：正文里的一级标题是作者明确的层级意图，
+   * 删掉会丢信息、也会让 toc 少一层。
+   */
+  const demoteH1 = ctx.demoteH1 !== false;
 
   while (i < lines.length) {
     const line = lines[i];
@@ -52,7 +66,7 @@ function renderBlocks(text, ctx) {
     if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { out.push('<hr />'); i += 1; continue; }
     if (/^#{1,6}\s/.test(line)) {
       const [, hashes, rawTitle] = /^(#{1,6})\s+(.*)$/.exec(line);
-      const level = hashes.length;
+      const level = demoteH1 && hashes.length === 1 ? 2 : hashes.length;
       const title = renderInline(rawTitle.replace(/\s+#+\s*$/, ''), ctx);
       out.push(`<h${level} id="${slugify(plain(rawTitle), ctx)}">${title}</h${level}>`);
       i += 1;
@@ -229,7 +243,14 @@ function renderInline(text, ctx) {
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, label, url, title) => {
     const safe = sanitizeUrl(ctx.resolveLink(url));
     if (safe === null) return keep(`<span class="unsafe-url">${escapeHtml(label)}</span>`);
-    return keep(`<a href="${escapeHtml(safe)}"${title ? ` title="${escapeHtml(title)}"` : ''}>${renderInline(label, ctx)}</a>`);
+    // 外链一律 rel="noopener noreferrer"。
+    //   noopener  —— window.opener 是跨域钓鱼的入口（目标页可改写本站标签页）
+    //   noreferrer —— 不把本站 URL 当 Referer 送给第三方
+    // 站内链接（相对路径 / 同源绝对地址）不加：加上会让分析工具丢掉来源，
+    // 而站内导航本来就没有这两个风险。
+    const external = /^https?:\/\//i.test(safe);
+    const rel = external ? ' rel="noopener noreferrer"' : '';
+    return keep(`<a href="${escapeHtml(safe)}"${title ? ` title="${escapeHtml(title)}"` : ''}${rel}>${renderInline(label, ctx)}</a>`);
   });
   // 双向链接 [[文章标题]] / [[标题|别名]]
   out = out.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) =>

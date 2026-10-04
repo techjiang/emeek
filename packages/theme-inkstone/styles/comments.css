@@ -1,0 +1,59 @@
+/* Inkstone 评论区 —— 信笺与批注的语汇。
+   每条评论像一张信笺（浅色底、赭石细边），头像不切圆而用方形，
+   作者标记取印章红的小方块。与主站的留白与竖细线一致。 */
+
+.comments { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
+
+.comments-title {
+  font-family: var(--font-heading);
+  font-size: 1.05rem; font-weight: 600; margin: 0 0 1.25rem; color: var(--primary);
+  letter-spacing: 0.05em;
+}
+/* 标题左侧的赭石短竖线 —— 与主站的小节标题同一套装饰。 */
+.comments-title::before {
+  content: ""; display: inline-block; width: 3px; height: 0.95em;
+  background: var(--accent); margin-right: 0.5rem; vertical-align: -0.1em;
+}
+
+.comments-status { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 1rem; }
+.comments-status[data-kind="error"] { color: var(--seal-red); }
+
+.comments-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: 0.85rem; }
+
+.c-item {
+  padding: 1rem 1.15rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-light);
+}
+.c-item:hover { border-left-color: var(--accent); }
+
+.c-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+/* 方形头像：圆形头像与主站的方章语汇不搭。 */
+.c-avatar { width: 30px; height: 30px; flex: none; border: 1px solid var(--border); }
+.c-author { font-family: var(--font-heading); font-weight: 600; font-size: 0.92rem; color: var(--primary); text-decoration: none; }
+.c-author:hover { color: var(--accent); }
+.c-badge {
+  font-size: 0.7rem; padding: 0.15rem 0.4rem; letter-spacing: 0.08em;
+  background: var(--seal-red); color: var(--bg-soft);
+}
+.c-time { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.c-body { font-size: 0.94rem; color: var(--text); line-height: 1.85; }
+.c-body p { margin: 0 0 0.6rem; }
+.c-body p:last-child { margin-bottom: 0; }
+.c-mention, .c-link { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-light); }
+.c-mention:hover, .c-link:hover { border-bottom-color: var(--accent); }
+
+.c-reactions { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.c-reaction {
+  font-size: 0.78rem; padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border); color: var(--text-secondary); background: var(--bg);
+}
+
+.c-permalink { display: inline-block; margin-top: 0.55rem; font-size: 0.78rem; color: var(--text-dim); letter-spacing: 0.06em; }
+.c-permalink:hover { color: var(--accent); }
+
+.comments-cta { font-size: 0.88rem; margin: 0; color: var(--text-secondary); }
+.comments-cta a { color: var(--accent); border-bottom: 1px solid var(--accent-light); text-decoration: none; }
+.comments-cta-note { color: var(--text-dim); font-size: 0.82rem; }

@@ -1,0 +1,4 @@
+{# 资源提示：预取下一篇可能读的文章。
+   与 seo.html 同一条理由 —— 由引擎算，主题只摆放。
+   放在 head 末尾：prefetch 是低优先级提示，写太靠前会与首屏资源抢解析时间。 #}
+{% if prefetch.length %}{% for url in prefetch %}<link rel="prefetch" href="{{ url }}" as="document" />{% endfor %}{% endif %}

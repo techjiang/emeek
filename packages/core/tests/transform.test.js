@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildToc, addAnchorLinks, stripTags } from '../src/pipeline/transform/toc.js';
 import { makeExcerpt, readingTime, countWords } from '../src/pipeline/transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks, extractWikiTargets } from '../src/pipeline/transform/links.js';
-import { decorateImages, createImageResolver } from '../src/pipeline/transform/images.js';
+import { decorateImages, createImageResolver, deriveAlt } from '../src/pipeline/transform/images.js';
 import { buildSitemap, buildRss, buildRobots, buildSearchIndex, truncate, absolutize } from '../src/pipeline/transform/seo.js';
 
 test('从 HTML 抽取目录，跳过一级标题', () => {
@@ -91,11 +91,55 @@ test('图片地址归一化：外链原样、站内补域名', () => {
   assert.equal(resolve('img/x.png'), 'https://a.com/img/x.png');
 });
 
-test('decorateImages 补齐懒加载与 alt', () => {
-  const html = decorateImages('<img src="a.png" />');
-  assert.match(html, /loading="lazy"/);
-  assert.match(html, /decoding="async"/);
-  assert.match(html, /alt=""/);
+test('decorateImages：首屏图 eager，其余懒加载', () => {
+  // 第一张图给 eager + fetchpriority=high：它通常就是 LCP 那张，
+  // 给它 loading="lazy" 会让「最快内容绘制」反而更慢。
+  const one = decorateImages('<img src="a.png" />');
+  assert.match(one, /loading="eager"/);
+  assert.match(one, /fetchpriority="high"/);
+  assert.match(one, /decoding="async"/);
+
+  const many = decorateImages('<img src="a.png" /><img src="b.png" /><img src="c.png" />');
+  const lazy = many.match(/loading="lazy"/g) ?? [];
+  assert.equal(lazy.length, 2, '首屏之外的两张图应懒加载');
+  assert.equal((many.match(/fetchpriority="high"/g) ?? []).length, 1, '只有首屏图提优先级');
+});
+
+test('decorateImages：alt 从文件名推导，并标记为推导值', () => {
+  const html = decorateImages('<img src="/assets/cover-photo.jpg" />');
+  assert.match(html, /alt="cover photo"/);
+  // data-alt-inferred 让 SEO 自检能区分「作者写的」与「引擎猜的」——
+  // 悄悄替作者编 alt 再自己给自己打勾，是自欺。
+  assert.match(html, /data-alt-inferred="true"/);
+});
+
+test('decorateImages：空 alt 必须被兜底替换 —— `![]()` 不是「作者写过了」', () => {
+  // Markdown 渲染器对 `![](...)` 会写出 alt=""，而空 alt 让图片对
+  // 屏幕阅读器与图片搜索**完全消失**。
+  // 只判断「有没有 alt 属性」会把这个空串当成作者的决定，
+  // 兜底永远不触发 —— 这是最初真实存在的缺陷。
+  const html = decorateImages('<img src="/assets/my-photo.png" alt="" />');
+  assert.doesNotMatch(html, /alt=""/);
+  assert.match(html, /alt="my photo"/);
+  assert.match(html, /data-alt-inferred="true"/);
+});
+
+test('decorateImages：仅空白的 alt 也算没写', () => {
+  const html = decorateImages('<img src="/assets/x.png" alt="   " />');
+  assert.doesNotMatch(html, /alt="   "/);
+  assert.match(html, /alt="x"/);
+});
+
+test('decorateImages：作者写了 alt 就完全不动它', () => {
+  const html = decorateImages('<img src="x.png" alt="作者写的说明" />');
+  assert.match(html, /alt="作者写的说明"/);
+  assert.doesNotMatch(html, /data-alt-inferred/);
+});
+
+test('deriveAlt 从地址推导可读文本', () => {
+  assert.equal(deriveAlt('src="/a/b/design-notes_v2.png"'), 'design notes v2');
+  assert.equal(deriveAlt('src="https://x.com/%E4%B8%AD%E6%96%87.png"'), '中文');
+  assert.equal(deriveAlt(''), '');
 });
 
 test('sitemap 包含全部条目与最后修改时间', () => {

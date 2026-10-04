@@ -2,8 +2,8 @@
     <div class="footer-inner">
         <p>© {{ year }} {{ site.author }} · {{ site.title }}</p>
         <p class="footer-meta">
-            Powered by <a href="https://github.com/Meekdai/Gmeek" rel="noopener">Gmeek</a> 理念 · Emeek
-            {% if config.feed.enabled != false %}<span class="dot">·</span><a href="/rss.xml">RSS</a>{% endif %}
+            Powered by <a href="https://github.com/Meekdai/Gmeek" rel="noopener noreferrer">Gmeek</a> 理念 · Emeek
+            {% if config.feed.enabled != false %}<span class="dot">·</span><a class="feed-link" href="/rss.xml" title="订阅 RSS" aria-label="订阅 RSS"><svg class="feed-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg><span class="feed-label">RSS</span></a><span class="dot">·</span><a class="feed-link" href="/atom.xml" title="订阅 Atom" aria-label="订阅 Atom"><svg class="feed-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg><span class="feed-label">Atom</span></a>{% endif %}
             {% if config.seo.sitemap != false %}<span class="dot">·</span><a href="/sitemap.xml">Sitemap</a>{% endif %}
         </p>
     </div>
@@ -13,3 +13,8 @@
 {{{ themeSwitcher }}}
 {% if themeJS %}<script>{{{ themeJS }}}</script>{% endif %}
 {{{ themeSwitcherScript }}}
+{% include "jsonld" %}
+{# Service Worker 注册：放在 body 末尾，注册本身在 load 之后跑。
+   它与页面渲染无关，抢占首屏带宽没有任何收益。 #}
+{% if pwa %}<script>{{{ pwa.registerScript }}}</script>{% endif %}
+{% if pwa %}{% if pwa.installScript %}<script>{{{ pwa.installScript }}}</script>{% endif %}{% endif %}

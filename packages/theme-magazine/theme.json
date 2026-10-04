@@ -13,7 +13,7 @@
     "tags",
     "about",
     "404"
-  ],
+  , "search"],
   "features": [
     "dark-mode",
     "light-mode",

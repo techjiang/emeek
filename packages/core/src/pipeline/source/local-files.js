@@ -58,11 +58,37 @@ async function readPost(file, cwd, sourceDir) {
     draft: data.draft === true || data.publish === false,
     pinned: data.pin === true || data.pinned === true,
     cover: data.cover ?? data.image ?? null,
+    /**
+     * `issue: 42` —— 把本地文章挂到某个 GitHub Issue 的讨论上。
+     *
+     * 为什么需要它：评论存在 Issue 的评论区里（见 comments/index.js），
+     * 而 `local` 源的文章天然没有 Issue 编号。没有这个字段的话，
+     * 「本地写文章 + 用 GitHub 放评论」这个组合做不到 ——
+     * 而那恰恰是「不想把草稿放 GitHub、但想要评论区」的人最需要的东西。
+     *
+     * 只接受正整数。写成 `issue: abc` 时不报错也不生效 ——
+     * 报错会让「顺手把 issue 字段写错」变成整站构建失败，
+     * 而它只是一个可选字段。但也不静默当成 0（那会去请求 issue/0）。
+     */
+    issueNumber: normalizeIssueNumber(data.issue),
     raw: content,
     file: path.relative(cwd, file),
     sourceDir,
     source: 'local',
   };
+}
+
+/**
+ * `issue` front-matter → 正整数，或 null。
+ *
+ * 刻意不接受字符串数字以外的形式（`#42`、`issue-42` 都不行）——
+ * 宽松解析在这里没有收益：写错的人会得到一个「评论区不出现」的结果，
+ * 而不是「评论区指向了别的 Issue」。后者才是真正危险的。
+ */
+function normalizeIssueNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const number = typeof value === 'number' ? value : (/^\d+$/.test(String(value).trim()) ? Number(value) : NaN);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function deriveTitle(content) {

@@ -98,6 +98,17 @@ jobs:
       # 负向验证：「削弱防线 → 测试必须红」。
       # 一条防线如果削弱了测试还是绿的，它就没被测试守住，
       # 只是恰好写在那儿。这一步把每条防线的守护关系证明一遍。
+      # SEO 自检（P3-3a）。
+      #
+      # 为什么必须有这一步：SEO 元数据错了，页面看起来毫无异常 ——
+      # 重复的 canonical、JSON.parse 失败的 JSON-LD、丢了 og:image 的
+      # 社交卡片，这些在浏览器里全都不可见，只有搜索引擎和社交平台知道。
+      # 静态检查看不见它们，所以需要一条专门的线。
+      #
+      # 它会构建 4 套主题并逐页解析真实产物（真 JSON.parse，不是正则）。
+      - name: SEO 自检（4 套主题逐页）
+        run: pnpm check:seo
+
       - name: 负向验证（削弱防线必须让测试红）
         run: pnpm test:negative
 
@@ -131,6 +142,12 @@ jobs:
           for f in index.html 404.html archive.html tags.html about.html sitemap.xml rss.xml robots.txt search-index.json; do
             test -f "examples/minimal/dist/$f" || { echo "缺失产物：$f"; exit 1; }
           done
+          # P3-3a：SEO 产物必须真的写出来。
+          # 「引擎算好了但模板没渲染」是真实发生过的失败模式
+          # （headMeta 曾经传给了页面数据，4 套主题里一处都没引用）。
+          grep -q 'application/ld+json' "examples/minimal/dist/index.html" || { echo "首页缺 JSON-LD"; exit 1; }
+          grep -q '<link rel="canonical"' "examples/minimal/dist/index.html" || { echo "首页缺 canonical"; exit 1; }
+          grep -q 'og:title' "examples/minimal/dist/index.html" || { echo "首页缺 og:title"; exit 1; }
           echo "全部关键产物就绪"
 
       # 加速防线：指纹、预压缩、服务器片段必须在产物里。

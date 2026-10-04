@@ -87,18 +87,6 @@ a:hover { text-decoration: underline; }
 }
 .icon-button:hover { color: var(--accent); border-color: var(--accent); }
 
-/* ── 搜索 ── */
-.search-panel { max-width: 64rem; margin: 0 auto; padding: 0 1.25rem 1rem; }
-.search-panel input {
-  width: 100%; padding: 0.6rem 0.8rem; font-size: 1rem; font-family: inherit;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg-soft); color: var(--text);
-}
-.search-results { margin-top: 0.5rem; max-height: 60vh; overflow-y: auto; }
-.search-results a { display: block; padding: 0.5rem 0.25rem; border-bottom: 1px solid var(--border); color: var(--text); }
-.search-results a:hover { background: var(--bg-soft); text-decoration: none; }
-.search-results mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; }
-.search-empty { color: var(--text-dim); padding: 0.5rem 0.25rem; font-size: 0.9rem; }
 
 /* ── 布局 ── */
 .site-main { max-width: 64rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
@@ -222,22 +210,22 @@ html[data-theme="dark"] .tok-function { color: #79c0ff; }
   border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 2rem;
 }
 .toc-title { margin: 0 0 0.5rem; font-weight: 600; font-size: 0.9rem; }
-.toc ul, .sidebar-toc { list-style: none; padding: 0; margin: 0; }
-.toc li { margin: 0.2rem 0; font-size: 0.9rem; }
-.toc-level-3, .sidebar-toc .toc-level-3 { padding-left: 1rem; }
+.toc-list, .sidebar-toc { list-style: none; padding: 0; margin: 0; }
+.toc-item { margin: 0.2rem 0; font-size: 0.9rem; }
+.toc-item.toc-level-3, .sidebar-toc .toc-item.toc-level-3 { padding-left: 1rem; }
 
 /* 侧边栏 */
 .sidebar { font-size: 0.9rem; }
 .sidebar-block { margin-bottom: 2rem; }
 .sidebar-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 0.6rem; }
 .sidebar-toc { position: sticky; top: 5rem; max-height: calc(100vh - 7rem); overflow-y: auto; }
-.sidebar-toc li { margin: 0.3rem 0; }
+.sidebar-toc .toc-item { margin: 0.3rem 0; }
 .sidebar-toc a { color: var(--text-dim); }
 .sidebar-toc a:hover, .sidebar-toc a.active { color: var(--accent); text-decoration: none; }
 
 /* 阅读进度 */
 .reading-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 40; pointer-events: none; }
-.reading-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
+.reading-progress .reading-bar { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
 
 /* 归档 */
 .archive-year { margin-bottom: 2rem; }
@@ -294,4 +282,23 @@ html[data-theme="dark"] .tok-function { color: #79c0ff; }
   .site-nav { gap: 0.7rem; font-size: 0.85rem; }
   .site-nav a { white-space: nowrap; }
   .site-main { padding: 2rem 1rem; }
+}
+
+/* ── Feed 图标（页脚） ──
+   图标用 currentColor，所以跟随主题的链接色：hover 时变强调色，
+   与页脚其它链接行为一致，不需要为每个主题单独配色。 */
+.feed-link {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  color: inherit; text-decoration: none;
+}
+.feed-link:hover { color: var(--accent); }
+.feed-icon { flex: none; }
+.feed-label { font-size: inherit; }
+
+/* 无障碍工具类：视觉上隐藏、语义上保留。
+   首页的主标题、表单 label 都用它 —— 视觉可以不要，文档大纲不能没有。
+   放在 main.css 而不是 search.css：它是通用工具类，搜索页只是使用者之一。 */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }

@@ -92,9 +92,19 @@ describe('渲染链路：链接与图片', () => {
   });
 
   test('合法的外链与相对链接不受影响', () => {
-    assert.match(render('[a](https://a.example)'), /<a href="https:\/\/a\.example">/);
+    // 外链强制带 rel="noopener noreferrer"：
+    //   noopener  —— 关掉 window.opener 这条跨域改写标签页的路径
+    //   noreferrer —— 不把本站 URL 当 Referer 送给第三方
+    // 站内链接不加：加上会让分析工具丢掉来源，而站内本来没有这两个风险。
+    assert.match(render('[a](https://a.example)'), /<a href="https:\/\/a\.example" rel="noopener noreferrer">/);
     assert.match(render('[a](/posts/x.html)'), /<a href="\/posts\/x\.html">/);
     assert.match(render('[a](#p-1)'), /<a href="#p-1">/);
+  });
+
+  test('外链一律带 rel，内链一律不带', () => {
+    assert.doesNotMatch(render('[a](/posts/x.html)'), /rel=/);
+    assert.doesNotMatch(render('[a](#p-1)'), /rel=/);
+    assert.match(render('[a](http://a.example)'), /rel="noopener noreferrer"/);
   });
 
   test('resolveLink 返回危险地址时同样被拒（消毒在 resolve 之后）', () => {

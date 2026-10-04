@@ -12,7 +12,60 @@ const RULES = [
   { path: 'theme.name', type: 'string' },
   { path: 'theme.darkMode', type: 'string', check: (v) => ['auto', 'light', 'dark', 'toggle'].includes(v) || '只能是 auto / light / dark / toggle' },
   { path: 'feed.limit', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'feed.fullContent', type: 'boolean' },
+  { path: 'feed.categories', type: 'array' },
   { path: 'search.maxResults', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'search.suggest', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数' },
+  { path: 'search.gzipBudget', type: 'number', check: (v) => Number.isInteger(v) && v > 0 || '必须是正整数（字节）' },
+  { path: 'search.indexPath', type: 'string', check: (v) => v.startsWith('/') || '必须以 / 开头' },
+  { path: 'search.pagePath', type: 'string', check: (v) => v.startsWith('/') || '必须以 / 开头' },
+  { path: 'search.inlineLimit', type: 'number', check: (v) => Number.isInteger(v) && v >= 0 || '必须是非负整数（字节）' },
+  { path: 'seo.sitemap', type: 'boolean' },
+  { path: 'seo.robots', check: (v) => typeof v === 'boolean' || (typeof v === 'object' && v !== null) || '只能是布尔值或对象' },
+  { path: 'seo.openGraph', type: 'boolean' },
+  { path: 'seo.structuredData', type: 'boolean' },
+  { path: 'seo.canonical', type: 'boolean' },
+  { path: 'perf.lazyLoading', type: 'boolean' },
+  { path: 'perf.criticalCSS', type: 'boolean' },
+  { path: 'perf.prefetch', type: 'boolean' },
+  { path: 'perf.preconnect', type: 'boolean' },
+  { path: 'perf.responsiveImages', type: 'boolean' },
+  {
+    path: 'perf.criticalCssLimit',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v > 0) || '必须是正整数（字节）',
+  },
+  {
+    path: 'perf.imageVariants',
+    type: 'object',
+    check: (v) => Object.entries(v).every(([src, list]) => {
+      if (!Array.isArray(list)) return `「${src}」的候选集必须是数组`;
+      return list.every((item) => Number.isFinite(Number(item?.width)) && Number(item.width) > 0)
+        || `「${src}」的候选项必须带正数 width（只写你确实生成了的尺寸）`;
+    }) || '候选集格式不正确',
+  },
+  { path: 'pwa.enabled', type: 'boolean' },
+  {
+    path: 'pwa.display',
+    type: 'string',
+    check: (v) => ['standalone', 'minimal-ui', 'browser', 'fullscreen'].includes(v)
+      || '只能是 standalone / minimal-ui / browser / fullscreen',
+  },
+  { path: 'pwa.themeColor', type: 'string' },
+  { path: 'pwa.backgroundColor', type: 'string' },
+  { path: 'pwa.installPrompt', type: 'boolean' },
+  {
+    path: 'pwa.precachePosts',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v >= 0) || '必须是非负整数（篇）',
+  },
+  {
+    path: 'pwa.offlinePath',
+    type: 'string',
+    check: (v) => v.startsWith('/') || '必须以 / 开头',
+  },
+  // 部署目标枚举必须与 deploy/platforms.js 的注册表一致：多一个未注册的名字
+  // 只会在真正推送时才炸，那时产物已经在路上了。
   { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'rsync', 'docker', 'custom'].includes(v) || '不支持的部署目标' },
   { path: 'deploy.customDomain', type: 'string' },
   { path: 'deploy.verify', type: 'boolean' },
