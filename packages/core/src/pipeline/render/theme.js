@@ -64,7 +64,19 @@ async function loadThemeDir(dir, { themeConfig, themeConfigRuntime } = {}) {
     const source = await fs.readFile(file, 'utf8');
     partials.set(path.basename(file, '.html'), { source, compiled: compile(source), file });
   }
-  for (const file of await listFiles(path.join(dir, 'styles'))) {
+  /**
+   * 样式表按**文件名排序**拼接 —— 顺序是确定的，且与文件系统返回顺序无关。
+   *
+   * 为什么要显式 sort：`readdir` 的顺序在语义上不保证（不同文件系统、
+   * 不同 Node 版本可能不同）。不排序时「同一份主题在本地与 CI 上产出
+   * 不同的 CSS 顺序」是可能的，而 CSS 顺序决定了同权重规则谁生效 ——
+   * 表现成「本地看着对、线上看着错」，且极难往回查。
+   *
+   * 约定：`main.css` 是基底，`<模块>.css`（如 comments.css / search.css）
+   * 按字母序叠加。同权重覆盖要靠**选择器特异性**，不能靠文件顺序 ——
+   * 靠顺序的样式在别人改个文件名之后就会悄悄失效。
+   */
+  for (const file of (await listFiles(path.join(dir, 'styles'))).sort()) {
     if (file.endsWith('.css')) styles.push({ name: path.basename(file), content: await fs.readFile(file, 'utf8') });
   }
   for (const file of await listFiles(path.join(dir, 'scripts'))) {

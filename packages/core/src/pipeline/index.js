@@ -4,6 +4,7 @@ import { loadConfig, resolvePluginSpec } from '../config/loader.js';
 import { loadPosts } from './source/index.js';
 import { renderMarkdown } from './parse/markdown.js';
 import { buildToc, renderToc, addAnchorLinks } from './transform/toc.js';
+import { buildReadingNav, renderReadingToc, renderReadingProgress, READING_CLIENT } from '../reading/index.js';
 import { makeExcerpt, readingTime, countWords } from './transform/excerpt.js';
 import { buildWikiLinkIndex, resolveWikiLink, computeBacklinks } from './transform/links.js';
 import { decorateImages, createImageResolver } from './transform/images.js';
@@ -15,9 +16,16 @@ import {
 } from './transform/seo.js';
 import { buildRss, buildAtom } from '../feed/build.js';
 import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
+import { resolveCommentTarget, renderCommentsShell } from '../comments/index.js';
+import { loadCommentsClient } from '../comments/ui.js';
+import { buildManifest, ICON_SIZES } from './pwa/manifest.js';
+import { buildServiceWorker, cacheVersion, cacheName } from './pwa/service-worker.js';
+import { buildOfflinePage, buildRegisterScript, buildInstallPrompt, buildDisplayModeScript } from './pwa/offline.js';
 import { loadSearchClient } from '../search/ui/index.js';
 import { loadTheme, renderLayout } from './render/theme.js';
 import { buildInjections } from '../theme/inject.js';
+import { planPrefetch, collectPreconnect, isHintable, renderResourceHints } from './transform/hints.js';
+import { decorateResponsive, buildSrcset } from './transform/responsive.js';
 import { loadPlugins } from '../plugin/loader.js';
 import { createHookRunner } from '../plugin/hooks.js';
 import { writeOutput } from './render/output.js';
@@ -59,9 +67,9 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   // 主题注入片段：变量块 / 自定义 CSS / 自定义 head·footer / 首帧防闪烁脚本。
   // 安全过滤在这一步完成（见 theme/inject.js），模板只负责摆放，不负责清洗。
   const injections = buildInjections(theme, config.theme ?? {});
-  // 变量 + 自定义 CSS 必须写在内联主题 CSS 之后，所以挂到 theme 上，
-  // 由 output.js 在 `</head>` 前统一落位（见 inlineCriticalCss）。
-  theme.__varsOverride = injections.headStyle ? `\n${injections.headStyle}` : '';
+  // 变量 + 自定义 CSS 是「内联 CSS 之后、</head> 之前」的一块。
+  // 顺序理由见 output.js 的 planStyles —— 两者选择器都是同权重的 :root。
+  theme.__varsOverride = injections.headStyle ?? '';
 
   // ── 2. 预处理：先定 URL 与 wiki 链接索引，正文渲染时需要用到 ──
   const urlFor = (post) => `/${config.postPath ?? 'posts'}/${post.slug}.html`;
@@ -70,6 +78,26 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   const wikiIndex = buildWikiLinkIndex(published, { urlPattern: (post) => post.url });
   const siteData = { ...config.site };
   const imageResolver = createImageResolver({ baseUrl: config.site.url, assetBase: '/assets' });
+
+  /**
+   * 主题的长期版面事实，只算一次。
+   *
+   * 为什么要读布局源码而不是读 theme.json 的 `sidebar` 配置项：
+   * 那个配置项是**用户可覆盖的开关**（用户可以关掉侧边栏），
+   * 而我们要知道的是「布局里到底有没有 include sidebar 的位置」——
+   * 用户关掉侧边栏时，那片空间仍然存在（只是空的），目录不该因此
+   * 从侧栏跑到正文上方。
+   *
+   * 读源码做判据看起来粗糙，但它是**布局的事实**，不是我们的猜测；
+   * 而且判据（有没有 include "sidebar"）是可枚举的、不会随主题改版漂移。
+   */
+  const postLayoutSource = theme.layouts.get('post')?.source ?? '';
+  const layoutFacts = {
+    hasSidebar: /include\s+["']sidebar["']/.test(postLayoutSource),
+    // 主题是否**已经**自己渲染了目录（老主题在正文上方塞了 tocHtml）。
+    // 这种主题不该再拿到一份目录 —— 那就是重复渲染。
+    rendersOwnToc: /tocHtml/.test(postLayoutSource),
+  };
 
   // ── 3. 渲染 Markdown + 内容级转换 ──────────────────────────────
   const posts = [];
@@ -85,16 +113,45 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     });
 
     // 顺序有意义：先抽目录再插锚点按钮，否则目录文字会带上锚点的 “#”。
-    const decorated = decorateImages(html, { lazy: config.perf?.lazyLoading !== false });
+    const decorated = decorateImages(html, {
+      lazy: config.perf?.lazyLoading !== false,
+      // 响应式图片默认关：没有候选集时生成 srcset 就是编造地址。
+      // 候选集来自 config.perf.imageVariants（作者声明「这些尺寸确实存在」）。
+      responsive: config.perf?.responsiveImages === true,
+      variantsBySrc: config.perf?.imageVariants ?? {},
+    });
     const toc = buildToc(decorated, { minLevel: 2, maxLevel: config.theme?.tocMaxLevel ?? 3 });
     const withAnchors = addAnchorLinks(decorated);
     const text = post.raw;
+
+    /**
+     * 长文导航的落位。
+     *
+     * P3-3c 之前这里有真实的重复渲染：`tocHtml`（Phase 1 的产物）
+     * 被塞在正文上方，而 P3-1 加的侧边栏又从 `toc` 重新渲染了一份 ——
+     * 同一份目录在 3 套主题的长文页上出现两次，内容与锚点完全一样。
+     *
+     * 现在由 buildReadingNav 决定**放一处**：
+     *   · 布局有侧栏位置 → 放侧栏（正文上方不再重复）
+     *   · 布局没有侧栏、但它自己写了 tocHtml → 保持原样（主题自治）
+     *   · 布局没有侧栏也没有 tocHtml → 引擎给正文上方那一份
+     */
+    const reading = buildReadingNav({
+      toc,
+      hasSidebar: layoutFacts.hasSidebar,
+      minItems: Number(config.theme?.tocMinItems ?? 3),
+    });
 
     const enriched = {
       ...post,
       html: withAnchors,
       toc,
-      tocHtml: renderToc(toc, '目录'),
+      readingNav: reading,
+      readingTocHtml: reading.placement === 'inline' ? renderReadingToc(reading) : '',
+      readingProgressHtml: renderReadingProgress(reading),
+      // 保留 tocHtml 给「自己会渲染目录」的主题（向后兼容，但只在
+      // 主题真的会用它时才产出内容）。
+      tocHtml: layoutFacts.rendersOwnToc ? renderToc(toc, '目录') : '',
       description: post.description ?? makeExcerpt(withAnchors),
       wordCount: countWords(text),
       readingTime: readingTime(text),
@@ -164,6 +221,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     defaultImage: config.seo?.defaultImage ?? null,
   };
 
+  // 评论客户端脚本只算一次（构建期缓存），但只挂到真的有评论区的页面上 ——
+  // 7.6KB 内联到每个页面上是纯浪费（首页、归档、标签页都没有评论区）。
+  let commentsScriptCache = null;
+  const commentsScript = async () => {
+    if (commentsScriptCache === null) commentsScriptCache = await loadCommentsClient();
+    return commentsScriptCache;
+  };
   const common = () => ({
     site: siteData,
     config,
@@ -201,6 +265,20 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     searchFacets: null,
     tagUrl,
     headMeta: '',
+    // 资源提示由引擎统一算（理由见 transform/hints.js）。默认空数组，
+    // 由 applySeo 之后、渲染之前按页填上 —— 只有文章页才会真的预取。
+    prefetch: [],
+    // PWA 开关与地址。主题只负责把这几行摆进 head 与 body 末尾。
+    pwa: pwaHeadData(config),
+    // 评论客户端脚本。默认空 —— 只有文章页（真的有评论区的那几个）才会填。
+    commentsScript: '',
+    // 长文导航。默认空 —— 只有文章页会填。给一个空对象而不是 undefined，
+    // 让「非文章页 include 了 reading partial」这种模板错误表现成
+    // 「什么都不渲染」而不是构建崩溃。
+    readingScript: '',
+    readingProgressHtml: '',
+    readingTocHtml: '',
+    readingNav: { items: [], placement: 'none', nested: false, showProgress: false },
   });
 
   // 首页（含分页）
@@ -230,7 +308,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     });
   }
 
-  for (const post of sorted) {
+  for (const index in sorted) {
+    const post = sorted[index];
+    const related = findRelated(post, sorted);
+    // 「读完之后最可能去哪」的两条猜法：同一话题里更新的一篇（newer），
+    // 以及标签重合度最高的几篇（related）。预取只在这两者上做 ——
+    // 全站乱预取等于替读者下载他没打算看的页。
+    const newer = sorted.slice(0, Number(index)).reverse().find((p) => p.tags.some((t) => post.tags.includes(t)))?.url ?? null;
     pages.push({
       layout: 'post',
       strict: true,
@@ -249,7 +333,26 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
         articleTags: post.tags,
         canonical: `${config.site.url}${post.url}`,
         post,
-        related: findRelated(post, sorted),
+        related,
+        prefetch: config.perf?.prefetch === false
+          ? []
+          : planPrefetch({ layout: 'post', related, newer }),
+        // 评论区：外壳在构建期渲染（无 JS 读者也要有一句可读的话 +
+        // 一个去 GitHub 的链接），内容在运行时由同一份 normalize 填。
+        // 数据属性是浏览器端唯一的接缝。
+        // 长文导航脚本。只给**真的需要**它的页面 —— 短文章既没有目录
+        // 也没有进度条，塞一段什么都不干的脚本是纯浪费。
+        readingScript: post.readingNav.showProgress || post.readingNav.placement !== 'none' ? READING_CLIENT : '',
+        readingProgressHtml: post.readingProgressHtml,
+        readingTocHtml: post.readingTocHtml,
+        // 侧边栏 partial 读的是页面级的 readingNav（与 SEO 视图同一形状：
+        // 引擎算好的视图对象，主题只读不拼）。
+        readingNav: post.readingNav,
+        // post 里有 issueNumber（github-issues 源自带，local 源可由
+        // front-matter 的 `issue:` 指定）。两者都没有时 resolveCommentTarget
+        // 返回 null —— 页面**完全不渲染评论区**，而不是渲染一个空壳。
+        commentsHtml: renderCommentsShell(resolveCommentTarget({ config, post })),
+        commentsScript: resolveCommentTarget({ config, post }) ? await commentsScript() : '',
       },
     });
   }
@@ -403,6 +506,16 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     const robotsConfig = typeof config.seo.robots === 'object' && config.seo.robots !== null ? config.seo.robots : {};
     extraFiles.push({ path: '/robots.txt', content: buildRobots(siteData, robotsConfig) });
   }
+  // ── 6.5 PWA 产物 ───────────────────────────────────────────────
+  //
+  // 顺序要紧：manifest / sw.js 的地址要先进 common() 才能被模板引用，
+  // 而 sw.js 的缓存指纹又要等**全部产物**（含 sitemap 等 extraFiles）算完。
+  // 所以分两步：先把声明放进页面数据，产物最后统一追加到 extraFiles。
+  const pwaFiles = config.pwa?.enabled === true
+    ? buildPwaArtifacts({ config, siteData, sorted, rendered, extraFiles, theme })
+    : null;
+  if (pwaFiles) extraFiles.push(...pwaFiles.files);
+
   // ── 7. 写盘 ────────────────────────────────────────────────────
   const outDir = path.resolve(cwd, config.output?.dir ?? 'dist');
   const manifest = await writeOutput({
@@ -560,6 +673,22 @@ function applySeo(data, { site, config, seo }) {
       breadcrumbs,
       authorUrl: data.authorUrl ?? config.seo?.authorUrl ?? null,
     }));
+  applyHints(data, { site, config });
+}
+
+/**
+ * 资源提示（preconnect / prefetch）也由引擎统一算，理由同 SEO —— 4 套主题
+ * 各写一份一定会漂移，而漂移的表现是「页面照常工作，只是慢了一个 RTT」。
+ *
+ * 这里只处理**逐页不同**的那部分（prefetch）。preconnect 是站点级的，
+ * 由 output.js 在写盘时统一注入 —— 它不随页面变化，没必要每个页面算一遍。
+ */
+function applyHints(data, { site, config }) {
+  if (config.perf?.prefetch === false) {
+    data.prefetch = [];
+    return;
+  }
+  data.prefetch = Array.isArray(data.prefetch) ? data.prefetch.filter(isHintable) : [];
 }
 
 /** 面包屑：首页 → 中间层 → 当前页。首页自身不给面包屑（一条只有自己的链没有信息）。 */
@@ -623,6 +752,118 @@ function formatDate(iso, locale) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleDateString(locale || 'zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * PWA 在页面侧的声明数据（manifest 链接 + 注册脚本 + 安装提示）。
+ *
+ * 全部由引擎给，主题只摆放 —— 理由同 SEO：4 套主题各写一份注册脚本，
+ * 迟早有一份写成 `/sw.js`（子路径部署下就是 404），而 Service Worker
+ * 注册失败**不会影响页面外观**，只会让人以为「PWA 功能就是这样」。
+ */
+function pwaHeadData(config) {
+  if (config.pwa?.enabled !== true) return null;
+  const basePath = config.site?.basePath ?? '';
+  return {
+    manifestUrl: `${basePath}/manifest.webmanifest`,
+    themeColor: config.pwa?.themeColor ?? '#ffffff',
+    // 注册脚本放在 body 末尾执行；install 提示只在显式打开时才注入。
+    registerScript: buildRegisterScript({ basePath, swPath: '/sw.js' }),
+    displayModeScript: buildDisplayModeScript(),
+    installScript: config.pwa?.installPrompt === true ? buildInstallPrompt({ basePath }) : '',
+  };
+}
+
+/**
+ * PWA 产物：manifest.webmanifest / sw.js / offline.html。
+ *
+ * 三个文件互相引用（sw 的缓存名包含全部产物的指纹，manifest 的 start_url
+ * 带 basePath），所以必须在**所有页面渲染完之后**才能生成 —— 这是它
+ * 放在写盘前一步的原因。
+ *
+ * `precache` 只放「离线时真的想看的东西」：首页 + 离线页 + 若干篇文章。
+ * 把全部页面都塞进去会让第一次访问就下载整个站点，而 SW 的 install
+ * 是**在首屏之后**跑的 —— 那等于给每个访客偷偷加一次全站下载。
+ */
+function buildPwaArtifacts({ config, siteData, sorted, rendered, extraFiles, theme }) {
+  const basePath = siteData.basePath ?? config.site?.basePath ?? '';
+  const offlinePath = config.pwa?.offlinePath ?? '/offline.html';
+  // 预缓存的文章数：默认 5。上限的理由见上面注释，不是随手写的。
+  const precachePosts = sorted.slice(0, Number(config.pwa?.precachePosts ?? 5));
+
+  const offlinePage = buildOfflinePage({
+    site: siteData,
+    basePath,
+    offlinePath,
+    cachedPosts: precachePosts.map((post) => ({ title: post.title, url: post.url })),
+  });
+
+  const files = [
+    { path: offlinePath, content: offlinePage },
+    {
+      path: '/manifest.webmanifest',
+      content: JSON.stringify(buildManifest({
+        site: siteData,
+        basePath,
+        icons: pickIcons(config.pwa?.icons ?? {}, theme),
+        themeColor: config.pwa?.themeColor ?? '#ffffff',
+        backgroundColor: config.pwa?.backgroundColor ?? '#ffffff',
+        display: config.pwa?.display ?? 'standalone',
+      }), null, 2),
+    },
+  ];
+
+  // SW 的缓存指纹必须包含**它自己之外的全部产物** —— 包括站点页面、
+  // sitemap、feed、离线页、manifest。少算一类，那类文件变更时
+  // 缓存名不变，读者就永远拿到旧的。
+  const fingerprint = cacheVersion([
+    ...rendered.map((page) => ({ path: page.path, bytes: page.html.length, hash: hashString(page.html) })),
+    ...files.map((f) => ({ path: f.path, bytes: f.content.length, hash: hashString(f.content) })),
+    ...extraFiles.map((f) => ({ path: f.path, bytes: String(f.content).length, hash: hashString(String(f.content)) })),
+  ]);
+
+  const precache = [
+    '/',
+    offlinePath,
+    '/manifest.webmanifest',
+    ...precachePosts.map((post) => post.url),
+  ];
+
+  files.push({
+    path: '/sw.js',
+    content: buildServiceWorker({ version: fingerprint, precache, offlineUrl: offlinePath, basePath }),
+  });
+
+  logger.info(`PWA：manifest + sw.js（缓存 ${cacheName(fingerprint)}）+ ${offlinePath}，预缓存 ${precache.length} 个地址`);
+  return { files, fingerprint };
+}
+
+/**
+ * 从项目/主题的图标里挑出**确实存在**的档位。
+ *
+ * 只声明存在的图标是硬要求：manifest 里的每个图标都会被下载并在安装时校验，
+ * 缺一个就是「安装失败」——而失败信息在浏览器控制台里很不显眼，
+ * 表现成「PWA 功能好像没做」。
+ */
+function pickIcons(configured, theme) {
+  const out = {};
+  for (const size of ICON_SIZES) {
+    const value = configured?.[String(size)] ?? configured?.[size];
+    if (value) out[String(size)] = value;
+  }
+  if (configured?.maskable) out.maskable = configured.maskable;
+  return out;
+}
+
+/** 内容指纹。与 SW 里的 FNV-1a 同一算法族，但这里只用来做缓存名，不参与校验。 */
+function hashString(text) {
+  let hash = 0x811c9dc5;
+  const value = String(text);
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16);
 }
 
 function inlineStyles(theme) {

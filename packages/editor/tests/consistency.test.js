@@ -121,14 +121,30 @@ describe('预览一致性：预览 HTML 与构建产物必须渲染等价', () =
     assert.equal((html.match(/class="anchor"/g) ?? []).length, 2);
   });
 
-  test('图片一定带懒加载与 async 解码', () => {
+  test('图片的 loading 按位置决定：首屏 eager，其余 lazy', () => {
     const html = updatePreview('![图](/a.png)\n\n![图](https://x.com/b.png)\n');
     const imgs = [...html.matchAll(/<img[^>]*>/g)].map((m) => m[0]);
     assert.equal(imgs.length, 2);
-    for (const img of imgs) {
-      assert.match(img, /loading="lazy"/);
-      assert.match(img, /decoding="async"/);
-    }
+    for (const img of imgs) assert.match(img, /decoding="async"/);
+
+    // 这条断言原先写的是「**每张**图都必须 loading=lazy」，于是首屏图
+    // 同时拿到了 loading="lazy" 与 fetchpriority="high" —— 两个属性互相矛盾，
+    // 浏览器按 lazy 处理，**LCP 比不加还慢**。旧断言把 bug 钉住了。
+    assert.match(imgs[0], /loading="eager"/);
+    assert.match(imgs[0], /fetchpriority="high"/);
+    assert.doesNotMatch(imgs[0], /loading="lazy"/);
+    assert.match(imgs[1], /loading="lazy"/);
+    assert.doesNotMatch(imgs[1], /fetchpriority="high"/);
+  });
+
+  test('空 alt 必须被兜底替换（`![]()` 不是「作者写过了」）', () => {
+    const html = updatePreview('![](/assets/my-photo.png)\n');
+    const img = /<img[^>]*>/.exec(html)[0];
+    // 空 alt 让图片对屏幕阅读器与图片搜索完全消失；只判断「有没有 alt 属性」
+    // 会把这个空串当成作者的决定，兜底永远不触发。
+    assert.doesNotMatch(img, /alt=""/);
+    assert.match(img, /alt="my photo"/);
+    assert.match(img, /data-alt-inferred="true"/, '推导出来的 alt 必须被标出来，不能冒充作者写的');
   });
 });
 

@@ -41,42 +41,16 @@
     });
   }
 
-  // ── 阅读进度 + 回到顶部 ────────────────────────────────────
-  var bar = document.getElementById('reading-bar');
+  // ── 回到顶部 ──────────────────────────────────────────────
+  // 阅读进度与目录高亮已移到引擎的 reading script（core/reading/index.js）——
+  // 它们需要与「目录放在哪」这件事保持一致，而那个决定在引擎手里。
+  // 主题只管这一件纯样式的事。
   var toTop = document.getElementById('to-top');
-  var post = document.querySelector('.prose');
 
-  function onScroll() {
-    var scrollTop = window.scrollY;
-    if (bar && post) {
-      var start = post.offsetTop;
-      var total = post.offsetHeight - window.innerHeight;
-      var ratio = total > 0 ? (scrollTop - start) / total : 0;
-      bar.style.width = Math.min(100, Math.max(0, ratio * 100)) + '%';
-    }
-    if (toTop) toTop.classList.toggle('visible', scrollTop > 600);
-  }
-
-  if (bar || toTop) {
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-  }
+  window.addEventListener('scroll', function () {
+    if (toTop) toTop.classList.toggle('visible', window.scrollY > 600);
+  }, { passive: true });
   if (toTop) toTop.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
-
-  // ── 目录高亮当前章节 ──────────────────────────────────────
-  var sidebarLinks = Array.prototype.slice.call(document.querySelectorAll('.sidebar-toc a'));
-  if (sidebarLinks.length && 'IntersectionObserver' in window) {
-    var headings = sidebarLinks.map(function (link) { return document.getElementById(link.hash.slice(1)); }).filter(Boolean);
-    var observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        sidebarLinks.forEach(function (link) { link.classList.remove('active'); });
-        var active = sidebarLinks.find(function (link) { return link.hash === '#' + entry.target.id; });
-        if (active) active.classList.add('active');
-      });
-    }, { rootMargin: '-10% 0px -80% 0px' });
-    headings.forEach(function (h) { observer.observe(h); });
-  }
 
   // ── 代码复制 ──────────────────────────────────────────────
   document.addEventListener('click', function (event) {

@@ -26,6 +26,45 @@ const RULES = [
   { path: 'seo.structuredData', type: 'boolean' },
   { path: 'seo.canonical', type: 'boolean' },
   { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'custom'].includes(v) || '不支持的部署目标' },
+  { path: 'perf.lazyLoading', type: 'boolean' },
+  { path: 'perf.criticalCSS', type: 'boolean' },
+  { path: 'perf.prefetch', type: 'boolean' },
+  { path: 'perf.preconnect', type: 'boolean' },
+  { path: 'perf.responsiveImages', type: 'boolean' },
+  {
+    path: 'perf.criticalCssLimit',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v > 0) || '必须是正整数（字节）',
+  },
+  {
+    path: 'perf.imageVariants',
+    type: 'object',
+    check: (v) => Object.entries(v).every(([src, list]) => {
+      if (!Array.isArray(list)) return `「${src}」的候选集必须是数组`;
+      return list.every((item) => Number.isFinite(Number(item?.width)) && Number(item.width) > 0)
+        || `「${src}」的候选项必须带正数 width（只写你确实生成了的尺寸）`;
+    }) || '候选集格式不正确',
+  },
+  { path: 'pwa.enabled', type: 'boolean' },
+  {
+    path: 'pwa.display',
+    type: 'string',
+    check: (v) => ['standalone', 'minimal-ui', 'browser', 'fullscreen'].includes(v)
+      || '只能是 standalone / minimal-ui / browser / fullscreen',
+  },
+  { path: 'pwa.themeColor', type: 'string' },
+  { path: 'pwa.backgroundColor', type: 'string' },
+  { path: 'pwa.installPrompt', type: 'boolean' },
+  {
+    path: 'pwa.precachePosts',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v >= 0) || '必须是非负整数（篇）',
+  },
+  {
+    path: 'pwa.offlinePath',
+    type: 'string',
+    check: (v) => v.startsWith('/') || '必须以 / 开头',
+  },
   { path: 'plugins', type: 'array' },
 ];
 

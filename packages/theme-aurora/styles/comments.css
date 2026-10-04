@@ -1,0 +1,58 @@
+/* Aurora 评论区 —— 玻璃拟态卡片 + 极光渐变强调。
+   与主站同一套「透明层 + 细发光边」语言，评论区不该是唯一的例外。 */
+
+.comments {
+  margin-top: 3.5rem; padding: 1.75rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.comments-title {
+  font-size: 1.05rem; font-weight: 600; margin: 0 0 1.25rem;
+  background: var(--grad-aurora); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.comments-status { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 1rem; }
+.comments-status[data-kind="error"] { color: #fca5a5; }
+
+.comments-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: 0.9rem; }
+
+.c-item {
+  padding: 1rem 1.15rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.c-item:hover { border-color: var(--aurora-violet); box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25); }
+
+.c-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+.c-avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3); }
+.c-author { font-weight: 600; font-size: 0.9rem; color: var(--primary); text-decoration: none; }
+.c-author:hover { color: var(--aurora-blue); }
+.c-badge {
+  font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px;
+  background: var(--grad-aurora); color: #0b0b1a; font-weight: 600;
+}
+.c-time { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; }
+
+.c-body { font-size: 0.94rem; color: var(--text); line-height: 1.7; }
+.c-body p { margin: 0 0 0.6rem; }
+.c-body p:last-child { margin-bottom: 0; }
+.c-mention, .c-link { color: var(--aurora-blue); text-decoration: none; border-bottom: 1px solid rgba(56, 189, 248, 0.4); }
+.c-mention:hover, .c-link:hover { border-bottom-color: var(--aurora-blue); }
+
+.c-reactions { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.c-reaction {
+  font-size: 0.78rem; padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: rgba(139, 92, 246, 0.14); color: var(--text); border: 1px solid rgba(139, 92, 246, 0.28);
+}
+
+.c-permalink { display: inline-block; margin-top: 0.55rem; font-size: 0.78rem; color: var(--text-dim); }
+.c-permalink:hover { color: var(--aurora-blue); }
+
+.comments-cta { font-size: 0.88rem; margin: 0; }
+.comments-cta a { color: var(--aurora-blue); }
+.comments-cta-note { color: var(--text-dim); font-size: 0.82rem; }

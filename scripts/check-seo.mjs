@@ -103,6 +103,22 @@ function checkPage(theme, route, html) {
   const ogImage = attr(html, /<meta property="og:image" content="([^"]*)"/);
   if (ogImage && !/^https?:\/\//.test(ogImage)) fail(scope, `og:image 不是绝对地址：${ogImage}`);
 
+  // ── B2. noindex 的页面必须真的带 noindex ──────────────────
+  //
+  // 这一条是 lighthouse.mjs 里那条「404 页 SEO 豁免」的**对价**。
+  // 豁免一项分数是可以的，但必须换成更准确的断言守住同一个事实 ——
+  // 否则豁免就退化成「把分数低的东西删掉」。
+  //
+  // 事实链：404 页的 SEO 分低，是因为它带 noindex，而 Lighthouse 的
+  // is-crawlable 对 noindex 页面记 0 分。所以「豁免 SEO 分」成立的唯一前提
+  // 是「404 页确实带 noindex」。这条断言盯的就是那个前提。
+  if (route === '/404.html') {
+    const robots = attr(html, /<meta name="robots" content="([^"]*)"/);
+    if (!robots || !robots.includes('noindex')) {
+      fail(scope, '404 页没有 noindex —— 收录一个「页面不存在」是纯粹的错误结果，且会让 lighthouse.mjs 的 SEO 豁免失去依据');
+    }
+  }
+
   // ── C. JSON-LD 真解析 ──────────────────────────────────────
   //
   // 关键：用 JSON.parse，不用正则。正则「看起来像 JSON」的东西里
