@@ -15,6 +15,8 @@ import {
 } from './transform/seo.js';
 import { buildRss, buildAtom } from '../feed/build.js';
 import { buildSearchIndexFile, summarizeIndex } from '../search/site-index.js';
+import { resolveCommentTarget, renderCommentsShell } from '../comments/index.js';
+import { loadCommentsClient } from '../comments/ui.js';
 import { buildManifest, ICON_SIZES } from './pwa/manifest.js';
 import { buildServiceWorker, cacheVersion, cacheName } from './pwa/service-worker.js';
 import { buildOfflinePage, buildRegisterScript, buildInstallPrompt, buildDisplayModeScript } from './pwa/offline.js';
@@ -175,6 +177,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     defaultImage: config.seo?.defaultImage ?? null,
   };
 
+  // 评论客户端脚本只算一次（构建期缓存），但只挂到真的有评论区的页面上 ——
+  // 7.6KB 内联到每个页面上是纯浪费（首页、归档、标签页都没有评论区）。
+  let commentsScriptCache = null;
+  const commentsScript = async () => {
+    if (commentsScriptCache === null) commentsScriptCache = await loadCommentsClient();
+    return commentsScriptCache;
+  };
   const common = () => ({
     site: siteData,
     config,
@@ -217,6 +226,8 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     prefetch: [],
     // PWA 开关与地址。主题只负责把这几行摆进 head 与 body 末尾。
     pwa: pwaHeadData(config),
+    // 评论客户端脚本。默认空 —— 只有文章页（真的有评论区的那几个）才会填。
+    commentsScript: '',
   });
 
   // 首页（含分页）
@@ -275,6 +286,14 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
         prefetch: config.perf?.prefetch === false
           ? []
           : planPrefetch({ layout: 'post', related, newer }),
+        // 评论区：外壳在构建期渲染（无 JS 读者也要有一句可读的话 +
+        // 一个去 GitHub 的链接），内容在运行时由同一份 normalize 填。
+        // 数据属性是浏览器端唯一的接缝。
+        // post 里有 issueNumber（github-issues 源自带，local 源可由
+        // front-matter 的 `issue:` 指定）。两者都没有时 resolveCommentTarget
+        // 返回 null —— 页面**完全不渲染评论区**，而不是渲染一个空壳。
+        commentsHtml: renderCommentsShell(resolveCommentTarget({ config, post })),
+        commentsScript: resolveCommentTarget({ config, post }) ? await commentsScript() : '',
       },
     });
   }
