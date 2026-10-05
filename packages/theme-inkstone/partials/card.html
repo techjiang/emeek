@@ -4,9 +4,13 @@
         {% if post.description %}<p class="card-excerpt">{{ post.description }}</p>{% endif %}
     </a>
     <div class="card-meta">
-        <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
-        <span class="dot">·</span>
-        <span>{{ post.readingTime }} 分钟</span>
+        {% if readingDisplay.showDate !== false %}<time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>{% endif %}
+        {% if readingDisplay.showTime !== false %}<span class="dot">·</span>
+        <span class="card-reading">{{ post.readingTime }} 分钟</span>{% endif %}
+        {# 评论数徽章只在**有数据源**时出现（local 源没有评论数 → null）。
+           显示「0 条评论」会被读成「没人评论」；不显示才是真相。 #}
+        {% if readingDisplay.showComments !== false && post.commentCount != null %}<span class="dot">·</span>
+        <span class="card-comments">{{ post.commentCount }} 条评论</span>{% endif %}
         {% for tag in post.tagLinks %}<a class="tag" href="{{ tag.url }}">{{ tag.name }}</a>{% endfor %}
     </div>
 </article>

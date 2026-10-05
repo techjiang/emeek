@@ -22,7 +22,8 @@
     "syntax-highlight",
     "toc",
     "search",
-    "search-index"
+    "search-index",
+    "share-buttons"
   ],
   "compatible": ">=1.0.0",
   "config": {

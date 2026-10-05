@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import { loadConfig, resolvePluginSpec } from '../config/loader.js';
 import { loadPosts } from './source/index.js';
 import { renderMarkdown } from './parse/markdown.js';
@@ -33,6 +34,8 @@ import { logger, progress } from '../util/logger.js';
 import { buildAnalyticsScripts, validateAnalyticsConfig } from '../analytics/providers.js';
 import { renderProbeTag } from '../analytics/probe.js';
 import { buildStatsView, hasSectionData } from '../stats/index.js';
+import { buildShareView, SHARE_CLIENT } from '../share/index.js';
+import { partitionPosts, validatePosts } from '../workflow/index.js';
 
 /**
  * 构建主流程。这是一个纯函数式的管线：
@@ -76,9 +79,21 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   // ── 1. 读取内容 ────────────────────────────────────────────────
   const rawPosts = await loadPosts(cwd, config);
-  const published = rawPosts.filter((p) => !p.draft);
-  const drafts = rawPosts.filter((p) => p.draft);
-  logger.info(`读取 ${rawPosts.length} 篇内容（${drafts.length} 篇草稿已跳过）`);
+  /**
+   * 草稿与定时发布的**唯一判定点**（见 workflow/index.js）。
+   *
+   * 之前这里是 `rawPosts.filter(p => !p.draft)` —— 草稿被排除，
+   * 但「发布时间在未来」的文章会被当成已发布**直接上线**。
+   * 那是「定时发布」最危险的失败形态：你以为它在等，其实它已经发了。
+   *
+   * 现在两种情况共用同一个 partitionPosts，命令行（emeek drafts）
+   * 与产物读到的是同一份判定，不可能分叉。
+   */
+  const { published, drafts, scheduled } = partitionPosts(rawPosts, {
+    now: buildNow,
+    schedule: config.workflow?.schedule ?? {},
+  });
+  logger.info(`读取 ${rawPosts.length} 篇内容（${drafts.length} 篇草稿、${scheduled.length} 篇待定时发布已跳过）`);
 
   const theme = await loadTheme(cwd, config);
   logger.info(`主题：${theme.meta.name} v${theme.meta.version ?? '0.0.0'}`);
@@ -95,7 +110,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   // ── 2. 预处理：先定 URL 与 wiki 链接索引，正文渲染时需要用到 ──
   const urlFor = (post) => `/${config.postPath ?? 'posts'}/${post.slug}.html`;
-  for (const post of published) post.url = urlFor(post);
+  for (const post of published) {
+    post.url = urlFor(post);
+    // 绝对地址。分享链接必须是绝对的 —— 社交平台是在**它自己的域名**下
+    // 抓这个链接的，相对地址抓取直接失败。SEO 那里也会重新算一遍 canonical，
+    // 但分享是**构建期**就要用到的，不能等到 applySeo。
+    post.canonical = `${config.site.url}${post.url}`;
+  }
 
   const wikiIndex = buildWikiLinkIndex(published, { urlPattern: (post) => post.url });
   const siteData = { ...config.site };
@@ -176,10 +197,17 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       tocHtml: layoutFacts.rendersOwnToc ? renderToc(toc, '目录') : '',
       description: post.description ?? makeExcerpt(withAnchors),
       wordCount: countWords(text),
-      readingTime: readingTime(text),
+      // 阅读时长口径由 config.reading.wordsPerMinute 决定（默认 400 字/分钟，
+      // 与 AI 模块的阅读时长估算同一口径）。之前这里用的是 excerpt.js 的
+      // 默认值 300 —— 于是同一篇文章的「预计阅读时间」在页面上和 AI 分析里
+      // 是两个数字。两处口径必须来自一处。
+      readingTime: readingTime(text, { wpm: Number(config.reading?.wordsPerMinute ?? 400) }),
       dateFormatted: formatDate(post.date, config.site.language),
       updatedFormatted: formatDate(post.updated, config.site.language),
       url: post.url,
+      // 评论数：只来自 Issues 源（local 源没有）。null 与 0 分开 ——
+      // 主题据此决定「显示 0」还是「根本不显示这一项」。
+      commentCount: post.interactions?.comments ?? null,
     };
     posts.push(enriched);
     bar.tick();
@@ -188,6 +216,14 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   await hooks.run('onContentLoad', { config, posts, site: siteData });
   computeBacklinks(posts);
+
+  // ── 3.5 内容校验（P3-4b-rest D2）─────────────────────────────
+  //
+  // 放在这里而不是写盘前：校验要看到**渲染后的文章**（内链检查需要知道
+  // 解析出的链接），但不需要等页面渲染完。早一点发现问题，日志里离
+  // 出错的文件更近。
+  const validation = runContentValidation({ config, cwd, posts, drafts, scheduled, rawPosts });
+  if (validation) posts.validation = validation;
 
   // ── 4. 排序、分组 ──────────────────────────────────────────────
   const sorted = [...posts].sort((a, b) => {
@@ -256,7 +292,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
   const common = () => ({
     site: siteData,
     config,
-    nav: buildNav(config, tags),
+    nav: buildNav(config, tags, categories),
     allTags: tags.sort((a, b) => b.count - a.count),
     allCategories: categories.sort((a, b) => b.count - a.count),
     year: new Date().getFullYear(),
@@ -306,6 +342,13 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     analyticsProvider: analytics.provider,
     // 统计页入口。默认 null —— 主题的导航 partial 据此决定要不要渲染那一项。
     statsUrl: statsEnabled ? (config.analytics?.statsPage?.path ?? '/stats/') : null,
+    // 社交分享。默认 null —— 只有文章页会填。理由同 reading：
+    // 让「非文章页 include 了 share partial」表现成「不渲染」而不是崩溃。
+    shareView: null,
+    shareScript: '',
+    // 阅读统计显示的开关。主题据此决定是否渲染徽章 —— 判据放在引擎，
+    // 4 套主题不会各自解释「showComments 是什么意思」。
+    readingDisplay: config.reading ?? {},
     // 长文导航。默认空 —— 只有文章页会填。给一个空对象而不是 undefined，
     // 让「非文章页 include 了 reading partial」这种模板错误表现成
     // 「什么都不渲染」而不是构建崩溃。
@@ -349,6 +392,11 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     // 以及标签重合度最高的几篇（related）。预取只在这两者上做 ——
     // 全站乱预取等于替读者下载他没打算看的页。
     const newer = sorted.slice(0, Number(index)).reverse().find((p) => p.tags.some((t) => post.tags.includes(t)))?.url ?? null;
+    // 分享视图：引擎算好（链接拼接 + UTM + 平台可用性），主题只摆放。
+    const shareView = buildShareView(post, config);
+    if (shareView?.unknown?.length) {
+      logger.warn(`share.platforms 里有未知平台：${shareView.unknown.join(' / ')}（会被忽略，请检查拼写）`);
+    }
     pages.push({
       layout: 'post',
       strict: true,
@@ -387,6 +435,12 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
         // 返回 null —— 页面**完全不渲染评论区**，而不是渲染一个空壳。
         commentsHtml: renderCommentsShell(resolveCommentTarget({ config, post })),
         commentsScript: resolveCommentTarget({ config, post }) ? await commentsScript() : '',
+        // 社交分享（P3-4b-rest C）。null 表示这一页不出分享按钮 ——
+        // 主题据此整块不渲染，而不是渲染一排空链接。
+        shareView: shareView,
+        // 只有真的需要浏览器端的分享按钮（微信二维码 / 复制链接）才带脚本。
+        // 一个只有 <a> 分享按钮的页面不该背这段 QR 编码器。
+        shareScript: shareView && shareView.needsClient ? SHARE_CLIENT : '',
       },
     });
   }
@@ -402,6 +456,22 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     strict: true,
     path: '/tags.html',
     data: { ...common(), type: 'website', seoKind: 'collection', title: '标签', description: '按标签浏览文章', canonical: `${config.site.url}/tags.html`, tags: tags.sort((a, b) => b.count - a.count) },
+  });
+  /**
+   * 分类总览页。
+   *
+   * 与标签总览页**共用同一个布局**（tags.html）——两者的页面形态完全一样
+   * （一组名字 + 数量 + 链接），分叉成两个布局只会得到两份迟早漂移的模板。
+   * 差异只有「title 是分类」与「href 指向 /categories/」。
+   *
+   * 之前没有这一页：分类条目在面包屑里指向 /tags.html（「据实」，
+   * 因为那时没有 /categories.html）。现在有了，面包屑也跟着改（见 buildBreadcrumbs）。
+   */
+  pages.push({
+    layout: 'tags',
+    strict: true,
+    path: '/categories.html',
+    data: { ...common(), type: 'website', seoKind: 'collection', title: '分类', description: '按分类浏览文章', canonical: `${config.site.url}/categories.html`, tags: categories.sort((a, b) => b.count - a.count) },
   });
   // 关于页：正文里的 h1 提成页面主标题，避免「布局 h1 + 正文 h1」一页两个。
   const about = extractAboutTitle(await renderAbout(cwd, config), '关于');
@@ -598,6 +668,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
       draft: false,
     })),
     drafts: drafts.map((post) => ({ title: post.title, slug: post.slug, draft: true })),
+    scheduled: scheduled.map((post) => ({ title: post.title, slug: post.slug, date: post.date })),
     titles: sorted.map((post) => post.title),
   };
 
@@ -607,6 +678,8 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     posts: sorted.length,
     pages: rendered.length,
     drafts: drafts.length,
+    scheduled: scheduled.length,
+    validation,
     tags: tags.length,
     outDir,
     manifest,
@@ -641,6 +714,11 @@ function toCard(post) {
     leadCategory: post.categories?.[0] ? slugifyTag(post.categories[0]) : 'default',
     readingTime: post.readingTime,
     wordCount: post.wordCount,
+    // 评论数：只来自 Issues 源。null 与 0 分开 —— 主题据此决定
+    // 「显示 0 条评论」还是「不显示这一项」（见 config.reading.showComments）。
+    commentCount: post.commentCount ?? post.interactions?.comments ?? null,
+    updated: post.updated,
+    updatedFormatted: post.updatedFormatted,
     pinned: post.pinned,
     cover: post.cover,
     slug: post.slug,
@@ -749,9 +827,7 @@ function buildBreadcrumbs(data, site, seo) {
     crumbs.push({ name: '标签', url: `${site.url}/tags.html` });
     crumbs.push({ name: data.title, url: data.canonical });
   } else if (/^分类：/.test(String(data.title ?? ''))) {
-    // 分类目前与标签共用 /tags.html 总览页。面包屑指向那里是据实 —
-    // 编一个并不存在的 /categories.html 会让爬虫多抓一个 404。
-    crumbs.push({ name: '分类', url: `${site.url}/tags.html` });
+    crumbs.push({ name: '分类', url: `${site.url}/categories.html` });
     crumbs.push({ name: data.title, url: data.canonical });
   } else if (data.title) {
     crumbs.push({ name: data.title, url: data.canonical });
@@ -768,7 +844,7 @@ function sitemapPolicyFor(page) {
   if (page.data.type === 'article') return SITEMAP_POLICY.post;
   const title = String(page.data.title ?? '');
   if (page.layout === 'tags' && /^(?:标签|分类)：/.test(title)) return SITEMAP_POLICY.taxonomy;
-  if (page.data.type === 'website' && ['归档', '标签'].includes(title)) return SITEMAP_POLICY.taxonomy;
+  if (page.data.type === 'website' && ['归档', '标签', '分类'].includes(title)) return SITEMAP_POLICY.taxonomy;
   return SITEMAP_POLICY.page;
 }
 
@@ -814,6 +890,83 @@ export function validateAndBuildAnalytics(config = {}) {
   if (built.origin) logger.info(`分析：${built.provider} · 数据发往 ${built.origin}`);
   else if (built.provider) logger.info(`分析：${built.provider}（站内，不发往第三方）`);
   return built;
+}
+
+/**
+ * 构建期内容校验（P3-4b-rest D2）。
+ *
+ * 三件事决定它的行为，都在配置里：
+ *   workflow.validate = off   → 完全不跑
+ *                     = warn  → 逐条告警，构建继续（默认）
+ *                     = error → 有问题就让构建失败
+ *
+ * `knownFiles` 由**项目目录**扫描得到（内容目录 + assets），不是「渲染器认为
+ * 有哪些图」—— 后者拿不到「文件到底在不在」这个事实。拿不到时就跳过这项检查，
+ * 而不是凭猜报警。
+ */
+function runContentValidation({ config, cwd, posts, drafts, scheduled, rawPosts }) {
+  const mode = config.workflow?.validate ?? 'warn';
+  if (mode === 'off') return null;
+
+  const source = config.content?.source ?? 'local';
+  // knownFiles 只在本地源时可用（远程源的文件不在磁盘上）。
+  // 扫描是同步的：校验要在渲染之前出结果，而它只读目录名，很快。
+  const knownFiles = source === 'github-issues' ? null : scanKnownFiles(cwd, config);
+  const urlSet = new Set(posts.map((p) => p.url).filter(Boolean));
+
+  const { issues, counts } = validatePosts(posts, {
+    checks: config.workflow?.checks ?? [],
+    knownFiles,
+    urlSet,
+    source,
+  });
+
+  if (!issues.length) {
+    logger.info(`内容校验：${posts.length} 篇全部通过`);
+    return { mode, issues: [], counts };
+  }
+
+  const limit = Number(config.workflow?.maxReport ?? 20);
+  logger.warn(`内容校验：${counts.error} 个错误、${counts.warn} 个警告`);
+  for (const item of issues.slice(0, limit)) {
+    const tag = item.severity === 'error' ? '✗' : '!';
+    logger.raw(`  ${tag} [${item.rule}] ${item.file} · ${item.message}`);
+    logger.raw(`      → ${item.fix}`);
+  }
+  if (issues.length > limit) logger.dim(`  …还有 ${issues.length - limit} 条，完整清单见 .emeek/workflow-report.json`);
+
+  const report = { mode, issues, counts, drafts: drafts.length, scheduled: scheduled.length, total: rawPosts.length };
+  if (mode === 'error' && counts.error > 0) {
+    throw new Error(
+      `内容校验失败（workflow.validate = error）：${counts.error} 个错误。`
+      + '\n逐条修掉后再构建，或把 workflow.validate 改成 warn。',
+    );
+  }
+  return report;
+}
+
+/**
+ * 项目里「确实存在」的文件集合（以 / 开头）。
+ *
+ * 只扫内容目录与 assets —— 全仓库扫描会把 node_modules（几万个文件）
+ * 拖进来，而校验只关心「这篇 Markdown 引用的图在不在」。
+ */
+function scanKnownFiles(cwd, config) {
+  const set = new Set();
+  const roots = [...(config.content?.localDirs ?? ['posts']), 'assets', 'public', 'static'];
+  const walk = (dir, prefix) => {
+    let entries;
+    try {
+      entries = fsSync.readdirSync(path.resolve(cwd, dir), { withFileTypes: true });
+    } catch { return; }
+    for (const entry of entries) {
+      const rel = `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), rel);
+      else set.add(rel);
+    }
+  };
+  for (const root of roots) walk(root, '');
+  return set;
 }
 
 /**
@@ -883,11 +1036,15 @@ function buildStatsPage({ config, sorted, siteData, now = new Date(), base = {} 
  * 默认关闭也是刻意的：绝大多数个人博客不想把「这个站只有 3 篇文章」
  * 摆在导航栏上。
  */
-function buildNav(config, tags) {
+function buildNav(config, tags, categories = []) {
   const nav = [
     { title: '首页', url: '/' },
     { title: '归档', url: '/archive.html' },
     { title: '标签', url: '/tags.html' },
+    // 分类入口只在**真的有分类**时出现 —— 一个点进去空无一物的「分类」
+    // 比没有这一项更像坏了。判据是 categories 数组，不是配置开关：
+    // 有没有分类是内容决定的，不该让用户去配。
+    ...(categories.length ? [{ title: '分类', url: '/categories.html' }] : []),
     { title: '关于', url: '/about.html' },
   ];
   if (config.analytics?.statsPage?.enabled === true && config.analytics?.statsPage?.nav !== false) {

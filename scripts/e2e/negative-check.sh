@@ -756,5 +756,101 @@ weaken_py "排行数值不重复（单位拼两遍）" \
   "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'rank-value' in L and 'esc(suffix)' in L]; assert idx, 'rank-value 行没找到'; lines[idx[0]] = lines[idx[0]].replace('esc(suffix)}<', 'esc(suffix)}' + 'esc(suffix)}<'); s = chr(10).join(lines)" \
   'node --test packages/core/tests/stats/charts.test.js'
 
+# ── P3-4b-rest-2：社交分享 + 阅读统计 + 内容工作流 ──────────────
+# 这几条守的都是「不可撤回」或「用户信任」类的事故：
+# 分享了坏链接、草稿被发出去、定时文章抢跑、二维码扫出错的地址。
+
+# 83. 草稿必须被排除：让 partitionPosts 的草稿判断恒为假。
+weaken "草稿不进生产（draft 判断恒为假）" \
+  packages/core/src/workflow/index.js \
+  "s|    if (post.draft) {|    if (false) {|" \
+  'node --test packages/core/tests/build-rest2.test.js'
+
+# 84. 定时发布必须生效：让未来时间判断恒为假（= 未到点也发）。
+weaken "定时发布不漏（未来时间判断恒为假）" \
+  packages/core/src/workflow/index.js \
+  "s|    if (scheduleEnabled && at != null && !Number.isNaN(at) && at > cutoff) {|    if (false) {|" \
+  'node --test packages/core/tests/build-rest2.test.js'
+
+# 85. 默认零追踪之外的：分享默认必须关闭（不配就不注入）。
+weaken "分享默认关闭（enabled 检查恒真）" \
+  packages/core/src/share/index.js \
+  "s|  if (share.enabled !== true) return null;|  if (false) return null;|" \
+  'node --test packages/core/tests/build-rest2.test.js'
+
+# 86. 分享地址必须是绝对地址：让 appendUtm 对相对地址也拼参数。
+#     （会把 /posts/x.html?utm=... 发给社交平台 → 对方抓到 404）
+weaken_py "相对地址不拼 UTM（放行相对地址）" \
+  packages/core/src/share/platforms.js \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'test(text)) return text' in L]; assert idx, 'appendUtm 的绝对地址判断没找到'; lines[idx[0]] = '  if (false) return text;'; s = chr(10).join(lines)" \
+  'node --test packages/core/tests/share/client-consistency.test.js'
+
+# 87. 二维码画布必须留静默区：把 quiet 改成 0。
+#     静默区是扫码成功率的硬条件 —— 少了它很多解码器直接读不出来。
+weaken "二维码静默区（quiet 改成 0）" \
+  packages/core/src/share/client.js \
+  "s|    var quiet = 4;|    var quiet = 0;|" \
+  'node --test packages/core/tests/share/client-consistency.test.js packages/core/tests/share/qr.test.js'
+
+# 88. 二维码格式信息必须 MSB 在前：改成 LSB 在前（第一版就错在这里）。
+#     数据全对、结构自洽，但任何解码器都读不出来。
+weaken_py "二维码格式信息位序（改回 LSB 在前）" \
+  packages/core/src/share/qr.js \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'bits >> (14 - index)' in L]; assert idx, '格式信息位序行没找到'; lines[idx[0]] = lines[idx[0]].replace('(14 - index)', 'index'); s = chr(10).join(lines)" \
+  'node --test packages/core/tests/share/qr.test.js'
+
+# 89. 二维码分块必须短块在前：把顺序改成「数据多的在前」。
+#     v1-v4 全对、v5 起全错，且纠错/格式/版本信息全都对 —— 极难发现。
+weaken "二维码分块短块在前（改成大块在前）" \
+  packages/core/src/share/qr.js \
+  "s|  5: { L: \[\[1, 134, 108\]\], M: \[\[2, 67, 43\]\], Q: \[\[2, 33, 15\], \[2, 34, 16\]\], H: \[\[2, 33, 11\], \[2, 34, 12\]\] },|  5: { L: [[1, 134, 108]], M: [[2, 67, 43]], Q: [[2, 34, 16], [2, 33, 15]], H: [[2, 34, 12], [2, 33, 11]] },|" \
+  'node --test packages/core/tests/share/qr.test.js'
+
+# 90. 二维码容量必须硬边界：把超长返回改成静默截断（一个错的地址比没有更糟）。
+weaken "二维码超长必须报错（改成不报错）" \
+  packages/core/src/share/qr.js \
+  "s|    if (chosen == null) {|    if (false) {|" \
+  'node --test packages/core/tests/share/qr.test.js'
+
+# 91. 内容校验必须能失败：把标题检查改成永远返回空。
+weaken "内容校验能报错（title 检查恒空）" \
+  packages/core/src/workflow/validate.js \
+  "s|function checkTitle(post, where) {|function checkTitle(post, where) { return []; // weakened|" \
+  'node --test packages/core/tests/workflow/validate.test.js'
+
+# 92. 内容校验的「文件存在性」检查必须真的查：让它恒返回空。
+weaken "本地文件存在性检查（恒空）" \
+  packages/core/src/workflow/validate.js \
+  "s|function checkLinks(post, where, knownFiles) {|function checkLinks(post, where, knownFiles) { return []; // weakened|" \
+  'node --test packages/core/tests/workflow/validate.test.js'
+
+# 93. 校验失败不得泄漏绝对路径：让 relativeFile 恒等返回原值。
+weaken "校验路径不泄漏绝对路径（relativeFile 恒等）" \
+  packages/core/src/workflow/validate.js \
+  "s|function relativeFile(file) {|function relativeFile(file) { return String(file); // weakened|" \
+  'node --test packages/core/tests/workflow/validate.test.js'
+
+# 94. reading.showTime=false 必须真的不渲染阅读时间：让配置检查恒真。
+weaken "阅读时间开关生效（恒显示）" \
+  packages/theme-minimal/partials/card.html \
+  "s|{% if readingDisplay.showTime !== false %}|{% if true %}|" \
+  'node --test packages/core/tests/build-rest2.test.js'
+
+# 95. 没有评论数据源时不得显示 0：把 null 判断拆掉，并让数字硬编码成 0。
+#     只说「恒渲染」不够 —— commentCount 是 null，{{ }} 渲染出来是空串，
+#     页面上并不会出现「0 条评论」，断言自然不红。削弱必须让它真的输出 0。
+weaken_py "无评论数据源不显示 0（恒渲染成 0）" \
+  packages/theme-minimal/layouts/post.html \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'readingDisplay.showComments' in L and 'post.commentCount != null' in L]; assert idx, '评论数判断行没找到'; lines[idx[0]] = '                    {% if true %}<span class=\"dot\">·</span>'; idx2 = [i for i, L in enumerate(lines) if '{{ post.commentCount }} 条评论' in L]; assert idx2, '评论数输出行没找到'; lines[idx2[0]] = '                    <span class=\"post-comments\">0 条评论</span>{% endif %}'; s = chr(10).join(lines)" \
+  'node --test packages/core/tests/build-rest2.test.js'
+
+
+# 96. `elsif` 必须被识别：把 elsif 的 emit 分支摘掉（回到「只认 else if」）。
+#     症状是「两个分支同时渲染」—— share 的「复制链接」按钮会出现两份。
+weaken_py "elsif 被识别（摘掉 elsif 分支）" \
+  packages/core/src/pipeline/render/liquid.js \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'const elsif = /^elsif' in L]; assert idx, 'elsif 分支没找到'; lines[idx[0]] = '  const elsif = null; // weakened'; s = chr(10).join(lines)" \
+  'node --test packages/core/tests/template.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

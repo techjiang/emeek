@@ -41,6 +41,19 @@ export {
   probeEndpoint, DEFAULT_RETENTION_DAYS,
 } from './analytics/index.js';
 export { buildStatsView, hasSectionData, STATS_SECTIONS } from './stats/index.js';
+// ── 社交分享（P3-4b-rest C）────────────────────────────────────
+export {
+  SHARE_PLATFORMS, PLATFORM_IDS, SHARE_POSITIONS, appendUtm,
+  buildShareItem, resolvePlatforms, buildShareView, SHARE_CLIENT,
+} from './share/index.js';
+// 分享平台查询另起一个名字 —— `getPlatform` 已被部署层占用（deploy/platforms.js），
+// 两者一个是「分享到哪」一个是「部署到哪」，同名会让 import 的人拿错。
+export { getPlatform as getSharePlatform } from './share/index.js';
+export { encodeQr, qrMatrix, QR_CAPACITY, capacityBytes, rsBlocks } from './share/qr.js';
+// ── 内容工作流（P3-4b-rest D2）────────────────────────────────
+export {
+  WORKFLOW_CHECKS, partitionPosts, explainStatus, validatePosts, VALIDATION_RULES,
+} from './workflow/index.js';
 // 图表是纯函数（数据 → SVG 字符串），单独导出让编辑器/插件也能复用。
 export {
   barChart, lineChart, pieChart, heatmapChart, wordCloud, rankedBars,

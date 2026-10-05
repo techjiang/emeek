@@ -1,0 +1,66 @@
+/* ── 社交分享（P3-4b-rest C）──────────────────────────────────
+   Minimal 的做法：与站点一致的克制。无阴影、无圆角夸张、无渐变。
+   按钮是描边胶囊，hover 时描边变强调色 —— 与 .tag 的行为一致。 */
+
+.share {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem;
+  margin: 2.5rem 0 0; padding-top: 1.5rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.share-label { font-size: 0.85rem; color: var(--muted, #6b7280); letter-spacing: 0.02em; }
+.share-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.share-btn {
+  display: inline-flex; align-items: center; min-height: 2rem; padding: 0.25rem 0.8rem;
+  font: inherit; font-size: 0.85rem; line-height: 1;
+  color: var(--text, #1f2937); background: transparent;
+  border: 1px solid var(--border, #d1d5db); border-radius: 999px;
+  text-decoration: none; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.share-btn:hover { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
+.share-btn:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+.share-copy[data-copied] { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
+
+/* 微信二维码：点击后在原地展开。用属性选择器而不是 hidden 属性 ——
+   无 JS 时它不显示（默认），有 JS 点击后加 data-open 才出现。 */
+.share-qr { display: none; flex-basis: 100%; }
+.share-qr[data-open] { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding-top: 0.5rem; }
+.share-qr-canvas { width: 200px; height: 200px; image-rendering: pixelated; }
+.share-qr[data-qr-error]::after {
+  content: "二维码生成失败：" attr(data-qr-error);
+  font-size: 0.85rem; color: var(--muted, #6b7280);
+}
+.share-qr-hint { margin: 0; font-size: 0.85rem; color: var(--muted, #6b7280); }
+
+/* 移动端：按钮收进「分享」开关里。44px 是触摸目标的下限。 */
+.share-toggle { display: none; }
+@media (max-width: 640px) {
+  .share-toggle {
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem;
+    font: inherit; font-size: 0.9rem; color: var(--text, #1f2937);
+    background: transparent; border: 1px solid var(--border, #d1d5db); border-radius: 999px; cursor: pointer;
+  }
+  .share-buttons { display: none; flex-basis: 100%; }
+  .share[data-open] .share-buttons { display: flex; }
+  .share-btn { min-height: 44px; padding: 0 1rem; }
+}
+
+/* 侧栏浮动条 */
+.share-float { display: none; }
+@media (min-width: 1024px) {
+  .share-float {
+    display: flex; flex-direction: column; gap: 0.5rem;
+    position: sticky; top: 5rem; margin-bottom: 1.5rem;
+  }
+}
+.share-float-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem;
+  font: inherit; font-size: 0.8rem; line-height: 1;
+  color: var(--muted, #6b7280); background: transparent;
+  border: 1px solid var(--border, #d1d5db); border-radius: 50%;
+  text-decoration: none; cursor: pointer;
+}
+.share-float-btn:hover { color: var(--accent, #2563eb); border-color: var(--accent, #2563eb); }
+.share-float .share-qr { position: absolute; left: 3rem; top: 0; }

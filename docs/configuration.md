@@ -226,6 +226,44 @@ issue: 42
 目录的落位（侧栏 / 正文上方 / 不给）由引擎根据布局决定，
 不在这里配 —— 见 [长文导航](reading.md)。
 
+## reading（阅读统计显示）
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `reading.showTime` | `true` | 阅读时间徽章 |
+| `reading.showDate` | `true` | 发布日期（有 `updated` 且不同时显示「更新于」） |
+| `reading.showComments` | `true` | 评论数徽章（**只在有数据源时出现**，local 源没有 → 不显示） |
+| `reading.wordsPerMinute` | `400` | 阅读时长口径（中文速度）。与 AI 模块的估算共用这一处 |
+
+评论数「没有数据源时不显示」而不是显示 0 —— 见 [长文导航 · 阅读统计显示](reading.md#六阅读统计显示p3-4b-rest-d1)。
+
+## share（社交分享）
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `share.enabled` | `false` | 总开关。默认关 —— 要不要让别人分享是作者的偏好 |
+| `share.platforms` | `['twitter','weibo','copy']` | 要出现哪些平台。未知名字会告警（不静默丢弃） |
+| `share.position` | `'bottom'` | `bottom` / `sidebar` / `both` |
+| `share.utm_source` | `'emeek'` | 拼进分享地址的 UTM。设 `null` 去掉 |
+| `share.utm_medium` | `'social'` | 同上 |
+| `share.utm_campaign` | `null` | 同上 |
+| `share.label` | `'分享'` | 按钮组前的文字 |
+
+全部按钮都是构建期算好的 `<a>` —— 零第三方 JS、零 SDK。
+见 [社交分享](share.md)。
+
+## workflow（内容工作流）
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `workflow.validate` | `'warn'` | `off` / `warn`（逐条告警，构建继续）/ `error`（让构建失败） |
+| `workflow.checks` | `[]` | 要跑哪些检查，空 = 全部：`title` / `date` / `links` / `markdown` / `taxonomy` / `internal-links` |
+| `workflow.schedule.enabled` | `true` | 定时发布：`date` 在未来的文章不进产物 |
+| `workflow.schedule.graceHours` | `0` | **推迟**小时数：`date + graceHours` 才算到点 |
+
+草稿（`draft: true`）与定时发布都不进生产构建，判定只有一处。
+见 [内容工作流](workflow.md)。
+
 ## plugins
 
 数组，元素为路径或包名，也可写成 `[名称, { 选项 }]`：

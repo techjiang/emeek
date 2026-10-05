@@ -1,0 +1,24 @@
+{# 侧栏浮动分享条（share.position 为 sidebar / both 时）。
+
+   与底部的 share 是**同一份数据**，只是位置不同。刻意不复用同一个 partial ——
+   浮动条是竖向的、只有图标，而底部是横向的、带文字标签，
+   两者的标记结构不一样。共用一份 HTML 会逼出一堆「这里是浮动条所以……」的
+   模板分支，比两份清晰的 partial 更难维护。
+
+   数据仍是引擎算好的 shareView，所以两份的链接**不可能分叉**。 #}
+{% if shareView && shareView.sidebar %}
+<aside class="share-float" data-share data-share-url="{{ shareView.url }}" data-share-title="{{ shareView.title }}" aria-label="分享这篇文章">
+  {% for item in shareView.items %}
+    {% if item.wechat %}
+    <button class="share-float-btn" type="button" data-share-wechat aria-label="微信扫码分享">微</button>
+    {% elsif item.copy %}
+    <button class="share-float-btn" type="button" data-share-copy aria-label="复制链接">链</button>
+    {% else %}
+    <a class="share-float-btn" href="{{ item.href }}"{% if item.external %} target="_blank" rel="noopener noreferrer"{% endif %} aria-label="分享到 {{ item.label }}">{{ item.label }}</a>
+    {% endif %}
+  {% endfor %}
+  <div class="share-qr" data-share-qr>
+    <canvas class="share-qr-canvas" width="200" height="200" role="img" aria-label="当前文章地址的二维码"></canvas>
+  </div>
+</aside>
+{% endif %}

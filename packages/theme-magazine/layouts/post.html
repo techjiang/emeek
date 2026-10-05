@@ -11,11 +11,17 @@
                 <p class="post-kicker">{{ post.leadCategory || '长文' }}</p>
                 <h1 class="post-title">{{ post.title }}</h1>
                 <div class="post-meta">
-                    <time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>
-                    <span class="dot">·</span>
-                    <span>{{ post.readingTime }} 分钟读完</span>
+                    {% if readingDisplay.showDate !== false %}<time datetime="{{ post.date }}">{{ post.dateFormatted }}</time>{% endif %}
+                    {% if post.updatedFormatted && post.updatedFormatted != post.dateFormatted %}<span class="dot">·</span>
+                    <span class="post-updated">更新于 <time datetime="{{ post.updated }}">{{ post.updatedFormatted }}</time></span>{% endif %}
+                    {% if readingDisplay.showTime !== false %}<span class="dot">·</span>
+                    <span>{{ post.readingTime }} 分钟读完</span>{% endif %}
                     <span class="dot">·</span>
                     <span>{{ post.wordCount }} 字</span>
+                    {# 评论数：链接到评论区。只在有数据源时出现（local 源没有 → null）。
+                       点进去没反应比不显示更糟，所以这里同时要求评论区真的有内容。 #}
+                    {% if readingDisplay.showComments !== false && post.commentCount != null %}<span class="dot">·</span>
+                    <a class="post-comments" href="#comments">{{ post.commentCount }} 条评论</a>{% endif %}
                     {% if post.backlinks %}<span class="dot">·</span><span>被引用 {{ post.backlinks }} 次</span>{% endif %}
                 </div>
                 {% if post.tags.length %}
@@ -32,6 +38,7 @@
                窄屏侧栏落到正文下方时尤其像 bug。 #}
             <div class="prose">{{{ post.html }}}</div>
             {% include "related" %}
+            {% include "share" %}
             {% include "comments" %}
         </article>
         {% include "reading" %}

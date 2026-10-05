@@ -195,6 +195,21 @@ function emit(token) {
   if (/^if\s/.test(tag)) return `if (${compileFilters(tag.slice(3))}) {`;
   // "else if " 恰好 8 个字符，slice(8) 才是条件表达式本身。
   if (/^else\s+if\s/.test(tag)) return `} else if (${compileFilters(tag.slice(8))}) {`;
+  /**
+   * `elsif` 与 `else if` 是同一个东西。
+   *
+   * 只支持 `else if` 是个真实的坑：`elsif` 是 Liquid/Jekyll 的写法，
+   * 主题作者（尤其从 Gmeek/Jekyll 过来的人）会写成 `{% elsif x %}`。
+   * 而它不被识别时**不会报错** —— emit 返回空串，于是这个 if 分支
+   * 根本没被闭合，两边的分支会同时渲染出来。
+   * 症状是「按钮/条目莫名其妙出现两份」，而模板源码看起来完全正常。
+   *
+   * 这个 bug 我自己踩过：share partial 用 elsif 写「微信 → 复制 → 链接」
+   * 三分支，结果复制链接那个按钮渲染了两遍（一个是 <button>、一个是 <a>）。
+   * 所以两条写法都要支持，并且**别名必须在源码里写清楚**。
+   */
+  const elsif = /^elsif\s+([\s\S]+)$/.exec(tag);
+  if (elsif) return `} else if (${compileFilters(elsif[1])}) {`;
   if (tag === 'else') return '} else {';
   if (tag === 'endif' || tag === '/if') return '}';
   if (/^for\s+/.test(tag)) {

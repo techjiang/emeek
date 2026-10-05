@@ -1,0 +1,64 @@
+/* ── 社交分享（Inkstone）───────────────────────────────────────
+   不用按钮，用「文字链接 + 竖线分隔」—— 水墨主题里一排圆角按钮
+   太跳。hover 时下划线从墨色变成朱砂（--seal-red），与印章的用法一致。 */
+
+.share {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.6rem;
+  margin: 2.5rem 0 0; padding-top: 1rem;
+  border-top: 1px solid var(--rule, var(--border));
+}
+.share-label { font-size: 0.85rem; color: var(--text-dim); letter-spacing: 0.1em; }
+.share-buttons { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.9rem; }
+
+.share-btn {
+  display: inline-flex; align-items: center;
+  font: inherit; font-size: 0.9rem; line-height: 1.6;
+  color: var(--text-secondary, var(--text)); background: none;
+  border: 0; border-bottom: 1px solid transparent; padding: 0 0 1px;
+  text-decoration: none; cursor: pointer;
+}
+.share-btn:hover { color: var(--seal-red, var(--accent)); border-bottom-color: var(--seal-red, var(--accent)); }
+.share-btn:focus-visible { outline: 2px solid var(--seal-red, var(--accent)); outline-offset: 3px; }
+.share-copy[data-copied] { color: var(--seal-red, var(--accent)); border-bottom-color: var(--seal-red, var(--accent)); }
+
+.share-qr { display: none; flex-basis: 100%; }
+.share-qr[data-open] { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding-top: 0.6rem; }
+/* 扫码必须白底黑块。 */
+.share-qr-canvas {
+  width: 200px; height: 200px; image-rendering: pixelated;
+  background: #fff; padding: 0.5rem; border: 1px solid var(--rule, var(--border));
+}
+.share-qr[data-qr-error]::after {
+  content: "二维码生成失败：" attr(data-qr-error); font-size: 0.85rem; color: var(--text-dim);
+}
+.share-qr-hint { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
+
+.share-toggle { display: none; }
+@media (max-width: 640px) {
+  .share-toggle {
+    display: inline-flex; align-items: center; min-height: 44px;
+    font: inherit; font-size: 0.9rem; color: var(--text-secondary, var(--text));
+    background: none; border: 1px solid var(--rule, var(--border)); padding: 0 1rem; cursor: pointer;
+  }
+  .share-buttons { display: none; flex-basis: 100%; }
+  .share[data-open] .share-buttons { display: flex; }
+  .share-btn { min-height: 44px; align-items: center; }
+}
+
+.share-float { display: none; }
+@media (min-width: 1024px) {
+  .share-float {
+    display: flex; flex-direction: column; gap: 0.35rem;
+    position: sticky; top: 5rem; margin-bottom: 1.5rem;
+  }
+}
+.share-float-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem;
+  font: inherit; font-size: 0.78rem; line-height: 1;
+  color: var(--text-dim); background: none;
+  border: 1px solid var(--rule, var(--border));
+  text-decoration: none; cursor: pointer;
+}
+.share-float-btn:hover { color: var(--seal-red, var(--accent)); border-color: var(--seal-red, var(--accent)); }
+.share-float .share-qr { position: absolute; left: 2.8rem; top: 0; }

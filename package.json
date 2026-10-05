@@ -18,7 +18,7 @@
     "benchmark:preview": "node packages/editor/tests/bench/preview-bench.mjs",
     "studio": "node packages/cli/bin/emeeek.js studio --cwd examples/minimal",
     "check:studio-bundle": "node scripts/check-studio-bundle.mjs",
-    "test:e2e": "node scripts/e2e/xss.mjs && node scripts/e2e/draft-mobile.mjs && node scripts/e2e/dev-integration.mjs && node scripts/e2e/ai-panel.mjs",
+    "test:e2e": "node scripts/e2e/xss.mjs && node scripts/e2e/draft-mobile.mjs && node scripts/e2e/dev-integration.mjs && node scripts/e2e/ai-panel.mjs && node scripts/e2e/share.mjs && node scripts/e2e/workflow.mjs",
     "test:negative": "bash scripts/e2e/negative-check.sh",
     "check:shortcuts": "node scripts/check-shortcuts.mjs",
     "test:perf": "node scripts/lighthouse.mjs",
@@ -31,7 +31,9 @@
     "check:perf:all": "node scripts/check-perf.mjs && node scripts/check-perf.mjs --site examples/themes-demo && node scripts/check-perf.mjs --pwa",
     "e2e:comments": "node scripts/e2e/comments.mjs",
     "e2e:reading": "node scripts/e2e/reading.mjs",
-    "e2e:pwa": "node scripts/e2e/pwa.mjs"
+    "e2e:pwa": "node scripts/e2e/pwa.mjs",
+    "e2e:share": "node scripts/e2e/share.mjs",
+    "e2e:workflow": "node scripts/e2e/workflow.mjs"
   },
   "engines": {
     "node": ">=18"
