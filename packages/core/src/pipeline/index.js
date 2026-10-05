@@ -30,6 +30,9 @@ import { loadPlugins } from '../plugin/loader.js';
 import { createHookRunner } from '../plugin/hooks.js';
 import { writeOutput } from './render/output.js';
 import { logger, progress } from '../util/logger.js';
+import { buildAnalyticsScripts, validateAnalyticsConfig } from '../analytics/providers.js';
+import { renderProbeTag } from '../analytics/probe.js';
+import { buildStatsView, hasSectionData } from '../stats/index.js';
 
 /**
  * 构建主流程。这是一个纯函数式的管线：
@@ -38,6 +41,14 @@ import { logger, progress } from '../util/logger.js';
  */
 export async function build({ cwd = process.cwd(), configPath, onProgress } = {}) {
   const started = Date.now();
+  /**
+   * 全站共用的「现在」。
+   *
+   * 单独抽一个变量而不是各处 new Date()：统计页的运行天数、热力图的终点、
+   * sitemap 的 lastmod 判据都读它。如果各处自己取时间，跨零点的那次构建
+   * 会出现「热力图到 3 号，但运行天数算到 2 号」这种自相矛盾的产物。
+   */
+  const buildNow = new Date();
   // 显式 configPath 直接交给 loadConfig 解析，**不写进 process.env**。
   // 写 env 的代价是进程级全局状态在测试之间泄漏：一个用例设过 EMEEEK_CONFIG
   // 之后，后续所有用例都会被它劫持，且症状是「配置看起来没生效」而非报错。
@@ -51,6 +62,15 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   const plugins = await loadPlugins(config, cwd);
   const hooks = createHookRunner(plugins);
+
+  /**
+   * 分析片段只算一次，全站共用。
+   *
+   * `analytics.enabled !== true` 时这里得到的就是两个空串 —— 全站
+   * 零 script。校验失败会抛错（而不是注入一个半残的脚本）：
+   * 一个「配了但不生效」的分析比报错难查得多。
+   */
+  const analytics = validateAndBuildAnalytics(config);
 
   logger.step(`内容源：${config.content.source}${resolved ? ` · 配置：${path.relative(cwd, resolved)}` : ' · 使用默认配置'}`);
 
@@ -225,6 +245,9 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
 
   // 评论客户端脚本只算一次（构建期缓存），但只挂到真的有评论区的页面上 ——
   // 7.6KB 内联到每个页面上是纯浪费（首页、归档、标签页都没有评论区）。
+  // 统计页开关。放在 common() 之前 —— 导航项要读它，而 common() 是闭包。
+  const statsEnabled = config.analytics?.statsPage?.enabled === true;
+
   let commentsScriptCache = null;
   const commentsScript = async () => {
     if (commentsScriptCache === null) commentsScriptCache = await loadCommentsClient();
@@ -274,6 +297,15 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     pwa: pwaHeadData(config),
     // 评论客户端脚本。默认空 —— 只有文章页（真的有评论区的那几个）才会填。
     commentsScript: '',
+    // 分析脚本。默认**两段都是空字符串** —— 这是「默认零追踪」在模板层的落点：
+    // 主题无条件输出 {{{ analyticsHead }}} / {{{ analyticsFooter }}}，
+    // 关掉时它们就是空的，产物里连一个 script 标签都不会多。
+    analyticsHead: analytics.head,
+    analyticsFooter: analytics.footer,
+    analyticsEnabled: config.analytics?.enabled === true,
+    analyticsProvider: analytics.provider,
+    // 统计页入口。默认 null —— 主题的导航 partial 据此决定要不要渲染那一项。
+    statsUrl: statsEnabled ? (config.analytics?.statsPage?.path ?? '/stats/') : null,
     // 长文导航。默认空 —— 只有文章页会填。给一个空对象而不是 undefined，
     // 让「非文章页 include 了 reading partial」这种模板错误表现成
     // 「什么都不渲染」而不是构建崩溃。
@@ -441,12 +473,23 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     }
   }
 
+  // 统计页（P3-4b-rest B）。**在这里 push 而不是渲染完之后补**：
+  // sitemap 的条目来自 `rendered`，PWA 的缓存指纹也算 `rendered` ——
+  // 补在后面意味着统计页不在 sitemap 里、也不进 SW 缓存，
+  // 而这两种缺失都不会报错，只会让统计页「莫名其妙搜不到 / 离线打不开」。
+  // 我第一版就是补在后面，被 sitemap 断言抓出来了。
+  const statsPage = buildStatsPage({ config, sorted, siteData, now: buildNow, base: common() });
+  if (statsPage) pages.push(statsPage);
+
   // 布局渲染 + 插件钩子
   const rendered = [];
   for (const page of pages) {
     applySeo(page.data, { site: siteData, config, seo });
     const html = renderLayout(theme, page.layout, page.data, { strict: page.strict === true });
     rendered.push({ ...page, html });
+  }
+  if (statsPage) {
+    logger.info(`统计页：${statsPage.rendered.length} 个区块（${statsPage.path_}）`);
   }
   await hooks.run('onBeforeRender', { config, pages: rendered, posts, site: siteData });
 
@@ -517,6 +560,7 @@ export async function build({ cwd = process.cwd(), configPath, onProgress } = {}
     ? buildPwaArtifacts({ config, siteData, sorted, rendered, extraFiles, theme })
     : null;
   if (pwaFiles) extraFiles.push(...pwaFiles.files);
+
 
   // ── 7. 写盘 ────────────────────────────────────────────────────
   const outDir = path.resolve(cwd, config.output?.dir ?? 'dist');
@@ -742,13 +786,114 @@ function groupByYear(posts) {
   return [...map.entries()].sort((a, b) => b[0] - a[0]).map(([year, items]) => ({ year, posts: items }));
 }
 
+/**
+ * 分析脚本的构建期入口。
+ *
+ * 单独抽出来是为了让「关掉时到底注入了什么」成为**可单独测试**的一件事：
+ * 直接调这个函数断言返回两个空串，比构建一整个站点再看产物快得多，
+ * 而且失败时的信息也更清楚。
+ */
+export function validateAndBuildAnalytics(config = {}) {
+  const analytics = config.analytics ?? {};
+  if (analytics.enabled !== true) {
+    // 零追踪：连配置都不看。一个关掉的功能不该因为配置里留了半截参数而报错。
+    return { head: '', footer: '', provider: null, origin: null };
+  }
+  const { errors, warnings } = validateAnalyticsConfig(analytics);
+  for (const warning of warnings) logger.warn(`${warning.path}: ${warning.message}`);
+  if (errors.length) {
+    throw new Error(`分析配置校验失败：\n${errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n')}`);
+  }
+  const built = buildAnalyticsScripts(analytics, {
+    buildProbe: (cfg) => {
+      const endpoint = cfg?.endpoint;
+      if (!endpoint) throw new Error('analytics.builtin.endpoint 未配置，无法开启 PV 记录');
+      return renderProbeTag({ endpoint, retentionDays: cfg.retentionDays });
+    },
+  });
+  if (built.origin) logger.info(`分析：${built.provider} · 数据发往 ${built.origin}`);
+  else if (built.provider) logger.info(`分析：${built.provider}（站内，不发往第三方）`);
+  return built;
+}
+
+/**
+ * 统计页。
+ *
+ * 返回 null 表示这一页不存在 —— 与「生成了一个空页面」是完全不同的两件事。
+ * 关掉时导航里没有入口、sitemap 里没有 URL、产物里没有文件。
+ *
+ * 互动数据（评论数 / reaction 数）来自 Issues 源的文章自带字段；
+ * local 源没有，此时统计页会把评论那一栏显示为「无数据源」而不是 0。
+ */
+function buildStatsPage({ config, sorted, siteData, now = new Date(), base = {} }) {
+  if (config.analytics?.statsPage?.enabled !== true) return null;
+
+  // 从文章里汇总 Issues 互动数据。只有 Issues 源的文章才有这两个字段 ——
+  // 一篇都没有时返回 null，让统计层走「无数据源」分支。
+  const comments = {};
+  let anyInteraction = false;
+  for (const post of sorted) {
+    const stats = post.interactions;
+    if (!stats) continue;
+    anyInteraction = true;
+    comments[post.slug] = stats;
+    if (post.issueNumber != null) comments[String(post.issueNumber)] = stats;
+  }
+
+  const view = buildStatsView(sorted, {
+    config,
+    comments: anyInteraction ? comments : null,
+    now,
+    timezone: config.site?.timezone ?? 'Asia/Shanghai',
+    // 标签 URL 由引擎算好再传进去 —— 统计页自己拼 /tags/<name>.html 会与
+    // 标签页实际的 slugify 规则（大小写、空格、非字母数字）对不上，
+    // 表现成统计页上的标签链 404，而标签总览页上是好的。
+    tagUrl: base.tagUrl,
+  });
+  if (!view.rendered.length) return null;
+
+  const path = view.path;
+  const pagePath = path.endsWith('/') ? `${path}index.html` : path;
+  return {
+    layout: 'stats',
+    strict: true,
+    path: pagePath,
+    path_: path,
+    rendered: view.rendered,
+    data: {
+      // 非文章页仍然需要全套公共数据（site / config / nav / seo / jsonld）。
+      // 直接展开 base 而不是手写一份 —— 手写的那份一定会漏掉后来新加的字段，
+      // 而漏掉的表现是「某个页面少了一块」，不会有任何报错。
+      ...base,
+      type: 'website',
+      seoKind: 'webpage',
+      title: '站点统计',
+      description: `${siteData.title} 的内容统计 —— 数据全部在构建期从内容推断，零追踪、零 Cookie`,
+      canonical: `${siteData.url}${path}`,
+      statsView: view,
+    },
+  };
+}
+
+/**
+ * 导航。
+ *
+ * 统计页的入口**只在它真的存在时**出现 —— 一个点进去 404 的「统计」
+ * 比没有这一项更糟。所以判据是 statsPage.enabled，不是「有没有配 path」。
+ * 默认关闭也是刻意的：绝大多数个人博客不想把「这个站只有 3 篇文章」
+ * 摆在导航栏上。
+ */
 function buildNav(config, tags) {
-  return [
+  const nav = [
     { title: '首页', url: '/' },
     { title: '归档', url: '/archive.html' },
     { title: '标签', url: '/tags.html' },
     { title: '关于', url: '/about.html' },
   ];
+  if (config.analytics?.statsPage?.enabled === true && config.analytics?.statsPage?.nav !== false) {
+    nav.push({ title: '统计', url: config.analytics.statsPage.path ?? '/stats/' });
+  }
+  return nav;
 }
 
 function formatDate(iso, locale) {

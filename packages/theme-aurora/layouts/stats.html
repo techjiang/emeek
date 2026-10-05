@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}" data-theme="{{ config.theme.darkMode }}" data-theme-mode="{{ config.theme.darkMode }}" {{ themeFeatureAttrs }}>
+<head>
+    {% include "head" %}
+</head>
+<body class="layout-stats">
+    {% include "header" %}
+    <main class="site-main stats-main">
+        {# Aurora 的门面是「数据仪表盘」：数字卡片带极光渐变描边，
+           图表用霓虹发光而不是填充块。 #}
+        <header class="stats-hero">
+            <h1 class="page-title">站点统计</h1>
+            <p class="stats-subtitle">构建期推断 · 零追踪 · 零 Cookie</p>
+        </header>
+
+        {% if statsView.sections.totals %}
+        <section class="stats-totals" aria-label="概览">
+            {% for item in statsView.sections.totals.items %}
+            <div class="stat-card" data-key="{{ item.key }}">
+                <span class="stat-value">{% if item.value == null %}—{% else %}{{ item.value }}{% endif %}</span>
+                <span class="stat-label">{{ item.label }}{% if item.value != null %}<span class="stat-unit">{{ item.unit }}</span>{% endif %}</span>
+                {% if item.value == null %}<span class="stat-note">无数据源</span>{% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if statsView.sections.frequency %}
+        <section class="stats-block" aria-labelledby="stats-frequency">
+            <h2 class="section-label" id="stats-frequency">发文频率</h2>
+            <div class="stats-panel">
+                <div class="stats-chart">{{{ statsView.sections.frequency.bars }}}</div>
+                <div class="stats-chart">{{{ statsView.sections.frequency.line }}}</div>
+            </div>
+            <p class="stats-meta">
+                连续 <strong>{{ statsView.sections.frequency.streak.current }}</strong> 天
+                · 最长 {{ statsView.sections.frequency.streak.longest }} 天
+                {% if statsView.sections.frequency.writing.avgGapDays != null %}· 平均 {{ statsView.sections.frequency.writing.avgGapDays }} 天一篇{% endif %}
+            </p>
+        </section>
+        {% endif %}
+
+        {% if statsView.sections.top %}
+        <section class="stats-block" aria-labelledby="stats-top">
+            <h2 class="section-label" id="stats-top">热门文章</h2>
+            <p class="stats-hint">按{{ statsView.sections.top.metricLabel }}排序</p>
+            {{{ statsView.sections.top.html }}}
+        </section>
+        {% endif %}
+
+        {% if statsView.sections.tags %}
+        <section class="stats-block" aria-labelledby="stats-tags">
+            <h2 class="section-label" id="stats-tags">标签分布</h2>
+            <div class="stats-two-col">
+                <div class="stats-chart stats-chart-pie">{{{ statsView.sections.tags.pie }}}</div>
+                <div class="stats-tag-list">
+                    {% for tag in statsView.sections.tags.items %}
+                    <a class="tag" href="{{ tag.url }}">#{{ tag.name }} <span class="tag-count">{{ tag.count }}</span></a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="stats-chart">{{{ statsView.sections.tags.cloud }}}</div>
+        </section>
+        {% endif %}
+
+        {% if statsView.sections.heatmap %}
+        <section class="stats-block" aria-labelledby="stats-heatmap">
+            <h2 class="section-label" id="stats-heatmap">发文热力图</h2>
+            <div class="stats-panel stats-chart-heat">{{{ statsView.sections.heatmap.svg }}}</div>
+            <p class="stats-meta">{{ statsView.sections.heatmap.total }} 篇 · {{ statsView.sections.heatmap.activeDays }} 天有更新</p>
+        </section>
+        {% endif %}
+
+        {% if statsView.sections.pv %}
+        <section class="stats-block" aria-labelledby="stats-pv">
+            <h2 class="section-label" id="stats-pv">浏览量排行</h2>
+            {{{ statsView.sections.pv.html }}}
+        </section>
+        {% endif %}
+
+        <section class="stats-block stats-sources" aria-labelledby="stats-sources">
+            <h2 class="section-label" id="stats-sources">数据来源</h2>
+            <ul class="source-list">
+                {% for row in statsView.sections.sources.rows %}
+                <li class="source-row{% if row.available %} source-ok{% else %} source-none{% endif %}">
+                    <span class="source-name">{{ row.name }}</span>
+                    <span class="source-where">{% if row.available %}{{ row.source }}{% else %}无数据源{% endif %}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="stats-footnote">
+                {% if statsView.range.from %}统计自 {{ statsView.range.from }} · {% endif %}最后更新 {{ statsView.generatedAt }}
+            </p>
+        </section>
+    </main>
+    {% include "footer" %}
+</body>
+</html>

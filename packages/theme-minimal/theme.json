@@ -6,37 +6,145 @@
   "description": "极简黑白，排版为王。默认主题，零依赖、无外部字体请求、无阴影无装饰。",
   "preview": "preview.png",
   "entryLayout": "index",
-  "layouts": ["index", "post", "archive", "tags", "about", "404", "search"],
-  "features": ["dark-mode", "light-mode", "syntax-highlight", "toc", "search", "search-index"],
+  "layouts": [
+    "index",
+    "post",
+    "archive",
+    "tags",
+    "about",
+    "404",
+    "search",
+    "stats"
+  ],
+  "features": [
+    "dark-mode",
+    "light-mode",
+    "syntax-highlight",
+    "toc",
+    "search",
+    "search-index"
+  ],
   "compatible": ">=1.0.0",
   "config": {
     "colors": {
-      "primary": { "type": "color", "default": "#111827", "label": "标题色" },
-      "accent": { "type": "color", "default": "#2563eb", "label": "强调色" },
-      "background": { "type": "color", "default": "#ffffff", "label": "背景色" },
-      "text": { "type": "color", "default": "#1f2937", "label": "正文色" },
-      "muted": { "type": "color", "default": "#6b7280", "label": "次要色" }
+      "primary": {
+        "type": "color",
+        "default": "#111827",
+        "label": "标题色"
+      },
+      "accent": {
+        "type": "color",
+        "default": "#2563eb",
+        "label": "强调色"
+      },
+      "background": {
+        "type": "color",
+        "default": "#ffffff",
+        "label": "背景色"
+      },
+      "text": {
+        "type": "color",
+        "default": "#1f2937",
+        "label": "正文色"
+      },
+      "muted": {
+        "type": "color",
+        "default": "#6b7280",
+        "label": "次要色"
+      }
     },
     "typography": {
-      "headingFont": { "type": "font", "default": "ui-sans-serif, system-ui, -apple-system, Segoe UI, Noto Sans SC", "label": "标题字体" },
-      "bodyFont": { "type": "font", "default": "ui-sans-serif, system-ui, -apple-system, Segoe UI, Noto Sans SC", "label": "正文字体" },
-      "codeFont": { "type": "font", "default": "ui-monospace, SFMono-Regular, JetBrains Mono, Consolas", "label": "代码字体" },
-      "fontSize": { "type": "number", "default": 16, "min": 12, "max": 24, "label": "正文字号" },
-      "lineHeight": { "type": "number", "default": 1.75, "min": 1.2, "max": 2.2, "label": "行高" }
+      "headingFont": {
+        "type": "font",
+        "default": "ui-sans-serif, system-ui, -apple-system, Segoe UI, Noto Sans SC",
+        "label": "标题字体"
+      },
+      "bodyFont": {
+        "type": "font",
+        "default": "ui-sans-serif, system-ui, -apple-system, Segoe UI, Noto Sans SC",
+        "label": "正文字体"
+      },
+      "codeFont": {
+        "type": "font",
+        "default": "ui-monospace, SFMono-Regular, JetBrains Mono, Consolas",
+        "label": "代码字体"
+      },
+      "fontSize": {
+        "type": "number",
+        "default": 16,
+        "min": 12,
+        "max": 24,
+        "label": "正文字号"
+      },
+      "lineHeight": {
+        "type": "number",
+        "default": 1.75,
+        "min": 1.2,
+        "max": 2.2,
+        "label": "行高"
+      }
     },
     "layout": {
-      "maxWidth": { "type": "number", "default": 736, "min": 600, "max": 1200, "label": "内容最大宽度" },
-      "sidebar": { "type": "boolean", "default": true, "label": "显示侧边栏" },
-      "toc": { "type": "boolean", "default": true, "label": "显示目录" },
-      "footer": { "type": "boolean", "default": true, "label": "显示页脚" }
+      "maxWidth": {
+        "type": "number",
+        "default": 736,
+        "min": 600,
+        "max": 1200,
+        "label": "内容最大宽度"
+      },
+      "sidebar": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示侧边栏"
+      },
+      "toc": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示目录"
+      },
+      "footer": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示页脚"
+      }
     },
     "features": {
-      "darkMode": { "type": "select", "options": ["auto", "light", "dark", "toggle"], "default": "auto", "label": "明暗模式" },
-      "readingProgress": { "type": "boolean", "default": true, "label": "阅读进度条" },
-      "syntaxHighlight": { "type": "boolean", "default": true, "label": "代码高亮" },
-      "math": { "type": "boolean", "default": true, "label": "数学公式" },
-      "mermaid": { "type": "boolean", "default": true, "label": "图表" },
-      "relatedPosts": { "type": "boolean", "default": true, "label": "相关文章" }
+      "darkMode": {
+        "type": "select",
+        "options": [
+          "auto",
+          "light",
+          "dark",
+          "toggle"
+        ],
+        "default": "auto",
+        "label": "明暗模式"
+      },
+      "readingProgress": {
+        "type": "boolean",
+        "default": true,
+        "label": "阅读进度条"
+      },
+      "syntaxHighlight": {
+        "type": "boolean",
+        "default": true,
+        "label": "代码高亮"
+      },
+      "math": {
+        "type": "boolean",
+        "default": true,
+        "label": "数学公式"
+      },
+      "mermaid": {
+        "type": "boolean",
+        "default": true,
+        "label": "图表"
+      },
+      "relatedPosts": {
+        "type": "boolean",
+        "default": true,
+        "label": "相关文章"
+      }
     }
   }
 }

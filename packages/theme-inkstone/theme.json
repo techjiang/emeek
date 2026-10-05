@@ -6,40 +6,164 @@
   "description": "水墨宣纸质感 —— 暖白纸底、墨色三级层次、印章与晕染。为中文长文写作设计，留白为主，装饰克制。",
   "preview": "preview.png",
   "entryLayout": "index",
-  "layouts": ["index", "post", "archive", "tags", "about", "404", "search"],
-  "features": ["dark-mode", "light-mode", "syntax-highlight", "math", "mermaid", "toc", "search", "search-index", "reading-progress", "related-posts"],
+  "layouts": [
+    "index",
+    "post",
+    "archive",
+    "tags",
+    "about",
+    "404",
+    "search",
+    "stats"
+  ],
+  "features": [
+    "dark-mode",
+    "light-mode",
+    "syntax-highlight",
+    "math",
+    "mermaid",
+    "toc",
+    "search",
+    "search-index",
+    "reading-progress",
+    "related-posts"
+  ],
   "compatible": ">=1.0.0",
   "config": {
     "colors": {
-      "primary": { "type": "color", "default": "#2c2c2c", "label": "浓墨（标题）" },
-      "accent": { "type": "color", "default": "#8b4513", "label": "赭石（强调）" },
-      "background": { "type": "color", "default": "#f5f0e8", "label": "宣纸底色" },
-      "surface": { "type": "color", "default": "#faf7f2", "label": "卡片纸色" },
-      "text": { "type": "color", "default": "#2c2c2c", "label": "正文墨色" },
-      "muted": { "type": "color", "default": "#6f6a60", "label": "淡墨" },
-      "border": { "type": "color", "default": "#ddd4c4", "label": "格线色" },
-      "code": { "type": "color", "default": "#efe9de", "label": "代码纸色" }
+      "primary": {
+        "type": "color",
+        "default": "#2c2c2c",
+        "label": "浓墨（标题）"
+      },
+      "accent": {
+        "type": "color",
+        "default": "#8b4513",
+        "label": "赭石（强调）"
+      },
+      "background": {
+        "type": "color",
+        "default": "#f5f0e8",
+        "label": "宣纸底色"
+      },
+      "surface": {
+        "type": "color",
+        "default": "#faf7f2",
+        "label": "卡片纸色"
+      },
+      "text": {
+        "type": "color",
+        "default": "#2c2c2c",
+        "label": "正文墨色"
+      },
+      "muted": {
+        "type": "color",
+        "default": "#6f6a60",
+        "label": "淡墨"
+      },
+      "border": {
+        "type": "color",
+        "default": "#ddd4c4",
+        "label": "格线色"
+      },
+      "code": {
+        "type": "color",
+        "default": "#efe9de",
+        "label": "代码纸色"
+      }
     },
     "typography": {
-      "headingFont": { "type": "font", "default": "\"Noto Serif SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, serif", "label": "标题字体" },
-      "bodyFont": { "type": "font", "default": "\"Noto Serif SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, serif", "label": "正文字体" },
-      "codeFont": { "type": "font", "default": "\"JetBrains Mono\", Consolas, monospace", "label": "代码字体" },
-      "fontSize": { "type": "number", "default": 17, "min": 12, "max": 24, "label": "正文字号" },
-      "lineHeight": { "type": "number", "default": 1.95, "min": 1.2, "max": 2.4, "label": "行高" }
+      "headingFont": {
+        "type": "font",
+        "default": "\"Noto Serif SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, serif",
+        "label": "标题字体"
+      },
+      "bodyFont": {
+        "type": "font",
+        "default": "\"Noto Serif SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, serif",
+        "label": "正文字体"
+      },
+      "codeFont": {
+        "type": "font",
+        "default": "\"JetBrains Mono\", Consolas, monospace",
+        "label": "代码字体"
+      },
+      "fontSize": {
+        "type": "number",
+        "default": 17,
+        "min": 12,
+        "max": 24,
+        "label": "正文字号"
+      },
+      "lineHeight": {
+        "type": "number",
+        "default": 1.95,
+        "min": 1.2,
+        "max": 2.4,
+        "label": "行高"
+      }
     },
     "layout": {
-      "maxWidth": { "type": "number", "default": 720, "min": 600, "max": 1200, "label": "内容最大宽度" },
-      "sidebar": { "type": "boolean", "default": true, "label": "显示侧边栏" },
-      "toc": { "type": "boolean", "default": true, "label": "显示目录" },
-      "footer": { "type": "boolean", "default": true, "label": "显示页脚" }
+      "maxWidth": {
+        "type": "number",
+        "default": 720,
+        "min": 600,
+        "max": 1200,
+        "label": "内容最大宽度"
+      },
+      "sidebar": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示侧边栏"
+      },
+      "toc": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示目录"
+      },
+      "footer": {
+        "type": "boolean",
+        "default": true,
+        "label": "显示页脚"
+      }
     },
     "features": {
-      "darkMode": { "type": "select", "options": ["auto", "light", "dark", "toggle"], "default": "auto", "label": "明暗模式" },
-      "readingProgress": { "type": "boolean", "default": true, "label": "阅读进度条" },
-      "syntaxHighlight": { "type": "boolean", "default": true, "label": "代码高亮" },
-      "math": { "type": "boolean", "default": true, "label": "数学公式" },
-      "mermaid": { "type": "boolean", "default": true, "label": "图表" },
-      "relatedPosts": { "type": "boolean", "default": true, "label": "相关文章" }
+      "darkMode": {
+        "type": "select",
+        "options": [
+          "auto",
+          "light",
+          "dark",
+          "toggle"
+        ],
+        "default": "auto",
+        "label": "明暗模式"
+      },
+      "readingProgress": {
+        "type": "boolean",
+        "default": true,
+        "label": "阅读进度条"
+      },
+      "syntaxHighlight": {
+        "type": "boolean",
+        "default": true,
+        "label": "代码高亮"
+      },
+      "math": {
+        "type": "boolean",
+        "default": true,
+        "label": "数学公式"
+      },
+      "mermaid": {
+        "type": "boolean",
+        "default": true,
+        "label": "图表"
+      },
+      "relatedPosts": {
+        "type": "boolean",
+        "default": true,
+        "label": "相关文章"
+      }
     }
   }
 }

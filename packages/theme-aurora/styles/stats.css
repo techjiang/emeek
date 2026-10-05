@@ -1,0 +1,164 @@
+/* Emeek · Aurora —— 统计页。
+   设计：把统计页做成「仪表盘」。数字卡片用极光渐变描边（不是填充），
+   图表线条带发光（drop-shadow），暗色下像 HUD。 */
+
+.stats-main { display: flex; flex-direction: column; gap: 2.75rem; }
+.stats-hero { margin-bottom: 0.25rem; }
+.stats-subtitle { color: var(--text-dim); font-size: 0.875rem; margin: 0.25rem 0 0; letter-spacing: 0.02em; }
+
+/* ── 数字卡片：渐变描边靠 background-clip 双层实现（伪元素铺底 + 内层遮住）── */
+.stats-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 1rem;
+}
+.stat-card {
+  position: relative;
+  border-radius: var(--radius);
+  padding: 1.125rem 1.25rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow: hidden;
+  isolation: isolate;
+}
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--grad-aurora);
+  opacity: 0.55;
+  /* 只留 1px 边框：遮罩把中间挖空。 */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+.stat-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--grad-aurora);
+  opacity: 0.07;
+  z-index: -1;
+}
+.stat-value {
+  font-size: 1.9rem; font-weight: 800; line-height: 1.05;
+  color: var(--primary); font-variant-numeric: tabular-nums;
+  font-family: var(--font-heading);
+}
+.stat-label { font-size: 0.8125rem; color: var(--text-dim); letter-spacing: 0.04em; }
+.stat-unit { margin-left: 0.25rem; font-size: 0.75rem; opacity: 0.75; }
+.stat-note {
+  font-size: 0.6875rem; color: var(--text-dim);
+  border-top: 1px dashed var(--border); padding-top: 0.3rem; margin-top: 0.3rem;
+}
+
+/* ── 区块：带玻璃面的面板 ─────────────────────────────────── */
+.stats-block { display: flex; flex-direction: column; gap: 0.875rem; }
+.stats-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  padding: 1.25rem 1.125rem;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+.stats-hint, .stats-meta { font-size: 0.8125rem; color: var(--text-dim); margin: 0; }
+.stats-meta strong { color: var(--primary); font-variant-numeric: tabular-nums; font-weight: 700; }
+.stats-two-col { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 44rem) { .stats-two-col { grid-template-columns: 1fr; } }
+
+.stats-chart svg { width: 100%; height: auto; display: block; }
+.stats-chart-pie { max-width: 16rem; margin: 0 auto; }
+.stats-chart-heat { overflow-x: auto; }
+
+/* ── 图表：霓虹发光 ───────────────────────────────────────── */
+.chart { color: var(--text); }
+.chart-axis { stroke: var(--border); stroke-width: 1; }
+.chart-label { fill: var(--text-dim); font-size: 10px; letter-spacing: 0.06em; }
+.chart-value { fill: var(--text-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+/* 柱子用渐变而不是纯色 —— 这是 Aurora 的视觉签名。
+   ⚠️ 不能用 `fill: url(#aurora-bar)`：那需要在**每个** SVG 里注入一份
+   <defs>，而柱状图是构建期生成的字符串，它不知道主题叫什么。
+   引用一个不存在的 paint server 时，SVG 规范规定 fill 退化成 none ——
+   表现是「柱子完全不见了」。所以这里用两条实色 + 叠一层渐变背景。 */
+.bar { fill: var(--aurora-violet); }
+.bar-empty { fill: var(--border); }
+/* 奇偶列换色：这是「不需要 defs 的渐变感」——同色系两个核心色交替，
+   视觉上仍有极光的层次，但完全不依赖 paint server。 */
+.chart-bar:nth-child(even) .bar { fill: var(--aurora-blue); }
+.chart-bar:hover .bar { filter: brightness(1.25); }
+.chart-area { fill: var(--accent); opacity: 0.14; }
+.chart-stroke {
+  fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px var(--border-glow));
+}
+.chart-dot { fill: var(--accent); filter: drop-shadow(0 0 5px var(--border-glow)); }
+.chart-center-value { fill: var(--primary); font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chart-center-label { fill: var(--text-dim); font-size: 10px; }
+
+/* 环形图：极光三色轮转。用 CSS 变量引用那三个核心色，
+   暗色/亮色下都自动可见（亮色模式那三个色也在 :root 里）。 */
+.slice { stroke: var(--bg); stroke-width: 2; fill: var(--aurora-violet); }
+.slice-1 { fill: var(--aurora-blue); }
+.slice-2 { fill: var(--aurora-violet); }
+.slice-3 { fill: var(--aurora-pink); }
+.slice-4 { fill: var(--aurora-blue); opacity: 0.7; }
+.slice-5 { fill: var(--aurora-violet); opacity: 0.7; }
+.slice-6 { fill: var(--aurora-pink); opacity: 0.7; }
+.slice-7 { fill: var(--aurora-violet); opacity: 0.45; }
+/* 发光：只在有点击/悬停意图时给 —— 全图发光会糊成一片。 */
+.slice:hover { filter: drop-shadow(0 0 6px var(--border-glow)); }
+.chart-pie .slice { transition: opacity 0.15s ease; }
+.chart-pie:hover .slice { opacity: 0.55; }
+.chart-pie .slice:hover { opacity: 1; }
+
+.heat { fill: var(--border); }
+.heat-0 { fill: var(--border); opacity: 0.4; }
+.heat-1 { fill: var(--aurora-blue); opacity: 0.35; }
+.heat-2 { fill: var(--aurora-blue); opacity: 0.6; }
+.heat-3 { fill: var(--aurora-violet); opacity: 0.8; }
+.heat-4 { fill: var(--aurora-pink); opacity: 1; }
+
+.cloud-word { fill: var(--text); }
+
+/* ── 排行榜 ───────────────────────────────────────────────── */
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.rank-item { display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; }
+.rank-index {
+  flex: 0 0 1.75rem; text-align: right; color: var(--text-dim);
+  font-variant-numeric: tabular-nums; font-size: 0.8125rem; font-weight: 700;
+}
+.rank-link { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.875rem; text-decoration: none; color: inherit; }
+.rank-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.rank-link:hover .rank-title { color: var(--accent); }
+.rank-bar { flex: 0 0 28%; height: 5px; border-radius: 3px; background: var(--border); position: relative; overflow: hidden; }
+.rank-bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0;
+  width: calc(var(--ratio, 0) * 100%);
+  background: var(--grad-aurora); border-radius: 3px;
+}
+.rank-value { flex: 0 0 auto; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+.rank-meta { flex: 0 0 auto; color: var(--text-dim); font-size: 0.75rem; }
+
+.stats-tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.stats-tag-list .tag { text-decoration: none; }
+
+.stats-sources { border-top: 1px solid var(--border); padding-top: 1.5rem; }
+.source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8125rem; }
+.source-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.source-name { color: var(--text); }
+.source-where { color: var(--text-dim); }
+.source-none .source-where { font-style: italic; }
+.stats-footnote { font-size: 0.75rem; color: var(--text-dim); margin: 0.75rem 0 0; }
+
+/* 词云是唯一「不该被拉伸」的图表：拉伸 SVG = 放大字号 = 改掉权重表达。
+   选择器必须是 `.stats-chart svg.chart-cloud`（与上面那条同权重、后写生效）——
+   只写 `.chart-cloud` 会被 `.stats-chart svg { width: 100% }` 按特异性压过去，
+   表现成「加了样式却没生效」，这类失败从产物里很难看出来。 */
+.stats-chart svg.chart-cloud { width: auto; max-width: 100%; height: auto; }

@@ -203,6 +203,67 @@ export function defaultConfig() {
       },
       china: { enabled: false, provider: null, domain: '', icp: false },
     },
+    /**
+     * 分析（P3-4b-rest A）。**默认关闭，且关闭时产物里零 script**。
+     *
+     * 这不是「默认关掉一个功能」，是 Emeek 的价值观：
+     * 用户选择 Emeek 是因为它干净 —— 默认开追踪就是背叛。
+     *
+     * 打开后有两条互不冲突的路：
+     *   · 内置（provider: 'builtin'）—— 数据全部在**构建期**从内容推断，
+     *     产物里没有任何统计脚本。互动数字（评论 / reaction）来自 Issues 元数据。
+     *   · 第三方（plausible / umami / goatcounter）—— 用户显式点名才注入，
+     *     且注入的 script 域必须与配置一致（有测试钉住）。
+     *   · custom —— 用户塞自己的代码。会破坏「零第三方请求」承诺，
+     *     文档与 doctor 都会警告。
+     *
+     * builtin.trackPageViews 是唯一一处「内置也会发请求」的能力，
+     * 它需要一个**用户自托管**的 endpoint。Emeek 不提供收集服务。
+     *
+     * 这里没有任何「默认 provider」的陷阱：默认值就是 'builtin'，
+     * 而 builtin 的 build() 返回空字符串 —— 打开了也什么都不发。
+     */
+    analytics: {
+      enabled: false,
+      provider: 'builtin',           // builtin | plausible | umami | goatcounter | custom
+      plausible: {
+        domain: '',
+        scriptSrc: 'https://plausible.io/js/script.js',
+      },
+      umami: {
+        websiteId: '',
+        scriptSrc: '',
+      },
+      goatcounter: {
+        code: '',
+        scriptSrc: 'https://gc.zgo.at/count.js',
+      },
+      custom: {
+        headScript: '',
+        footerScript: '',
+      },
+      builtin: {
+        // 自托管 PV 记录。需要 endpoint；不开时连探针都不生成。
+        trackPageViews: false,
+        endpoint: '',
+        retentionDays: 90,
+        excludeAdmin: true,
+      },
+      /**
+       * 统计页（/stats/）。默认**关**。
+       *
+       * 与 analytics.enabled 分开的理由：统计页展示的是「内容事实」
+       * （多少篇、什么时候写的），与「要不要追踪访客」是两件事。
+       * 有人想要统计页但不想开任何分析，也有人开分析但不想要公开页面。
+       * 把它们绑在一个开关上，两种人都得不到自己想要的。
+       */
+      statsPage: {
+        enabled: false,
+        path: '/stats/',
+        nav: true,
+        sections: ['totals', 'frequency', 'top', 'tags', 'heatmap'],
+      },
+    },
   };
 }
 

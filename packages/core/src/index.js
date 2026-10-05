@@ -24,13 +24,27 @@ export {
 } from './accel/index.js';
 export { cacheHeaders, classifyCache, buildHeaderManifest, CACHE_CLASS } from './accel/cache-headers.js';
 export { precompress, compressVariants, shouldCompress } from './accel/compress.js';
-export { PROVIDERS, PROVIDER_IDS, getProvider, validateCdnConfig, readCredentialsFromEnv } from './accel/providers.js';
+export { PROVIDERS, PROVIDER_IDS, PROVIDER_IDS as CDN_PROVIDER_IDS, getProvider, validateCdnConfig, readCredentialsFromEnv } from './accel/providers.js';
 export { loadCredentials, saveCredentials, parseCredentials, serializeCredentials, ensureGitignored } from './accel/credentials.js';
 export { checkIcp, scanBlockedHosts, planFontSubset, toRanges, analyzeImages, buildLocalFontFace, BLOCKED_HOSTS, CHINA_ALTERNATIVES } from './accel/china.js';
 export { selectPreloadTargets, renderPreloadTags, buildEarlyHintsHeader, renderNginxSnippet, renderCaddySnippet } from './accel/hints.js';
 export { hashTree, diffTrees, planFanout, buildHealthChecks, decideActiveOrigin } from './accel/origins.js';
 export { createCdnClient, buildPurgeTargets, buildWarmTargets } from './accel/cdn-client.js';
 export { probe, measure, compareLatency, median, PROBE_REGIONS } from './accel/latency.js';
+// ── 分析与统计（P3-4b-rest A/B）────────────────────────────────
+export {
+  ANALYTICS_PROVIDERS, PROVIDER_IDS as ANALYTICS_PROVIDER_IDS, SCRIPT_ORIGINS, listScriptOrigins,
+  getAnalyticsProvider, buildAnalyticsScripts, validateAnalyticsConfig,
+  buildBuiltinStats, monthlyFrequency, topPosts, tagDistribution,
+  dailyHeatmap, computeStreak, writingFrequency, toDayKey,
+  buildProbeScript, renderProbeTag, encodeHit, decodeHit, summarizeHits,
+  probeEndpoint, DEFAULT_RETENTION_DAYS,
+} from './analytics/index.js';
+export { buildStatsView, hasSectionData, STATS_SECTIONS } from './stats/index.js';
+// 图表是纯函数（数据 → SVG 字符串），单独导出让编辑器/插件也能复用。
+export {
+  barChart, lineChart, pieChart, heatmapChart, wordCloud, rankedBars,
+} from './stats/charts.js';
 export { loadTheme } from './pipeline/render/theme.js';
 export { normalizeOverrides, mergeOverrides } from './theme/override.js';
 export { listBuiltinThemes, listAvailableThemes } from './theme/registry.js';

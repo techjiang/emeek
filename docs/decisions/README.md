@@ -15,5 +15,6 @@
 | [D5](0005-shortcut-declaration.md) | 快捷键表是声明面 | `packages/editor/src/studio/shortcuts.js`、`scripts/check-shortcuts.mjs` |
 | [D6](0006-deploy-architecture.md) | 部署是一等公民 | `packages/core/src/deploy/`、`scripts/e2e/weaken.py` |
 | [D7](0007-global-acceleration.md) | 全球加速做进构建，而非做进部署 | `packages/core/src/accel/`、`packages/cli/src/commands/accelerate.js` |
+| [D8](0008-analytics-zero-tracking.md) | 分析层默认零追踪，统计在构建期推断 | `packages/core/src/analytics/`、`packages/core/src/stats/` |
 
 负向验证统一入口：`bash scripts/e2e/negative-check.sh`

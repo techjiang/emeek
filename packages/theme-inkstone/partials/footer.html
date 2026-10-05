@@ -19,3 +19,5 @@
    它与页面渲染无关，抢占首屏带宽没有任何收益。 #}
 {% if pwa %}<script>{{{ pwa.registerScript }}}</script>{% endif %}
 {% if pwa %}{% if pwa.installScript %}<script>{{{ pwa.installScript }}}</script>{% endif %}{% endif %}
+{# 分析脚本（footer 位置）。同样是空字符串占位。 #}
+{{{ analyticsFooter }}}

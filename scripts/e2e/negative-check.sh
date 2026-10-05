@@ -637,5 +637,124 @@ weaken "预算按单文件判断（总量可无限膨胀）" \
   's|if (used + bytes > limit) external.push({ ...style, bytes });|if (bytes > limit) external.push({ ...style, bytes });|' \
   'node --test packages/core/tests/perf/assets.test.js'
 
+# ── 分析与统计（P3-4b-rest A/B）──────────────────────────────────
+#
+# 这一组里有三条是这一轮的价值观防线：
+#   · 零追踪（未开启时不得注入任何脚本）
+#   · 不编数据（没有数据源时不得显示 0）
+#   · 图表不得依赖 JS / 外部库
+# 它们都不是「功能」，所以也没有功能测试会自然钉住它们 —— 必须显式削弱。
+echo ""
+echo "▸ 分析（A）：零追踪 / 脚本注入 / 探针隐私"
+
+# 68. 零追踪：让未开启时也注入一段脚本。
+weaken "零追踪（未开启也注入脚本）" \
+  packages/core/src/analytics/providers.js \
+  "s|  if (analytics.enabled !== true) return { head: '', footer: '', provider: null, origin: null };|  return { head: '', footer: '', provider: null, origin: null }; // weakened (falls through)|" \
+  'node --test packages/core/tests/analytics/injection.test.js'
+
+# 69. 探针不得读 Cookie。
+weaken "探针不读 Cookie（改成读 document.cookie）" \
+  packages/core/src/analytics/probe.js \
+  "s|var p=location.pathname;|var p=document.cookie+location.pathname;|" \
+  'node --test packages/core/tests/analytics/probe.test.js'
+
+# 70. 探针不得带上 query（里面有 token 与追踪参数）。
+weaken "探针只发 pathname（改成带 query）" \
+  packages/core/src/analytics/probe.js \
+  "s|var p=location.pathname;|var p=location.pathname+location.search;|" \
+  'node --test packages/core/tests/analytics/probe.test.js'
+
+# 71. 自定义脚本里的 </script> 必须被打散。
+#
+# 走 weaken_py：这条目标行里同时有 `<`、`/`、`\`、`$1`，
+# sed 要转义三层，写出来谁也读不懂 —— 而且失配时只报「削弱没生效」。
+weaken_py "内联脚本打散闭合标签（恒等）" \
+  packages/core/src/analytics/providers.js \
+  "s = s.replace(chr(10) + 'function guardAgainstClosingTag(code) {' + chr(10), chr(10) + 'function guardAgainstClosingTag(code) {' + chr(10) + '  return String(code);' + chr(10))" \
+  'node --test packages/core/tests/analytics/providers.test.js packages/core/tests/analytics/injection.test.js'
+
+# 72. provider 枚举必须与注册表一致。
+weaken "provider 枚举与注册表一致（校验恒通过）" \
+  packages/core/src/analytics/providers.js \
+  "s|  if (!provider) {|  if (false) { // weakened|" \
+  'node --test packages/core/tests/analytics/providers.test.js'
+
+echo ""
+echo "▸ 统计（B）：不编数据 / 零 JS / 空区块"
+
+# 73. 没有数据源时不得画图（空数据必须返回空串）。
+weaken "空数据不画图（空数组也渲染）" \
+  packages/core/src/stats/charts.js \
+  "s|  if (!Array.isArray(series) \|\| !series.length) return '';|  if (!Array.isArray(series)) return ''; // weakened|" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
+# 74. 没有数据源时不得显示 0（PV / 评论必须是 null）。
+weaken "无数据源不显示 0（pv 改成 0）" \
+  packages/core/src/analytics/builtin.js \
+  "s|      pv: null,|      pv: 0, // weakened|" \
+  'node --test packages/core/tests/analytics/builtin.test.js'
+
+# 75. 图表不得引入 script。
+weaken "图表零 JS（往 barChart 里塞 script）" \
+  packages/core/src/stats/charts.js \
+  "s|  return \`<svg class=\"chart chart-bars\"|  return '<script>x</script>' + \`<svg class=\"chart chart-bars\"|" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
+# 76. 图表标签必须转义。
+weaken "图表标签转义（esc 恒等）" \
+  packages/core/src/stats/charts.js \
+  "s|^export function esc(value) {|export function esc(value) { return String(value ?? ''); // weakened|" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
+# 77. 统计页默认关闭。
+#
+# 走 weaken_py 并且按**唯一上下文**定位（statsPage 段里的 enabled: false）——
+# defaults.js 里 enabled: false 有好几处（pwa / analytics / statsPage），
+# 用 sed 的全局替换会改错地方，或者干脆打不中。
+weaken_py "统计页默认关闭（改成默认开启）" \
+  packages/core/src/config/defaults.js \
+  "marker = \"        enabled: false,\" + chr(10) + \"        path: '/stats/',\"; assert marker in s; s = s.replace(marker, \"        enabled: true, // weakened\" + chr(10) + \"        path: '/stats/',\")" \
+  'node --test packages/core/tests/stats/page.test.js'
+
+# 78. 统计页必须在 sitemap 里（渲染顺序）。
+weaken "统计页进 sitemap（移到渲染之后补）" \
+  packages/core/src/pipeline/index.js \
+  "s|  if (statsPage) pages.push(statsPage);|  if (false) pages.push(statsPage); // weakened|" \
+  'node --test packages/core/tests/stats/page.test.js'
+
+# 79. statsPage 关闭时不得产出页面。
+weaken "统计页开关生效（判据恒为真）" \
+  packages/core/src/pipeline/index.js \
+  "s|  if (config.analytics?.statsPage?.enabled !== true) return null;|  if (false) return null; // weakened|" \
+  'node --test packages/core/tests/stats/page.test.js'
+
+# 80. 词云的 font-size 必须走 SVG 属性。
+weaken "词云字号走 SVG 属性（改回内联 px）" \
+  packages/core/src/stats/charts.js \
+  "s|        + \`font-size=\"\${item.size}\" fill-opacity=|        + \`style=\"font-size:\${item.size}px\" fill-opacity=|" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
+# 81. 词云的 viewBox 必须收窄。
+weaken "词云 viewBox 收窄（恒为最宽）" \
+  packages/core/src/stats/charts.js \
+  "s|  const usedWidth = Math.round(Math.min(width, Math.max(1, ...rows.map((r) => r.reduce((sum, i) => sum + i.textWidth + 20, 0)))));|  const usedWidth = width; // weakened|" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
+# 82. 排行里的数值不得重复。
+#
+# 削弱的落点必须与守它的测试一致：这条规则由 charts.test.js 的
+# 「数值只出现一次（value 与 meta 不得重复同一个数字）」守住，
+# 而 weakened 实现要真的把同一个数字写两遍才行。
+# 上一版削弱的是 stats/index.js 的 meta，但那个 meta 只在 metric 是
+# comments 时才有值 —— 走不到「重复」那个分支，所以测试不会红。
+# 用行索引定位再整行改写 —— 不跟 ${...} 与引号较劲。
+# （上一版直接写 .replace(...) 字符串，${esc(suffix)} 在 shell heredoc 里
+#   被当变量展开，替换表达式根本没生效，而脚本只会报「削弱没生效」。）
+weaken_py "排行数值不重复（单位拼两遍）" \
+  packages/core/src/stats/charts.js \
+  "lines = s.split(chr(10)); idx = [i for i, L in enumerate(lines) if 'rank-value' in L and 'esc(suffix)' in L]; assert idx, 'rank-value 行没找到'; lines[idx[0]] = lines[idx[0]].replace('esc(suffix)}<', 'esc(suffix)}' + 'esc(suffix)}<'); s = chr(10).join(lines)" \
+  'node --test packages/core/tests/stats/charts.test.js'
+
 echo "  ── ${PASS} 条防线被守住，${FAIL} 条没守住"
 [ "$FAIL" -eq 0 ] || exit 1

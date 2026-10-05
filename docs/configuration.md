@@ -280,6 +280,53 @@ deploy: {
 
 完整说明见 [全球加速](acceleration.md)。
 
+## analytics（分析与统计）
+
+**默认零追踪。** `enabled: false` 时产物里不存在任何统计 `<script>` 标签、
+不存在任何探针端点的引用 —— 不是「加载了但不发」，是根本不生成。
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `analytics.enabled` | **`false`** | 总开关。关闭时零统计脚本 |
+| `analytics.provider` | `builtin` | `builtin` / `plausible` / `umami` / `goatcounter` / `custom` |
+| `analytics.plausible.domain` | `''` | Plausible 站点域名（必填） |
+| `analytics.plausible.scriptSrc` | `https://plausible.io/js/script.js` | 可指向自托管实例 |
+| `analytics.umami.websiteId` | `''` | Umami 站点 ID（必填） |
+| `analytics.umami.scriptSrc` | `''` | Umami 脚本地址（必填） |
+| `analytics.goatcounter.code` | `''` | GoatCounter 站点 code（必填） |
+| `analytics.goatcounter.scriptSrc` | `https://gc.zgo.at/count.js` | 可指向自托管实例 |
+| `analytics.custom.headScript` | `''` | 注入 `</head>` 前。**会破坏零第三方请求承诺** |
+| `analytics.custom.footerScript` | `''` | 注入 body 末尾。同上 |
+| `analytics.builtin.trackPageViews` | `false` | 自托管 PV 探针 |
+| `analytics.builtin.endpoint` | `''` | 你的收集端点（Emeek 不提供收集服务） |
+| `analytics.builtin.retentionDays` | `90` | 数据保留期，进上报体由服务端裁剪 |
+| `analytics.builtin.excludeAdmin` | `true` | 不统计管理员访问 |
+| `analytics.statsPage.enabled` | `false` | 统计页（与 `analytics.enabled` 独立） |
+| `analytics.statsPage.path` | `/stats/` | 统计页路径 |
+| `analytics.statsPage.nav` | `true` | 出现在导航里 |
+| `analytics.statsPage.sections` | 全部 | `totals` / `frequency` / `top` / `tags` / `heatmap` |
+
+> `sources`（数据来源）区块**不可关闭** —— 它是统计页诚实性的落点。
+> 一张不写数据来源的统计表，读者无法判断它是不是编的。
+
+### 两个开关是分开的
+
+- 想要统计页但不想开任何分析 → `analytics.enabled: false` + `statsPage.enabled: true`
+- 想开分析但不想要公开页面 → `analytics.enabled: true` + `statsPage.enabled: false`
+
+统计页展示的是「内容事实」（多少篇、什么时候写的），与「要不要追踪访客」是两件事。
+
+### 没有数据源时显示「—」而不是 0
+
+- `local` 内容源没有 Issues 互动数据 → 评论数是 `null`，页面显示 `—` + 「无数据源」
+- 构建期永远算不出 PV → 浏览量恒为 `null`，对应区块整块不渲染
+
+**`null` 与 `0` 是两个不同的东西。** 0 会被读成「确实没有」，`null` 的含义是
+「没有这个数据源」。一个全 0 的图看起来像「有数据只是都是 0」——
+那是误导，所以那种图我们不画。
+
+完整说明见 [分析与统计](analytics.md)。
+
 ## 校验
 
 配置在构建前会做一次校验，错误会一次性列全：

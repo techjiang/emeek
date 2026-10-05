@@ -80,7 +80,7 @@ a:hover { text-decoration: underline; }
 .site-nav { display: flex; gap: 1rem; margin-left: auto; }
 .site-nav a { color: var(--text-dim); font-size: 0.9rem; }
 .site-nav a:hover { color: var(--accent); text-decoration: none; }
-.header-actions { display: flex; gap: 0.25rem; }
+.header-actions { display: flex; gap: 0.25rem; flex: 0 0 auto; }
 .icon-button {
   background: none; border: 1px solid var(--border); color: var(--text-dim);
   width: 2rem; height: 2rem; border-radius: var(--radius); cursor: pointer; font-size: 1rem;
@@ -277,9 +277,14 @@ html[data-theme="dark"] .tok-function { color: #79c0ff; }
 
 /* ── 小屏 ── */
 @media (max-width: 34rem) {
+  /* min-width: 0 是关键：flex 子项默认 min-width:auto，
+     内容（4 个导航项 + 2 个 32px 图标按钮）撑不下时不会收缩，
+     直接顶出横向滚动条。390px 视口下实测溢出 2px —— 很小，但滚动条会出现。
+     配套：小屏隐藏品牌文字（图形标记保留），给 nav 让出空间。 */
   .header-inner { padding: 0.7rem 1rem; gap: 0.6rem; }
-  .brand-text { white-space: nowrap; }
-  .site-nav { gap: 0.7rem; font-size: 0.85rem; }
+  .brand { min-width: 0; flex: 0 1 auto; }
+  .brand-text { display: none; }
+  .site-nav { gap: 0.7rem; font-size: 0.85rem; margin-left: auto; min-width: 0; flex-wrap: wrap; }
   .site-nav a { white-space: nowrap; }
   .site-main { padding: 2rem 1rem; }
 }

@@ -12,8 +12,10 @@
     "archive",
     "tags",
     "about",
-    "404"
-  , "search"],
+    "404",
+    "search",
+    "stats"
+  ],
   "features": [
     "dark-mode",
     "light-mode",
