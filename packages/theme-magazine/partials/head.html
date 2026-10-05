@@ -5,3 +5,6 @@
 <script>{{{ noFlashScript }}}</script>
 {{{ themeHeadExtra }}}
 {% include "seo" %}
+{# 分析脚本。默认是空字符串 —— 关掉时这里什么都不产出。
+   它刻意排在 no-flash 与样式之后：统计永远不该抢首屏。 #}
+{{{ analyticsHead }}}

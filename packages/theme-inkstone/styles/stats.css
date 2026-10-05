@@ -1,0 +1,147 @@
+/* Emeek · Inkstone —— 统计页。
+   设计：不做卡片。数字用竖排的「条目 + 墨线」呈现，
+   图表只上墨色深浅（赭石 + 淡赭），不引入第二种颜色。 */
+
+.stats-main { display: flex; flex-direction: column; gap: 2.5rem; }
+.stats-hero { margin-bottom: 0.25rem; }
+.stats-subtitle {
+  color: var(--text-dim); font-size: 0.875rem; margin: 0.25rem 0 0;
+  letter-spacing: 0.08em;
+}
+
+/* ── 概览：横排条目，用墨线分隔而不是卡片边框 ─────────────── */
+.stats-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0;
+  border-top: 2px solid var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.stat-entry {
+  display: grid;
+  /* label / value / note 三行，单位跟着 label 走。
+     用 grid 而不是 flex+order：order 只改绘制顺序、不改文档顺序，
+     屏幕阅读器念出来的仍是 DOM 顺序 —— 那会变成「12 篇 文章」，很别扭。
+     grid 的模板行同时解决视觉顺序与语义顺序。 */
+  grid-template-rows: auto auto auto;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.875rem 1rem 0.875rem 0;
+  /* 条目之间一条细墨线；最后一条不要（右边是留白）。 */
+  border-right: 1px solid var(--border);
+}
+.stat-entry:last-child { border-right: 0; }
+.stat-label {
+  grid-row: 2;
+  font-size: 0.75rem; color: var(--text-dim); letter-spacing: 0.12em;
+}
+.stat-value {
+  grid-row: 1;
+  font-size: 1.7rem; font-weight: 600; line-height: 1.1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.stat-note {
+  grid-row: 3; font-size: 0.6875rem; color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── 区块：标题下一条赭石细线 ─────────────────────────────── */
+.stats-block { display: flex; flex-direction: column; gap: 0.875rem; }
+.stats-hint, .stats-meta { font-size: 0.8125rem; color: var(--text-dim); margin: 0; }
+.stats-meta strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats-two-col { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 42rem) { .stats-two-col { grid-template-columns: 1fr; } }
+
+.stats-chart svg { width: 100%; height: auto; display: block; }
+.stats-chart-pie { max-width: 15rem; margin: 0 auto; }
+.stats-chart-heat { overflow-x: auto; }
+
+/* ── 图表：只用墨色两级 + 赭石。没有圆角、没有阴影。 ──────── */
+.chart { color: var(--text); }
+.chart-axis { stroke: var(--border); stroke-width: 1; }
+.chart-label {
+  fill: var(--text-dim); font-size: 10px; letter-spacing: 0.1em;
+}
+.chart-value { fill: var(--text-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+/* 柱子用「浓墨 → 淡墨」的透明度，而不是换颜色。 */
+.bar { fill: var(--text); opacity: 0.78; }
+.bar-empty { fill: var(--border); opacity: 1; }
+.chart-bar:hover .bar { opacity: 1; }
+.chart-area { fill: var(--text); opacity: 0.08; }
+.chart-stroke { fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.85; }
+.chart-dot { fill: var(--accent); }
+.chart-center-value {
+  fill: var(--text); font-size: 20px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.chart-center-label { fill: var(--text-dim); font-size: 10px; letter-spacing: 0.1em; }
+
+/* 环形图：赭石一色，靠透明度分档 —— 唯一的彩色出现在这里，
+   因为「分布」是需要被区分的，只用墨色会分不出来。 */
+.slice { stroke: var(--bg); stroke-width: 1.5; fill: var(--accent); }
+.slice-1 { fill: var(--accent); opacity: 0.82; }
+.slice-2 { fill: var(--accent); opacity: 0.66; }
+.slice-3 { fill: var(--accent); opacity: 0.52; }
+.slice-4 { fill: var(--accent); opacity: 0.4; }
+.slice-5 { fill: var(--accent); opacity: 0.3; }
+.slice-6 { fill: var(--accent); opacity: 0.22; }
+.slice-7 { fill: var(--accent); opacity: 0.15; }
+
+/* 热力图：墨的浓淡 —— 这正是热力图该有的样子。 */
+.heat { fill: var(--border); }
+.heat-0 { fill: var(--text); opacity: 0.06; }
+.heat-1 { fill: var(--text); opacity: 0.2; }
+.heat-2 { fill: var(--text); opacity: 0.4; }
+.heat-3 { fill: var(--text); opacity: 0.62; }
+.heat-4 { fill: var(--text); opacity: 0.88; }
+
+.cloud-word { fill: var(--text); }
+
+/* ── 排行榜：编辑体的细线条目，不用条形底 ─────────────────── */
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rank-item {
+  display: flex; align-items: baseline; gap: 0.75rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+}
+.rank-item:last-child { border-bottom: 0; }
+.rank-index {
+  flex: 0 0 1.5rem; color: var(--text-dim); font-size: 0.75rem;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.08em;
+}
+.rank-link { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 0.75rem; text-decoration: none; color: inherit; }
+.rank-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.rank-link:hover .rank-title { color: var(--accent); }
+/* 条形退成一条极细的墨线，只提供「相对长度」这个信息。 */
+.rank-bar {
+  flex: 0 0 26%; height: 2px; background: var(--border);
+  position: relative; overflow: hidden; align-self: center;
+}
+.rank-bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0;
+  width: calc(var(--ratio, 0) * 100%);
+  background: var(--accent);
+}
+.rank-value {
+  flex: 0 0 auto; color: var(--text-dim);
+  font-variant-numeric: tabular-nums; font-size: 0.8125rem;
+}
+.rank-meta { flex: 0 0 auto; color: var(--text-dim); font-size: 0.75rem; }
+
+.stats-tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.stats-tag-list .tag { text-decoration: none; }
+
+.stats-sources { border-top: 2px solid var(--text); padding-top: 1.25rem; }
+.source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8125rem; }
+.source-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.source-name { color: var(--text); }
+.source-where { color: var(--text-dim); }
+.source-none .source-where { font-style: italic; }
+.stats-footnote { font-size: 0.75rem; color: var(--text-dim); margin: 0.75rem 0 0; letter-spacing: 0.04em; }
+
+/* 词云是唯一「不该被拉伸」的图表：拉伸 SVG = 放大字号 = 改掉权重表达。
+   选择器必须是 `.stats-chart svg.chart-cloud`（与上面那条同权重、后写生效）——
+   只写 `.chart-cloud` 会被 `.stats-chart svg { width: 100% }` 按特异性压过去，
+   表现成「加了样式却没生效」，这类失败从产物里很难看出来。 */
+.stats-chart svg.chart-cloud { width: auto; max-width: 100%; height: auto; }

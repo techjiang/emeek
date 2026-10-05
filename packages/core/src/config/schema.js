@@ -82,6 +82,32 @@ const RULES = [
     path: 'cdn.china.enabled',
     type: 'boolean',
   },
+  // ── 分析（P3-4b-rest A）───────────────────────────────────────
+  //
+  // provider 枚举必须与 analytics/providers.js 的注册表一致：
+  // 一个未注册的 provider 名字在构建期只是「不注入任何脚本」，
+  // 看起来构建成功、页面上也确实没有统计 —— 比报错难查得多。
+  { path: 'analytics.enabled', type: 'boolean' },
+  {
+    path: 'analytics.provider',
+    type: 'string',
+    check: (v) => ['builtin', 'plausible', 'umami', 'goatcounter', 'custom'].includes(v)
+      || '只能是 builtin / plausible / umami / goatcounter / custom',
+  },
+  { path: 'analytics.builtin.trackPageViews', type: 'boolean' },
+  { path: 'analytics.builtin.retentionDays', type: 'number', check: (v) => (Number.isInteger(v) && v > 0) || '必须是正整数（天）' },
+  { path: 'analytics.builtin.excludeAdmin', type: 'boolean' },
+  {
+    path: 'analytics.statsPage.enabled',
+    type: 'boolean',
+  },
+  {
+    path: 'analytics.statsPage.path',
+    type: 'string',
+    check: (v) => v.startsWith('/') || '必须以 / 开头',
+  },
+  { path: 'analytics.statsPage.nav', type: 'boolean' },
+  { path: 'analytics.statsPage.sections', type: 'array' },
 ];
 
 export function validateConfig(config) {

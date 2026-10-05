@@ -23,7 +23,10 @@ export const REQUIRED_LAYOUTS = ['index'];
 /** 内置主题共享的布局名清单 —— 新主题应该覆盖的「全集」参考。 */
 export const STANDARD_LAYOUTS = [
   // `tag` 是「单个标签页」，`tags` 是「标签总览页」—— 两者在管线里是不同页面。
-  'index', 'post', 'page', 'archive', 'tag', 'tags', 'category', 'search', 'about', '404',
+  // `stats` 是统计页（P3-4b-rest B）。它是**引擎 strict 要求**的布局：
+  // 主题没提供时构建直接抛错，而不是回退到首页 —— 一个长得像首页、
+  // 只是没有统计数据的页面，比报错难查得多。启用了才要求，见 pipeline。
+  'index', 'post', 'page', 'archive', 'tag', 'tags', 'category', 'search', 'about', '404', 'stats',
 ];
 
 /** 主题可声明的能力。未知能力不算错（前向兼容），但会被记录。 */

@@ -69,6 +69,50 @@ emeek accelerate --warm       # 部署后预热
 
 详见 [docs/acceleration.md](docs/acceleration.md)。
 
+## 隐私：默认零追踪
+
+**`analytics.enabled` 默认是 `false`，此时产物里不存在任何统计 `<script>` 标签。**
+不是「加载了但不发」，是根本不生成 —— 这两者的产物逐字节相同。
+
+想要统计又不想把访客数据交出去？Emeek 给两条路：
+
+**1. 构建期推断（零运行时依赖）**
+
+博客本来就在 GitHub 上 —— 评论、reaction、发布时间、标签全是 Issues 的一等对象。
+所以「多少篇、什么时候写的、哪些标签多、哪篇讨论热」这些答案已经在内容里了：
+
+```bash
+emeek build        # 顺手算好，不需要任何服务
+```
+
+**2. 统计页（纯 HTML + SVG，零 JavaScript）**
+
+```
+📊 站点统计
+┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
+│  42  │ │  —   │ │ 5.2K │ │ 365  │      评论显示「—」而不是 0：
+│ 文章 │ │ 评论 │ │ 字数 │ │ 运行 │      没有数据源 ≠ 数值是 0
+└──────┘ └──────┘ └──────┘ └──────┘
+```
+
+```js
+analytics: {
+  enabled: false,                        // 不开任何分析
+  statsPage: { enabled: true, nav: true } // 但要有统计页
+}
+```
+
+柱状图 / 折线图 / 环形图 / 热力图 / 词云，全部是构建期算好坐标的内联 SVG ——
+没有图表库、没有 canvas、没有一个 `<script src>`。
+
+**第三方分析（可选）**：`plausible` / `umami` / `goatcounter` 只在显式点名时才注入。
+**自托管 PV（可选）**：探针不读 Cookie、不发明文 IP/UA、不发 referer、只发 pathname。
+
+> 隐私与统计不是矛盾的。默认不追踪，需要时自己接 ——
+> 「默认开一个 Google Analytics」这件事，Emeek 不做。
+
+详见 [docs/analytics.md](docs/analytics.md)。
+
 ## 用 GitHub Issues 当 CMS
 
 改一行配置，文章就来自 Issue 了：
@@ -311,6 +355,7 @@ SEO 分析             13.0ms   目标 < 30ms
 - [插件开发](docs/plugins.md)
 - [搜索](docs/search.md) · [订阅 Feed](docs/feed.md) · [SEO](docs/seo.md)
 - [评论系统](docs/comments.md) · [长文导航](docs/reading.md)
+- [分析与统计](docs/analytics.md)（默认零追踪）
 - [性能基线](docs/performance.md) · [PWA](docs/pwa.md)
 - [编辑器（Emeek Studio）](docs/studio.md)
 - [决策记录](docs/decisions/README.md)
@@ -369,11 +414,16 @@ CLI、Actions 工作流、SEO 产物、测试与性能基线。
 **Phase 3** 已完成：主题系统 + 4 套内置主题、全文搜索（三类词元 + 策略链）、
 RSS/Atom、SEO 全量（sitemap / robots / JSON-LD / OG / canonical）、
 性能优化（关键 CSS / 资源提示 / 响应式图片）、PWA（默认关闭）、
-评论系统（GitHub Issues 驱动）、长文导航（目录 / 锚点 / 进度条）。
+评论系统（GitHub Issues 驱动）、长文导航（目录 / 锚点 / 进度条）、
+多平台部署（六目标 + 预检门禁）、全球加速（资源指纹 / 预压缩 / CDN 接入）、
+分析层（默认零追踪 + 构建期推断 + 零 JS 统计页）。
 
 尚未实现、且本仓库不做描述的能力：AI 面板的生成类功能（续写/改写，
-需要 API Key）、图片管理（重编码）、主题市场、知识图谱、分析面板。
+需要 API Key）、图片管理（重编码）、主题市场、知识图谱。
 AI 面板的生成类按钮会明确报错，不会返回降级结果。
+
+明确**不做**的：给分析服务提供默认的第三方 SDK、把访客标识落盘成可关联 ID。
+「拿到回访率」是这些设计的代价，不是 bug。
 
 ## License
 

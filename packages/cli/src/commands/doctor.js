@@ -8,6 +8,8 @@ import {
   validateCdnConfig,
   checkIcp,
   loadCredentials,
+  validateAnalyticsConfig,
+  listScriptOrigins,
 } from '@emeeek/core';
 
 /**
@@ -85,9 +87,10 @@ export async function doctor({ cwd, flags }) {
       }
     }
 
-    // 6. 主题
+    // 6. 主题。提到 try 之外，后面的分析自检要用它判断有没有 stats 布局。
+    let theme = null;
     try {
-      const theme = await loadTheme(root, config);
+      theme = await loadTheme(root, config);
       check('主题加载', true, `${theme.meta.name} v${theme.meta.version ?? '?'}（${theme.layouts.size} 个布局）`, null);
       const required = ['index', 'post'];
       const missing = required.filter((l) => !theme.layouts.has(l));
@@ -112,6 +115,10 @@ export async function doctor({ cwd, flags }) {
     // 10. 全球加速。放在 doctor 而不是只在构建日志里，是因为这几项失败的表现是
     // 「能构建、能部署、但中国大陆打不开」——用户不会去翻构建日志找原因。
     await checkAcceleration(root, config, check);
+
+    // 11. 分析。放在这里而不是只在构建日志里，理由是这一块的失败模式
+    // 是「静默的」：配了 provider 却因为缺一个字段没注入，页面看起来完全正常。
+    await checkAnalytics(root, config, check, theme);
 
     /**
      * 9. 插件：加载成功与被拒的各列一行。
@@ -204,6 +211,64 @@ async function checkAcceleration(root, config, check) {
   } else if (accelManifest) {
     check('国内可达性', true, '无国内不可达的外部引用', null);
   }
+}
+
+/**
+ * 分析自检。
+ *
+ * 三件事必须在这里被说清，因为它们都很容易被忽略：
+ *   1. 数据到底会不会发出去（`origin` 为 null 就是站内，不发第三方）
+ *   2. 开了 PV 但没有 endpoint（探针会构建失败，但那时已经在构建了）
+ *   3. 用了 custom provider —— 它破坏「零第三方请求」承诺，必须显式警告
+ */
+async function checkAnalytics(root, config, check, theme) {
+  const analytics = config.analytics ?? {};
+  const statsPage = analytics.statsPage ?? {};
+
+  if (analytics.enabled !== true) {
+    check('分析', true, '未启用（产物里零统计脚本）', '需要时在 emeeek.config.js 打开 analytics.enabled');
+  } else {
+    const { errors, warnings } = validateAnalyticsConfig(analytics);
+    for (const e of errors) check('分析配置', false, `${e.path}: ${e.message}`, '见 docs/analytics.md');
+    for (const w of warnings) check('分析配置', true, w.message, null);
+
+    if (!errors.length) {
+      const provider = analytics.provider ?? 'builtin';
+      const builtinPv = provider === 'builtin' && analytics.builtin?.trackPageViews === true;
+      const origin = provider === 'plausible' ? 'plausible.io'
+        : provider === 'goatcounter' ? 'gc.zgo.at'
+          : builtinPv ? safeHost(analytics.builtin?.endpoint) : null;
+      check('分析数据去向', true,
+        origin ? `${provider} → ${origin}` : `${provider}（站内，不发往第三方）`,
+        origin ? `CSP 需放行 ${origin}，见 docs/analytics.md 的 CSP 一节` : null);
+
+      if (provider === 'custom') {
+        check('自定义分析脚本', true,
+          '已启用 —— 它会破坏「零第三方请求」承诺，请自行确认脚本内容',
+          '脚本由你负责；Emeek 只保证 </script> 不会提前结束脚本块');
+      }
+      check('已知分析域名', true, listScriptOrigins().join(' / '), null);
+    }
+  }
+
+  if (statsPage.enabled === true) {
+    const hasStatsLayout = theme?.layouts?.has?.('stats') === true;
+    check('统计页', hasStatsLayout,
+      hasStatsLayout
+        ? `${statsPage.path ?? '/stats/'}（零 JavaScript，纯 SVG 图表）`
+        : `主题「${theme?.meta?.name ?? '?'}」没有 layouts/stats.html`,
+      hasStatsLayout ? null : '换一个内置主题，或给主题补一个 stats 布局');
+    if (statsPage.nav === false) check('统计页导航', true, '不在导航里显示（nav: false）', null);
+  } else {
+    check('统计页', true, '未启用', 'analytics.statsPage.enabled = true 可开启');
+  }
+}
+
+/** 从 URL 取 host，取不到就返回 null（不抛）。 */
+function safeHost(url) {
+  try {
+    return new URL(String(url)).hostname;
+  } catch { return null; }
 }
 
 async function readJson(file) {

@@ -1,0 +1,126 @@
+/* Emeek · Magazine —— 统计页。
+   设计：当「年报跨页」做。大号数字是版面主角（比正文大 3 倍），
+   图表占整栏，排行榜用编辑体细线 —— 杂志的节奏靠大小对比，不靠装饰。 */
+
+.stats-main { display: flex; flex-direction: column; gap: 3rem; }
+.stats-hero { margin-bottom: 0.25rem; }
+.stats-kicker {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--accent); margin: 0 0 0.5rem;
+}
+.stats-subtitle { color: var(--text-dim); font-size: 0.875rem; margin: 0.5rem 0 0; }
+
+/* ── 数字：杂志的做法是把数字当成标题。 ────────────────────── */
+.stats-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 1.5rem 1rem;
+  border-top: 3px solid var(--text);
+  padding-top: 1.25rem;
+}
+.stat-figure { display: flex; flex-direction: column; gap: 0.25rem; }
+.stat-value {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 800; line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-label { font-size: 0.8125rem; color: var(--text-dim); }
+.stat-note {
+  font-size: 0.6875rem; color: var(--text-dim); font-style: italic;
+  border-top: 1px solid var(--border); padding-top: 0.25rem; margin-top: 0.25rem;
+}
+
+/* ── 区块 ─────────────────────────────────────────────────── */
+.stats-block { display: flex; flex-direction: column; gap: 1rem; }
+.stats-hint, .stats-meta { font-size: 0.8125rem; color: var(--text-dim); margin: 0; }
+.stats-meta strong { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.stats-two-col {
+  display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+  gap: 2rem; align-items: start;
+}
+@media (max-width: 46rem) { .stats-two-col { grid-template-columns: 1fr; } }
+
+.stats-chart svg { width: 100%; height: auto; display: block; }
+.stats-chart-pie { max-width: 14rem; }
+.stats-chart-heat { overflow-x: auto; }
+
+/* ── 图表：高饱和红只在「强调」处出现，其余用墨色 ──────────── */
+.chart { color: var(--text); }
+.chart-axis { stroke: var(--border); stroke-width: 1; }
+.chart-label {
+  fill: var(--text-dim); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.chart-value { fill: var(--text); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 柱子用实心墨黑（杂志的柱状图是「印刷色块」），空月用浅灰。 */
+.bar { fill: var(--text); }
+.bar-empty { fill: var(--border); }
+.chart-bar:hover .bar { fill: var(--accent); }
+.chart-area { fill: var(--accent); opacity: 0.1; }
+.chart-stroke { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart-dot { fill: var(--accent); }
+.chart-center-value { fill: var(--text); font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chart-center-label { fill: var(--text-dim); font-size: 10px; letter-spacing: 0.1em; }
+
+/* 环形图：杂志的色阶是「印刷四色」的感觉 —— 主色 + 墨黑 + 灰阶。 */
+.slice { stroke: var(--bg); stroke-width: 2; fill: var(--accent); }
+.slice-1 { fill: var(--text); }
+.slice-2 { fill: var(--accent); }
+.slice-3 { fill: var(--text-secondary, var(--text-dim)); }
+.slice-4 { fill: var(--accent); opacity: 0.6; }
+.slice-5 { fill: var(--text); opacity: 0.55; }
+.slice-6 { fill: var(--accent); opacity: 0.35; }
+.slice-7 { fill: var(--text-dim); }
+
+.heat { fill: var(--border); }
+.heat-0 { fill: var(--border); opacity: 0.5; }
+.heat-1 { fill: var(--accent); opacity: 0.22; }
+.heat-2 { fill: var(--accent); opacity: 0.42; }
+.heat-3 { fill: var(--accent); opacity: 0.68; }
+.heat-4 { fill: var(--accent); opacity: 1; }
+
+.cloud-word { fill: var(--text); }
+
+/* ── 排行榜：编辑体（细线 + 大标题 + 小号数字） ─────────────── */
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rank-item {
+  display: flex; align-items: baseline; gap: 0.875rem;
+  padding: 0.625rem 0; border-bottom: 1px solid var(--border);
+  font-size: 1rem;
+}
+.rank-item:last-child { border-bottom: 0; }
+.rank-index {
+  flex: 0 0 1.75rem; color: var(--accent); font-weight: 800;
+  font-size: 0.8125rem; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.rank-link { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 0.875rem; text-decoration: none; color: inherit; }
+.rank-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+a.rank-link:hover .rank-title { color: var(--accent); }
+.rank-bar { flex: 0 0 22%; height: 8px; background: var(--bg-soft); position: relative; overflow: hidden; align-self: center; }
+.rank-bar::after {
+  content: ""; position: absolute; inset: 0 auto 0 0;
+  width: calc(var(--ratio, 0) * 100%);
+  background: var(--accent);
+}
+.rank-value { flex: 0 0 auto; color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
+.rank-meta { flex: 0 0 auto; color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.stats-tag-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.stats-tag-list .tag { text-decoration: none; }
+
+.stats-sources { border-top: 3px solid var(--text); padding-top: 1.25rem; }
+.source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8125rem; }
+.source-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.source-name { color: var(--text); font-weight: 600; }
+.source-where { color: var(--text-dim); }
+.source-none .source-where { font-style: italic; }
+.stats-footnote { font-size: 0.75rem; color: var(--text-dim); margin: 0.75rem 0 0; }
+
+/* 词云是唯一「不该被拉伸」的图表：拉伸 SVG = 放大字号 = 改掉权重表达。
+   选择器必须是 `.stats-chart svg.chart-cloud`（与上面那条同权重、后写生效）——
+   只写 `.chart-cloud` 会被 `.stats-chart svg { width: 100% }` 按特异性压过去，
+   表现成「加了样式却没生效」，这类失败从产物里很难看出来。 */
+.stats-chart svg.chart-cloud { width: auto; max-width: 100%; height: auto; }
