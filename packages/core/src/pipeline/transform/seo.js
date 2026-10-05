@@ -255,6 +255,23 @@ export function buildSitemap(site, entries) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
+/**
+ * RSS 的 lastBuildDate。
+ *
+ * 关键：**不取当前时间**。取当前时间会让每次构建的 rss.xml 都不一样，
+ * 于是「产物未变 → 跳过推送」的幂等判据永远为假，多源站每次全量重推、
+ * CDN 每次全量刷新、缓存全部失效。这个日期应该表达「内容最后更新于」，
+ * 而不是「我什么时候编的」。
+ */
+function latestDate(posts = []) {
+  let newest = null;
+  for (const post of posts) {
+    const t = new Date(post.updated ?? post.date).getTime();
+    if (!Number.isNaN(t) && (newest === null || t > newest)) newest = t;
+  }
+  return new Date(newest ?? 0).toUTCString();
+}
+
 /** 条目数超过上限时需要的分片文件清单（含 path 与切片）。 */
 export function planSitemapShards(entries) {
   if (entries.length <= SITEMAP_URL_LIMIT) return null;
@@ -327,7 +344,7 @@ export function buildRss(site, posts, { limit = 20 } = {}) {
     <link>${escapeHtml(site.url)}</link>
     <description>${escapeHtml(site.description)}</description>
     <language>${escapeHtml(site.language)}</language>
-    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <lastBuildDate>${latestDate(posts)}</lastBuildDate>
     <atom:link href="${escapeHtml(site.url)}/rss.xml" rel="self" type="application/rss+xml" />
 ${items}
   </channel>

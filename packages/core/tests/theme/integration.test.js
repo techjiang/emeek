@@ -164,11 +164,14 @@ test('站点 assets/ 拷进产物的 /assets（封面图不该 404）', async ()
     await fs.writeFile(path.join(dir, 'posts', 'hello.md'),
       '---\ntitle: 你好\ndate: 2024-01-01\ncover: /assets/covers/a.svg\n---\n\n正文。\n', 'utf8');
     await build({ cwd: dir });
-    // front-matter 里的 cover 是绝对路径，产物必须真的存在，否则浏览器 404
+    // front-matter 里的 cover 是绝对路径，产物必须真的存在，否则浏览器 404。
+    // 内容资源保持原路径：它的 URL 还会进 RSS 与搜索索引，加指纹就是制造 404。
     const copied = await fs.readFile(path.join(dir, 'dist', 'assets', 'covers', 'a.svg'), 'utf8');
     assert.equal(copied, '<svg/>');
-    // 主题自己的资源不能被站点内容挤掉
-    await fs.access(path.join(dir, 'dist', 'assets', 'favicon.svg'));
+    // 主题自己的资源不能被站点内容挤掉。指纹开启时它带哈希，
+    // 所以这里按「存在一份 favicon」断言，而不是钉死文件名。
+    const files = await fs.readdir(path.join(dir, 'dist', 'assets'));
+    assert.ok(files.some((f) => f.startsWith('favicon')), `应有 favicon，实际：${files.join(', ')}`);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
@@ -184,8 +187,11 @@ test('CSS 超阈值时改用外链，且 /assets/theme.css 真的写出来', asy
   try {
     await build({ cwd: dir });
     const html = await read(dir, 'index.html');
-    assert.match(html, /<link rel="stylesheet" href="\/assets\/theme\.css"/, '超阈值应改外链');
-    const css = await fs.readFile(path.join(dir, 'dist', 'assets', 'theme.css'), 'utf8');
+    // 超阈值时样式走外链。指纹开启后 href 指向带哈希的文件名，
+    // 所以断言「存在一份 theme.*.css 的外链」而不是钉死 /assets/theme.css。
+    const match = html.match(/<link rel="stylesheet" href="(\/assets\/theme\.[^"]+\.css)"/);
+    assert.ok(match, `超阈值应改外链，实际 HTML 里没有 theme CSS 链接`);
+    const css = await fs.readFile(path.join(dir, 'dist', match[1]), 'utf8');
     assert.ok(css.length > 24 * 1024, `theme.css 应包含完整样式（实际 ${css.length} 字节）`);
     assert.match(css, /\.section-number/, '外链里要有主题的特色样式');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }

@@ -11,6 +11,26 @@ export { decorateImages, createImageResolver } from './pipeline/transform/images
 export { buildWikiLinkIndex, resolveWikiLink } from './pipeline/transform/links.js';
 export { renderArticle } from './pipeline/index.js';
 export { makeExcerpt, readingTime, countWords } from './pipeline/transform/excerpt.js';
+// ── 全球加速（P3-4b-accel）─────────────────────────────────────
+export {
+  accelerate,
+  applyAcceleration,
+  buildAssetMap,
+  rewriteHtmlReferences,
+  contentHash,
+  fingerprintPath,
+  shouldFingerprint,
+  FINGERPRINT_EXTENSIONS,
+} from './accel/index.js';
+export { cacheHeaders, classifyCache, buildHeaderManifest, CACHE_CLASS } from './accel/cache-headers.js';
+export { precompress, compressVariants, shouldCompress } from './accel/compress.js';
+export { PROVIDERS, PROVIDER_IDS, getProvider, validateCdnConfig, readCredentialsFromEnv } from './accel/providers.js';
+export { loadCredentials, saveCredentials, parseCredentials, serializeCredentials, ensureGitignored } from './accel/credentials.js';
+export { checkIcp, scanBlockedHosts, planFontSubset, toRanges, analyzeImages, buildLocalFontFace, BLOCKED_HOSTS, CHINA_ALTERNATIVES } from './accel/china.js';
+export { selectPreloadTargets, renderPreloadTags, buildEarlyHintsHeader, renderNginxSnippet, renderCaddySnippet } from './accel/hints.js';
+export { hashTree, diffTrees, planFanout, buildHealthChecks, decideActiveOrigin } from './accel/origins.js';
+export { createCdnClient, buildPurgeTargets, buildWarmTargets } from './accel/cdn-client.js';
+export { probe, measure, compareLatency, median, PROBE_REGIONS } from './accel/latency.js';
 export { loadTheme } from './pipeline/render/theme.js';
 export { normalizeOverrides, mergeOverrides } from './theme/override.js';
 export { listBuiltinThemes, listAvailableThemes } from './theme/registry.js';
@@ -19,6 +39,9 @@ export { logger } from './util/logger.js';
 export { loadPlugins, pluginApi } from './plugin/loader.js';
 export { createHookRunner } from './plugin/hooks.js';
 export { CAPABILITIES, HOOK_CAPABILITY, FORBIDDEN_CAPABILITIES, normalizeCapabilities, createCapabilityGuard, stripSecrets, CapabilityError } from './plugin/capabilities.js';
+export { deploy, plan as planDeploy, verify as verifyDeploy, prepare as prepareDeploy, preflight, missingRequirements, pushCommand, summarize as summarizeDeploy } from './deploy/index.js';
+export { getPlatform, normalizeTarget, listTargets, PLATFORMS, probesFor } from './deploy/platforms.js';
+export { generateDeployFiles, slugify } from './deploy/config-files.js';
 export { AIService, createProvider, resolveProviders } from './ai/registry.js';
 export { AITask, AIQuality, AISource, AIError, AIErrorCode, TASK_CAPABILITIES } from './ai/types.js';
 export { LocalSummarizer, ReadabilityAnalyzer, LocalSEOAnalyzer, LocalProvider } from './ai/index.js';

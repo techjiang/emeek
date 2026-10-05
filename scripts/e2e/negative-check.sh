@@ -245,9 +245,92 @@ weaken "项目内主题优先于内置（改成内置覆盖项目）" \
   "s|  for (const theme of \[\.\.\.builtin, \.\.\.projectPackages, \.\.\.project\]) byName.set(theme.name, theme);|  for (const theme of [...project, ...projectPackages, ...builtin]) byName.set(theme.name, theme);|" \
   'node --test packages/core/tests/theme/registry.test.js'
 
+
+# ── 部署相关防线（P3-4a）──────────────────────────────────────
+# 部署是「发出去收不回」的动作。这几条防线漏了，用户会推一份坏产物上去。
+
+# 26. 部署前门禁：让 preflight 永远通过（等于不检查就发货）
+weaken "部署前门禁（preflight 恒通过）" \
+  packages/core/src/deploy/preflight.js \
+  's|^  let stat = null;|  return { ok: true, checks: [] }; // weakened|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 27. 部署配置幂等：内容一致也不跳过（每次都重写 → mtime 必变 → git 永远脏）
+weaken "部署配置幂等（跳过去掉）" \
+  packages/core/src/deploy/index.js \
+  's|    if (existing === content) {|    if (false) {|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 28. 部署后验证：只信 HTTP 200、不看内容 —— 静态托管的静默 404 会溜过去
+weaken "部署后验证（内容谓词直通）" \
+  packages/core/src/deploy/index.js \
+  's|const ok = response.ok && (probe.expect ? probe.expect(body) : true);|const ok = response.ok; // weakened|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 29. 参数校验：自托管必填项清空 —— 缺 host/path 也照跑，rsync 到空主机
+weaken "自托管必填参数（requires 清空）" \
+  packages/core/src/deploy/platforms.js \
+  's|requires: \["host", "path"\]|requires: []|' \
+  'node --test packages/core/tests/deploy/engine.test.js'
+
+# 30. rsync 幂等：去掉 --delete，远端会残留已删除的旧页面（漏删比漏传更隐蔽）
+weaken "rsync 幂等（--delete 去掉）" \
+  packages/core/src/deploy/platforms.js \
+  "s|'--delete', 'dist/'|'dist/'|" \
+  'node --test packages/core/tests/deploy/platforms.test.js'
+
+# ── 全球加速（P3-4b-accel）──────────────────────────────────────
+
+# 31. 指纹恒等：内容变了文件名却不变 → 长缓存会一直发旧版本
+weaken "资源指纹（fingerprintPath 恒等）" \
+  packages/core/src/accel/fingerprint.js \
+  's|^export function fingerprintPath(filePath, content) {|export function fingerprintPath(filePath, content) { return filePath; // weakened|' \
+  'node --test packages/core/tests/accel/fingerprint.test.js'
+
+# 32. 缓存头：未指纹资源也发 immutable → 用户永久看不到更新
+weaken "缓存头（未指纹资源也给 immutable）" \
+  packages/core/src/accel/cache-headers.js \
+  's|^  if (fingerprinted) return CACHE_CLASS.IMMUTABLE;|  return CACHE_CLASS.IMMUTABLE; // weakened|' \
+  'node --test packages/core/tests/accel/cache-headers.test.js'
+
+# 33. 预压缩类型白名单失效 → 图片被「压缩」，产物反而变大
+weaken "预压缩（可压缩类型白名单失效）" \
+  packages/core/src/accel/compress.js \
+  's|^  if (!COMPRESSIBLE.includes(ext)) return false;|  if (false) return false; // weakened|' \
+  'node --test packages/core/tests/accel/compress.test.js'
+
+# 34. 凭据：允许 secret 写进配置文件 → API Key 随仓库泄露
+weaken "CDN 凭据（secret 允许写进配置）" \
+  packages/core/src/accel/providers.js \
+  's|^    if (field.secret |    if (false) {|' \
+  'node --test packages/core/tests/accel/providers.test.js'
+
+# 35. ICP 备案检查失效 → 未备案域名在国内静默不通
+weaken "ICP 备案（未备案不再拦）" \
+  packages/core/src/accel/china.js \
+  's|^  if (!icp) {|  if (false) { // weakened|' \
+  'node --test packages/core/tests/accel/china.test.js'
+
+# 36. 国内不可达域名扫描失效 → Google Fonts 悄悄进产物，国内首屏卡死
+weaken "国内不可达域名扫描（恒返回空）" \
+  packages/core/src/accel/china.js \
+  's|^export function scanBlockedHosts(html, { hosts = BLOCKED_HOSTS } = {}) {|export function scanBlockedHosts(html, { hosts = BLOCKED_HOSTS } = {}) { return []; // weakened|' \
+  'node --test packages/core/tests/accel/china.test.js'
+
+# 37. 多源站幂等判据失效 → 每次推送都误判成「有变化」，CDN 全量刷新
+weaken "多源站幂等（diffTrees 恒判有变化）" \
+  packages/core/src/accel/origins.js \
+  's|^    identical: added.length + removed.length + changed.length === 0,|    identical: false, // weakened|' \
+  'node --test packages/core/tests/accel/origins.test.js'
+
+# 38. 内容谓词失效 → 200 + 404 页面也算「健康」，故障转移形同虚设
+weaken "健康检查内容谓词（恒通过）" \
+  packages/core/src/accel/latency.js \
+  's|^  const predicateOk = typeof expect === .function. \&\& !error ? Boolean(expect(body)) : true;|  const predicateOk = true; // weakened|' \
+  'node --test packages/core/tests/accel/latency.test.js'
 # ── P3-2a 搜索层防线 ──────────────────────────────────────────────
 #
-# 26. 标题命中必须被查：让 AND 只看 words，不看 titleIndex。
+# 39. 标题命中必须被查：让 AND 只看 words，不看 titleIndex。
 #
 # 这是真实踩过的坑：标题含「博客」但正文不含的文章，只查 words 表永远
 # 搜不到。削弱后「标题命中提权」的断言必须红。
@@ -256,7 +339,7 @@ weaken "标题命中纳入检索（AND 只查 words）" \
   "s|      postingList(index, 'titleIndex', word),|      [],|" \
   'node --test packages/core/tests/search/query.test.js'
 
-# 27. 索引感知查询：让 matchIndexedWords 不再从索引表认词。
+# 40. 索引感知查询：让 matchIndexedWords 不再从索引表认词。
 #
 # 词典未就绪时（前端首开），这是精确检索的唯一来源。削弱后
 # 「词典缺失仍走 AND」的断言必须红。
@@ -265,7 +348,7 @@ weaken "索引感知查询（matchIndexedWords 失效）" \
   "s|  const table = index?.words ?? {};|  const table = {}; // weakened|" \
   'node --test packages/core/tests/search/tokenizer.test.js packages/core/tests/search/runtime.test.js'
 
-# 28. 代码块必须退出索引：让围栏检测永远为假。
+# 41. 代码块必须退出索引：让围栏检测永远为假。
 #
 # 否则示例代码里的词会污染检索结果 —— 搜「function」搜出一堆文章，
 # 页面上却没有这个词。削弱后「代码块不进索引」的断言必须红。
@@ -274,7 +357,7 @@ weaken "代码块退出索引（围栏检测失效）" \
   "s|    if (FENCE.test(line)) {|    if (false) {|" \
   'node --test packages/core/tests/search/plain-text.test.js'
 
-# 29. front-matter 必须剥离：让元数据留在正文里。
+# 42. front-matter 必须剥离：让元数据留在正文里。
 #
 # 否则 draft: true 里的 true 能被搜出来。削弱后断言必须红。
 weaken "front-matter 剥离（元数据泄漏）" \
@@ -282,7 +365,7 @@ weaken "front-matter 剥离（元数据泄漏）" \
   "s|  text = text.replace(FRONTMATTER, '');|  // weakened|" \
   'node --test packages/core/tests/search/plain-text.test.js'
 
-# 30. 索引版本头必须校验：让 parseIndex 不看版本。
+# 43. 索引版本头必须校验：让 parseIndex 不看版本。
 #
 # 前端拿到旧结构的索引应当降级，而不是跑出错误结果。
 weaken "索引版本校验（parseIndex 忽略 version）" \
@@ -290,7 +373,7 @@ weaken "索引版本校验（parseIndex 忽略 version）" \
   "s|  if (parsed.version !== expectedVersion) return null;|  // weakened|" \
   'node --test packages/core/tests/search/indexer.test.js'
 
-# 31. 体积预算必须守：让超预算不再失败。
+# 44. 体积预算必须守：让超预算不再失败。
 #
 # 索引跟着页面下载，超预算静默发布等于拖垮首屏。削弱后断言必须红。
 weaken "索引体积预算（超预算不抛错）" \
@@ -298,7 +381,7 @@ weaken "索引体积预算（超预算不抛错）" \
   "s|  if (stats.overBudget) {|  if (false) {|" \
   'node --test packages/core/tests/search/site-index.test.js'
 
-# 32. 浏览器入口必须零 node: 依赖：往 runtime 顶部塞一个 node: 引用。
+# 45. 浏览器入口必须零 node: 依赖：往 runtime 顶部塞一个 node: 引用。
 #
 # 这是浏览器打包的硬边界。本地 Node 测试全绿、打包时炸，
 # 是最难在 CI 里提前发现的一类问题，所以专门造一条负向。
@@ -309,7 +392,7 @@ weaken "浏览器入口零 node: 依赖（runtime 顶层引入 node:fs）" \
 
 # ── P3-2b 搜索页防线 ──────────────────────────────────────────────
 #
-# 33. 内置布局缺失必须报错：关掉 strict（回退到 index）。
+# 46. 内置布局缺失必须报错：关掉 strict（回退到 index）。
 #
 # 主题没提供 search.html 时，搜索页会静默渲染成首页 —— 构建成功、
 # 页面看着正常、只是没有搜索框。这类失败最难在 CI 里发现，
@@ -319,7 +402,7 @@ weaken "内置布局缺失报错（关掉 strict 回退）" \
   "s|^  const layout = strict$|  const layout = false|" \
   'node --test packages/core/tests/search/page.test.js'
 
-# 34. 搜索页内联脚本必须用三花括号：改回转义输出。
+# 47. 搜索页内联脚本必须用三花括号：改回转义输出。
 #
 # 转义后 `&` 变成 `&amp;`，内联脚本直接语法错误（浏览器报
 # Unexpected token）。这条守住「搜索页不会变成白板」。
@@ -328,7 +411,7 @@ weaken "内联脚本不转义（改用 {{ searchScript }}）" \
   "s|<script>{{{ searchScript }}}</script>|<script>{{ searchScript }}</script>|" \
   'node --test packages/core/tests/search/page.test.js'
 
-# 35. header 只能有一个搜索入口：把内联面板加回来。
+# 48. header 只能有一个搜索入口：把内联面板加回来。
 #
 # 两套搜索实现必然分叉（内联那份要自己 fetch 索引、只能做子串 AND）。
 # 加回来后断言必须红。
@@ -337,7 +420,7 @@ weaken "header 单一搜索入口（加回内联面板）" \
   "s|<div class=\"header-actions\">|<div class=\"search-panel\" id=\"search-panel\"><input id=\"search-input\"></div><div class=\"header-actions\">|" \
   'node --test packages/core/tests/search/page.test.js'
 
-# 36. 搜索客户端里 runQuery 必须来自 matcher（占位符必须被替换）。
+# 49. 搜索客户端里 runQuery 必须来自 matcher（占位符必须被替换）。
 #
 # 占位符没了却没人发现，会产出一个「runQuery is not defined」的页面。
 weaken "搜索客户端占位符替换（改成不替换）" \
@@ -345,7 +428,7 @@ weaken "搜索客户端占位符替换（改成不替换）" \
   "s|  cached = shell.replace(PLACEHOLDER, indent(stripModuleSyntax(matcher)));|  cached = shell;|" \
   'node --test packages/core/tests/search/page.test.js'
 
-# 37. 搜索页样式必须逐主题适配：让某主题的搜索 CSS 空掉。
+# 50. 搜索页样式必须逐主题适配：让某主题的搜索 CSS 空掉。
 #
 # 「4 套主题的搜索页都要好看」如果退化成「共用一套样式」，
 # 两两可辨的断言会红。这条守的是「适配确实发生了」。
@@ -356,7 +439,7 @@ weaken "搜索页逐主题适配（minimal 高亮规则改名）" \
 
 # ── P3-2c Feed 防线 ──────────────────────────────────────────────
 #
-# 38. Atom updated 必须是 RFC 3339：改成 toUTCString（RFC 822）。
+# 51. Atom updated 必须是 RFC 3339：改成 toUTCString（RFC 822）。
 #
 # Atom 验证器对这个格式是硬要求，而 toUTCString 得到的 RFC 822
 # 肉眼看着也「像个日期」。这条守的是「阅读器不会拒收」。
@@ -365,7 +448,7 @@ weaken "Atom updated 用 RFC 3339（改成 toUTCString）" \
   "s|toISOString()|toUTCString()|g" \
   'node --test "packages/core/tests/feed/*.test.js"'
 
-# 39. feed 里的 XML 必须转义：把 escapeXml 改成恒等。
+# 52. feed 里的 XML 必须转义：把 escapeXml 改成恒等。
 #
 # 标题里的 & 或 < 会直接把 XML 弄坏，阅读器报解析错误。
 weaken "Feed XML 转义（escapeXml 恒等）" \
@@ -373,7 +456,7 @@ weaken "Feed XML 转义（escapeXml 恒等）" \
   "s|export function escapeXml(text) {|export function escapeXml(text) { return String(text ?? '');\nfunction _unused(text) {|" \
   'node --test "packages/core/tests/feed/*.test.js"'
 
-# 40. CDATA 里的 ]]> 必须拆开：让 cdataSafe 变成恒等。
+# 53. CDATA 里的 ]]> 必须拆开：让 cdataSafe 变成恒等。
 #
 # 正文里出现 ]]>（写代码文档时常见）会让整个 feed 变成坏 XML。
 weaken "CDATA 转义 ]]>（cdataSafe 恒等）" \
@@ -381,7 +464,7 @@ weaken "CDATA 转义 ]]>（cdataSafe 恒等）" \
   "s|^function cdataSafe(html) {|function cdataSafe(html) { return String(html ?? '');\nfunction _cdataUnused(html) {|" \
   'node --test "packages/core/tests/feed/*.test.js"'
 
-# 41. feed discovery 只能由 head partial 提供：把硬编码加回 layout。
+# 54. feed discovery 只能由 head partial 提供：把硬编码加回 layout。
 #
 # 硬编码那份不跟配置（写死 /rss.xml）、且只覆盖首页与文章页。
 weaken "Feed discovery 单一来源（layout 里加回硬编码）" \
@@ -391,7 +474,7 @@ weaken "Feed discovery 单一来源（layout 里加回硬编码）" \
 
 # ── P3-3a SEO 防线 ──────────────────────────────────────────────
 #
-# 42. JSON-LD 必须走 JSON.stringify：改成手拼字符串。
+# 55. JSON-LD 必须走 JSON.stringify：改成手拼字符串。
 #
 # 手拼的 JSON-LD 在标题带引号或 </script> 时会直接变成语法错误 ——
 # 而页面看起来完全正常，只有 Google 富媒体测试会报错。
@@ -400,13 +483,13 @@ weaken "JSON-LD 转义（改成手拼字符串）" \
   "s|^export function jsonLdSafe(data) {|export function jsonLdSafe(data) { return JSON.stringify(data); // weakened\nfunction _unused(data) {|" \
   'node --test packages/core/tests/seo/structured-data.test.js'
 
-# 43. 结构化数据必须真解析：让 renderJsonLd 输出不可解析的内容。
+# 56. 结构化数据必须真解析：让 renderJsonLd 输出不可解析的内容。
 weaken "JSON-LD 可解析（renderJsonLd 输出坏 JSON）" \
   packages/core/src/pipeline/transform/seo.js \
   "s|  return \`<script type=\"application/ld+json\">\${jsonLdSafe(data)}</script>\`;|  return \`<script type=\"application/ld+json\">{oops}</script>\`;|" \
   'node --test packages/core/tests/seo/structured-data.test.js'
 
-# 44. sitemap 子元素必须按 XSD 顺序：把 loc 提到最前。
+# 57. sitemap 子元素必须按 XSD 顺序：把 loc 提到最前。
 #
 # sitemaps.org 的 XSD 是 sequence。顺序错了整份 sitemap 无效，
 # 但浏览器打开它看起来完全正常。
@@ -415,13 +498,13 @@ weaken "sitemap 元素顺序（loc 提前）" \
   "s|      entry.lastmod ? \`    <lastmod>|      \`    <loc>\${escapeHtml(entry.url)}</loc>\`, entry.lastmod ? \`    <lastmod>|" \
   'node --test packages/core/tests/seo/crawl.test.js'
 
-# 45. sitemap 必须转义 & 与 <：让 escapeHtml 直通。
+# 58. sitemap 必须转义 & 与 <：让 escapeHtml 直通。
 weaken "sitemap XML 转义（escapeHtml 直通）" \
   packages/core/src/pipeline/transform/toc.js \
   "s|^export function escapeHtml(text) {|export function escapeHtml(text) { return String(text ?? '');\nfunction _unused(text) {|" \
   'node --test packages/core/tests/seo/crawl.test.js'
 
-# 46. 搜索页必须被 robots 屏蔽：把那条 Disallow 删掉。
+# 59. 搜索页必须被 robots 屏蔽：把那条 Disallow 删掉。
 #
 # 允许收录搜索页会产生「重复内容」，稀释整站权重 ——
 # 这不是可配置的偏好问题。
@@ -430,19 +513,19 @@ weaken "robots 屏蔽搜索页（删掉 Disallow）" \
   "s|'Disallow: /search/', ||" \
   'node --test packages/core/tests/seo/crawl.test.js'
 
-# 47. 404 必须 noindex：让 noindex 判断恒为假。
+# 60. 404 必须 noindex：让 noindex 判断恒为假。
 weaken "404 noindex（判断恒假）" \
   packages/core/src/pipeline/transform/seo.js \
   "s|    view.noindex ? '<meta name=\"robots\" content=\"noindex, follow\" />' : '',||" \
   'node --test packages/core/tests/seo/integration.test.js'
 
-# 48. 每页恰好一个 canonical：在 seo partial 里再加一个。
+# 61. 每页恰好一个 canonical：在 seo partial 里再加一个。
 weaken "canonical 唯一（partial 里加第二个）" \
   packages/theme-minimal/partials/seo.html \
   "s|^{{{ headMeta }}}|{{{ headMeta }}}\n<link rel=\"canonical\" href=\"/dup\" />|" \
   'node --test packages/core/tests/seo/integration.test.js'
 
-# 49. 正文 h1 必须降级：关掉 demoteH1。
+# 62. 正文 h1 必须降级：关掉 demoteH1。
 #
 # 不降级就有两个主标题（布局一个、正文一个），搜索引擎分不清
 # 哪个是页面主题，屏幕阅读器也会把大纲读成两棵树。
@@ -451,7 +534,7 @@ weaken "正文 h1 降级（关掉 demoteH1）" \
   "s|      const level = demoteH1 \&\& hashes.length === 1 ? 2 : hashes.length;|      const level = hashes.length;|" \
   'node --test packages/core/tests/seo/integration.test.js'
 
-# 50. 外链必须带 rel=noopener noreferrer：让它不加。
+# 63. 外链必须带 rel=noopener noreferrer：让它不加。
 #
 # 缺了 noopener 就留着 window.opener 这条跨域改写标签页的路径。
 weaken "外链 rel（不再加 rel）" \
@@ -459,7 +542,7 @@ weaken "外链 rel（不再加 rel）" \
   "s|    const rel = external ? ' rel=\"noopener noreferrer\"' : '';|    const rel = '';|" \
   'node --test packages/core/tests/security/xss.test.js'
 
-# 51. 首屏图片不得懒加载：让所有图片都 lazy。
+# 64. 首屏图片不得懒加载：让所有图片都 lazy。
 #
 # 首屏图通常就是 LCP 那张，给它 loading=lazy 会让「最快内容绘制」反而更慢。
 weaken "首屏图 eager（改成全部 lazy）" \
@@ -467,7 +550,7 @@ weaken "首屏图 eager（改成全部 lazy）" \
   "s|    const isEager = index < eagerCount;|    const isEager = false;|" \
   'node --test packages/core/tests/transform.test.js'
 
-# 52. 图片 alt 必须有兜底：让 alt 变回空字符串。
+# 65. 图片 alt 必须有兜底：让 alt 变回空字符串。
 #
 # 空 alt 让图片对屏幕阅读器与图片搜索完全消失。
 # 空 alt 兜底：把「有没有真实 alt」的判断改回「有没有 alt 属性」。
@@ -478,7 +561,7 @@ weaken "图片 alt 兜底（把空串当成作者写过了）" \
   "s|const hasRealAlt = altMatch \&\& altMatch\[1\].trim() !== '';|const hasRealAlt = !!altMatch;|" \
   'node --test packages/core/tests/transform.test.js'
 
-# 53. 关于页的主标题必须来自正文，而不是硬编码的「关于」。
+# 66. 关于页的主标题必须来自正文，而不是硬编码的「关于」。
 #
 # 这里有个真实的教训：我最初写的是「不提取 h1 就会有两个主标题」，
 # 但把提取函数削弱之后测试仍然全绿 —— 因为正文 h1 已经被降级成 h2，
@@ -491,7 +574,7 @@ weaken "关于页标题取正文（不提取）" \
   "s|  const match = .*exec(html);|  const match = null;|" \
   'node --test packages/core/tests/seo/about-title.test.js'
 
-# 54. sitemap 里的 URL 必须有对应产物：往 sitemap 里塞一个不存在的页面。
+# 67. sitemap 里的 URL 必须有对应产物：往 sitemap 里塞一个不存在的页面。
 weaken "sitemap 与产物一致（不过滤 noindex）" \
   packages/core/src/pipeline/index.js \
   "s|      .filter((page) => !page.data.noindex)|      .filter(() => true) // weakened|" \

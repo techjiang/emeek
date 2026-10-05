@@ -25,7 +25,6 @@ const RULES = [
   { path: 'seo.openGraph', type: 'boolean' },
   { path: 'seo.structuredData', type: 'boolean' },
   { path: 'seo.canonical', type: 'boolean' },
-  { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'custom'].includes(v) || '不支持的部署目标' },
   { path: 'perf.lazyLoading', type: 'boolean' },
   { path: 'perf.criticalCSS', type: 'boolean' },
   { path: 'perf.prefetch', type: 'boolean' },
@@ -65,7 +64,24 @@ const RULES = [
     type: 'string',
     check: (v) => v.startsWith('/') || '必须以 / 开头',
   },
+  // 部署目标枚举必须与 deploy/platforms.js 的注册表一致：多一个未注册的名字
+  // 只会在真正推送时才炸，那时产物已经在路上了。
+  { path: 'deploy.target', type: 'string', check: (v) => ['github-pages', 'vercel', 'netlify', 'cloudflare', 'rsync', 'docker', 'custom'].includes(v) || '不支持的部署目标' },
+  { path: 'deploy.customDomain', type: 'string' },
+  { path: 'deploy.verify', type: 'boolean' },
+  { path: 'deploy.probes', type: 'array' },
   { path: 'plugins', type: 'array' },
+  { path: 'cdn.enabled', type: 'boolean' },
+  {
+    path: 'cdn.provider',
+    type: 'string',
+    // null 表示「未配置 CDN」——允许，缺失不是错误。
+    check: (v) => v === null || v === undefined || ['cloudflare', 'aliyun', 'tencent', 'custom'].includes(v) || '不支持的 CDN 提供商（cloudflare / aliyun / tencent / custom）',
+  },
+  {
+    path: 'cdn.china.enabled',
+    type: 'boolean',
+  },
 ];
 
 export function validateConfig(config) {
