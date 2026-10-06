@@ -28,8 +28,14 @@ const THEMES = listThemes({ only: requested.length ? requested : undefined });
 const PAGES = [
   ['首页', '/index.html'],
   ['文章页', '/posts/design-notes.html'],
+  // 第二篇文章页（代码块密集型）—— 高亮过后体积最大的那一类。
+  ['语法页', '/posts/markdown-syntax.html'],
+  // 第三篇文章（长文）：目录 / 阅读进度条的样式在各主题里最重。
+  ['性能页', '/posts/performance-notes.html'],
   ['归档页', '/archive.html'],
   ['标签页', '/tags.html'],
+  ['关于页', '/about.html'],
+  ['404 页', '/404.html'],
   // 搜索页：内联了索引与客户端脚本，是最容易把 Performance 拉下来的页面 ——
   // 不测它就等于没守「搜索页 4 套主题 Lighthouse ≥ 90」这条要求。
   //
@@ -57,6 +63,7 @@ const PAGES = [
  */
 const SEO_OPT_OUT = new Set([
   '搜索页', // robots.txt 主动屏蔽，Lighthouse 的 is-crawlable 必然 0 分
+  '404 页', // 页面主动 noindex：收录一个「页面不存在」是纯粹的错误结果
 ]);
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain' };
