@@ -1,3 +1,5 @@
+import { VERSION } from '../version.js';
+
 /**
  * RSS 2.0 与 Atom 1.0 生成。
  *
@@ -105,7 +107,7 @@ export function buildRss(site, posts, options = {}) {
     <description>${escapeXml(site.description)}</description>
     <language>${escapeXml(site.language)}</language>
     <lastBuildDate>${lastBuild.toUTCString()}</lastBuildDate>
-    <generator>Emeek</generator>
+    <generator>Emeek ${VERSION}</generator>
     <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />
 ${body}
   </channel>
@@ -144,7 +146,7 @@ export function buildAtom(site, posts, options = {}) {
   <link rel="self" type="application/atom+xml" href="${escapeXml(feedUrl)}" />
   <id>${escapeXml(site.url)}</id>
   <updated>${updated.toISOString()}</updated>
-  <generator>Emeek</generator>
+  <generator>Emeek ${VERSION}</generator>
   <author><name>${escapeXml(site.author ?? site.title)}</name></author>
 ${entries}
 </feed>

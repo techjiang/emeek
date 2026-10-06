@@ -1,4 +1,5 @@
 import { escapeHtml, stripTags } from './toc.js';
+import { VERSION } from '../../version.js';
 
 /**
  * SEO 全量输出层。
@@ -73,7 +74,7 @@ export function renderSeoTags(view) {
     // 404 页在 sitemap 里已经排除了，但外部链接仍会把爬虫带过来，
     // 而一个被收录的 404 会在搜索结果里变成一个死链接。
     view.noindex ? '<meta name="robots" content="noindex, follow" />' : '',
-    `<meta name="generator" content="Emeek" />`,
+    `<meta name="generator" content="Emeek ${VERSION}" />`,
   ];
 
   const og = [

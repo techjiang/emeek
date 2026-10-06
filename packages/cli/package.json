@@ -1,24 +1,52 @@
 {
   "name": "emeeek",
-  "version": "0.1.0",
-  "description": "Emeek CLI —— 用 GitHub Issues 或本地 Markdown 构建零成本个人知识站",
+  "version": "1.0.0",
+  "description": "Emeek —— 用 GitHub Issues 或 Markdown 写文章、一条命令构建、零成本部署的静态知识站引擎",
   "type": "module",
   "bin": {
     "emeeek": "./bin/emeeek.js"
   },
   "main": "./src/index.js",
   "files": [
-    "bin",
-    "src",
-    "../core/src",
-    "../theme-minimal"
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@emeeek/core": "workspace:*",
-    "@emeeek/editor": "workspace:*"
+    "@emeeek/core": "workspace:^1.0.0",
+    "@emeeek/editor": "workspace:^1.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "static-site-generator",
+    "blog",
+    "markdown",
+    "github-issues",
+    "cms",
+    "ssg",
+    "zero-dependency",
+    "中文",
+    "pwa",
+    "seo"
+  ],
+  "homepage": "https://github.com/techjiang/emeek#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techjiang/emeek.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/techjiang/emeek/issues"
+  },
+  "author": {
+    "name": "科技酱",
+    "url": "https://github.com/techjiang"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

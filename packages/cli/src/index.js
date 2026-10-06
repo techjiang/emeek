@@ -1,4 +1,4 @@
-import { logger } from '@emeeek/core';
+import { logger, VERSION } from '@emeeek/core';
 import { init } from './commands/init.js';
 import { build } from './commands/build.js';
 import { dev } from './commands/dev.js';
@@ -10,8 +10,6 @@ import { themeCommand } from './commands/theme.js';
 import { deploy } from './commands/deploy.js';
 import { drafts } from './commands/drafts.js';
 import { accelerate } from './commands/accelerate.js';
-
-const VERSION = '0.1.0';
 
 const COMMANDS = {
   init: { run: init, desc: '初始化一个新项目' },

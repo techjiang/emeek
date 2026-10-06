@@ -1,6 +1,6 @@
 {
   "name": "@emeeek/editor",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Emeek Studio —— 基于 CodeMirror 6 的 Markdown 编辑器",
   "type": "module",
   "main": "./src/index.js",
@@ -18,7 +18,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@emeeek/core": "workspace:*",
+    "@emeeek/core": "workspace:^1.0.0",
     "markdown-it": "^15.0.2",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.1",
@@ -53,5 +53,13 @@
     "esbuild": "^0.28.2",
     "esbuild-wasm": "^0.28.2",
     "jsdom": "^30.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techjiang/emeek.git",
+    "directory": "packages/editor"
   }
 }

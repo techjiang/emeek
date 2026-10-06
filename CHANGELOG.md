@@ -3,230 +3,191 @@
 本项目的重要变更都记在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
----
+## [1.0.0] - 2026-03-15
 
-## [Unreleased] — Emeek Studio（S2）
+Emeek 的第一个正式版本。
 
-从「能构建」到「能写」。S2 交付了一个完整的 Markdown 编辑器（Emeek Studio）：
-CodeMirror 6 内核、双栏预览、36 种语言高亮、草稿不丢、AI 面板框架，
-以及一次**真实可触发**的 XSS 修复与 API Key 分层存储。
+一句话：**用 GitHub Issues 或 Markdown 写文章，一条命令构建，零依赖部署。**
+3339 条测试（1739 单元/集成 + 1600+ e2e）、105 条负向验证、64 次 Lighthouse 全绿。
 
-### 功能矩阵
+前身是 [Gmeek](https://github.com/Meekdai/Gmeek)。三根支柱原样继承 ——
+**内容即 Issue、构建即一条命令、部署即一片静态文件**，
+在此之上补齐了从「能构建」到「能写、能读、能被找到、能扛住流量」的整条链。
 
-| 功能 | 状态 | 说明 |
-| --- | --- | --- |
-| CodeMirror 6 编辑器 | ✅ | 可编程扩展装配，主题/换行/只读走 Compartment 热切换，不重建视图 |
-| Markdown 双栏预览 | ✅ | 防抖 200ms；**预览 ≡ 构建**有一致性测试盯着（生命线） |
-| 36 种语言高亮 | ✅ | 显式清单 + 真动态 `import()`，语法包不进首屏 |
-| 目录导航 | ✅ | 语法树抽标题（代码块里的 `#` 不算），点击跳转 + 光标联动 |
-| 快捷键 | ✅ | 31 条，声明表是唯一一份，`check:shortcuts` 双向审计 |
-| 自动补全 | ✅ | `[[` 文章链接 / <code>```</code> 语言 / `![` 图片路径 / 行首模板 |
-| 工具栏 | ✅ | 16 个格式按钮，与快捷键共用同一批命令对象 |
-| 草稿自动保存 | ✅ | 5s 空闲 + 10s/30s 兜底 + `visibilitychange`/`pagehide`/`freeze` |
-| 草稿版本回退 | ✅ | 保留最近 5 版，回退本身也是一次保存 |
-| 多标签页互斥 | ✅ | 会话级 `owner`，别人的草稿拒绝覆盖并明确告知 |
-| 崩进程恢复 | ✅ | 完整 JSON 落盘；e2e 用真浏览器杀进程验证 |
-| 读写磁盘文件 | ✅ | `emeeek dev` 下直接改 `posts/`，原子替换（tmp + rename） |
-| 移动端 | ✅ | 触控目标 ≥ 40px、`--vvh` 跟随软键盘、转屏重算、触屏帮助入口 |
-| 主题切换 | ✅ | One Dark / GitHub Light / Dracula / One Light |
-| 状态栏 | ✅ | 字数 · 阅读时长 · 语言 · 行:列 · 保存状态（五档）· 大文档性能提示 |
-| 图片拖拽粘贴 | ✅ | 有上传接口就上传，没有则本地预览并**明确标记未上传** |
-| AI 面板框架 | ✅ | 本地分析可用（摘要 / 关键词 / 可读性 / SEO）/ AI 生成类诚实报错 |
-| API Key 分层存储 | ✅ | 服务端托管 > 会话级（默认）> 显式记住；四档状态文案互不相同 |
-| `emeeek dev` 集成 | ✅ | `/studio` 路径；监听范围收敛到内容目录 |
-| 热更新 | ✅ | 本地干净 → 同步；本地脏 → 提示、两边都留、**不自动合并** |
-| 插件能力声明 | ✅ | `capabilities` 必须显式声明；未声明即跳过钩子，doctor 报出原因 |
-| 性能监控 | ✅ | 状态栏大文档提示 + 预览缓存命中率 |
-| 图片管理 | ⬜ | 计划 S3 |
-| AI 写作辅助（续写/改写） | ⬜ | 计划 S3（需 API Key） |
-| WYSIWYG 模式 | ⬜ | 后续迭代 |
-| 内容级 CSP | ⬜ | 属部署层，计划 Phase 4 |
+### Added
 
-### 安全加固
+#### 内容与构建（P1 核心引擎）
 
-#### 修复：Markdown 预览的 `javascript:` XSS（**真实可触发**）
+- **双内容源**：GitHub Issues（`github-issues`）与本地 Markdown（`local`），
+  同一份管线；Issue 正文可用 front-matter 覆盖标题/日期/标签
+- **草稿与发布**：`publish` / `draft` 标签隔离，draft 强制排除（即使同时带 publish）；
+  `partitionPosts` 是**唯一判定点** —— 发布/草稿/定时三态在同一处决定，结构上不可能分叉
+- **定时发布**：`date` 在未来即自动跳过，到点重建即上线
+- **模板引擎**：Liquid 子集，支持 `{% if %}` / `{% elsif %}` / `{% else %}` / `{% for %}` / `include`
+- **主题系统**：4 套内置主题 —— **Minimal / Aurora / Inkstone / Magazine**；
+  主题变量在 `theme.json` 声明类型与默认值，四套共用同一套 partial 契约
+- **插件系统**：`capabilities` 显式声明制，未声明即跳过钩子；凭证访问**不在能力表里**（靠不存在防越权）
+- **内容校验**：构建期检查标题/日期/本地文件存在性，报错不泄漏绝对路径
+- **CLI**：`init` / `build` / `dev` / `new` / `theme` / `doctor` / `clean` / `drafts` / `deploy` / `accelerate` / `studio`
 
-```markdown
-[点我](JaVaScRiPt:window.__xss=1)
-```
+#### 写作（S2 Emeek Studio）
 
-渲染成 `<a href="JaVaScRiPt:window.__xss=1">点我</a>` —— 属性没被跳出、
-括号没错配、`escapeHtml` 该做的都做了，**但用户一点就执行**。
+- **CodeMirror 6 编辑器**：可编程扩展装配，主题/换行/只读走 Compartment 热切换
+- **双栏预览**：防抖 200ms；**预览 ≡ 构建** 由一致性测试盯着（生命线）
+- **36 种语言高亮**：显式清单 + 真动态 `import()`，语法包不进首屏
+- **目录导航 / 31 条快捷键 / 自动补全 / 16 个格式按钮**
+- **草稿自动保存**：5s 空闲 + 10s/30s 兜底 + `visibilitychange`/`pagehide`/`freeze`；
+  保留最近 5 版可回退；多标签页会话级互斥
+- **AI 内容引擎（P2）**：Provider 抽象层（OpenAI / Anthropic / 本地 / Mock）；
+  本地分析（摘要 / 关键词 / 可读性 / SEO）离线可用，生成类无 Key 时**诚实报错**不编造
+- **API Key 分层存储**：服务端托管 > 会话级（默认）> 显式记住；密钥字符不回浏览器
 
-关键认识：转义解决的是「跳出属性」，而 `javascript:` 是一条**合法的属性值**，
-两者不在一层上。过滤前缀也不够 —— 浏览器解析 URL 时先剥掉 ASCII 空白与
-控制字符，`java\tscript:` / `JaVaScRiPt:` / `\x01javascript:` 都是活的。
+#### 阅读体验（P3-2 / P3-3c）
 
-**做法：白名单 + 默认拒绝，被拒 URL 不生成标签（退回纯文本）。**
+- **全文搜索（P3-2）**：构建期建索引，运行时零后端；中文 bigram + 拼音模糊；
+  搜索页独立成页，离线可用；索引体积有预算门禁
+- **RSS / Atom Feed（P3-3）**：同一份数据生成两份，日期输出 RFC 3339 + RFC 822 双格式
+- **评论系统（P3-3c）**：GitHub Issues 驱动，4 套主题各配样式
+- **长文导航（P3-3c）**：目录 / 锚点 / 阅读进度条
+- **阅读统计**：阅读时间 / 评论数 / 更新日期，可在配置中开关
 
-- URL：只放行 `http/https/mailto/tel` + 相对路径/片段/协议相对；
-  `data:` 默认拒，图片场景仅放开 `image/*`
-- 原始 HTML（`allowHtml` 打开时）：丢 `script/iframe/svg/object/form/base/meta`，
-  剥一切 `on*`，`style` 里的 `expression(` / `javascript:` 整条属性丢掉
-- 注释 / CDATA 直接删（`<!--><script>…</script>-->` 是经典越界手法）
-- 链接 / 图片 / 双向链接走**同一个** `sanitizeUrl`，wiki 链接不搞例外
+#### SEO 与发现（P3-3a）
 
-**`allowHtml` 不再等于「原样输出」** —— 在 Issue 驱动的站点里，
-「可执行的内容」等于「任何能提 Issue 的人都能 XSS」。
+- **meta / canonical / Open Graph / Twitter Card**：字段**从真实数据生成**，缺就不输出（不编占位值）
+- **结构化数据**：JSON-LD 走 `JSON.stringify`，不手拼字符串
+- **sitemap.xml / robots.txt**：统计页与 404 明确排除/标记 noindex
 
-**判据是「脚本有没有真的执行」，不是「HTML 里有没有 `<script>`」。**
-真浏览器断言真的去点那些链接，再看 `window.__xss` 有没有被写。
+#### 性能与加速（P3-3b / P3-4b-accel）
 
-#### API Key：分层存储
+- **资源指纹**：内容哈希命名，`immutable` 长缓存
+- **预压缩**：`.gz` + `.br` 双份产物（gzip 省 ~69% / brotli 省 ~75%）
+- **关键 CSS 内联 + 外链样式表落盘**，预压缩 + Preload/preconnect
+- **PWA**：Service Worker 离线缓存 + Web App Manifest + 主题色
+- **CDN 集成**：Cloudflare / 阿里云 / 腾讯云 / 自定义，`accelerate` 子命令含配置向导、
+  `--test`（8 探测点 TTFB 中位）/ `--purge` / `--warm` / `--fanout`
+- **中国大陆专项**：ICP 检测、Google Fonts 替代、中文字体子集（84 字形 → 2 片，每片 < 30KB）
 
-三层，Key 按安全度递减放置：服务端托管（最优）> 会话级（默认）> 显式记住。
-兑现点有三条，缺一条这个分层就等于没做：
+#### 交付与部署（P3-4a）
 
-1. `/__studio/ai/status` 只说「有没有配置」，一个字符都不回
-2. `/__studio/ai/run` 由服务端带 Key 转发（会话级 Key 走**请求体**，不放 URL）
-3. 回给浏览器的错误**先消毒** —— 上游 401 的响应体里经常把请求头回显回来
+- **多平台部署**：GitHub Pages / Cloudflare Pages / Vercel / Netlify / rsync / Docker
+- **多源站 + 故障转移**
+- **`emeek deploy`**：构建 + 校验 + 预演（`--dry-run`）+ 部署后在线验证
+- **CI/CD 模板**：GitHub Actions / CNB / GitLab CI
 
-`redact` / `scanForSecrets` 覆盖错误/日志/导出/URL/认证头，**生产代码与测试
-共用同一份实现**，不存在「测试扫的规则与运行时扫的不一样」。
+#### 数据与分享（P3-4b-rest）
 
-「Key 有没有到达浏览器」不靠读代码证明 —— e2e 在
-`outerHTML`、`localStorage`、请求 URL 列表里各搜一遍，都搜不到才算过。
+- **分析集成**：内置极简 / Plausible / Umami / GoatCounter，产物零第三方脚本
+- **统计页**：纯 HTML + SVG，**零 JavaScript**
+- **社交分享**：零第三方 JS；微信 QR 为**纯 Canvas 自绘**（自带 Reed-Solomon 编码器）
+- **内容工作流**：草稿 / 定时 / 分类，`drafts` 命令给出三态清单
 
-#### 插件能力声明（**破坏性变更**）
+#### 零依赖
 
-`capabilities` 必须显式声明，未声明即拒绝，报错说清「谁、想干什么、缺什么能力」。
+- **零 Composer / 零 Node.js 运行时依赖 / 零 Docker** —— 构建产物是纯静态文件
+- 中文优先 + 多语言支持
 
-- **凭证访问不在能力表里**：`key:read` / `env:read` 这些名字不存在，所以无法声明。
-  不靠审核，靠不存在。
-- 传给插件的 config 在**加载时**就剔掉凭证（`stripSecrets`）——
-  「顺手打个日志带上 config」这条路也堵住；字段名不管用，按值也认。
-- 插件路径必须在项目内；钩子超时 10s 跳过。
+### Fixed
 
-**迁移提示**：老插件没写 `capabilities` 时钩子会被跳过，但**插件本身仍能加载**，
-`emeeek doctor` 会报出被跳过的钩子与原因：
+按「真 Bug」计入，每条都有对应防线：
 
-```
-⚠️  插件 my-plugin 的钩子 onContentLoad 被跳过：未声明 capabilities。
-    修复：在 plugin.json 中添加：
-    { "capabilities": ["content:read", "content:write"] }
-```
+- **`{% elsif %}` 不被识别** —— emit 返回空串导致两个分支**同时渲染**，
+  典型的静默 bug；补 `else if` / `elsif` 双支持 + 负向验证钉住
+- **XSS：Markdown 预览的 `javascript:` 链接（真实可触发）** ——
+  `[点我](JaVaScRiPt:…)` 属性没被跳出，用户一点就执行；
+  改为 **URL 白名单 + 默认拒绝**，被拒 URL 退回纯文本；
+  `data:` 默认拒（图片仅放开 `image/*`）
+- **API Key 泄漏路径** —— Key 曾可能经错误信息/日志回显；改为分层存储 + `redact`/`scanForSecrets`
+- **`EMEEEK_CONFIG` 进程级泄漏** —— 并发构建时配置串台
+- **`rss.xml` 的 `lastBuildDate` 不可复现** —— 同一内容两次构建产物不同；改为从内容推导
+- **4 套主题 390px 横向溢出** —— 移动端出现横向滚动条
+- **词云 `viewBox` 字号叠加放大** —— SVG 里字号被父级缩放二次放大
+- **排行 `valueSuffix` 静默丢失** —— 图表单位没了，日志正常
+- **统计页不在 sitemap** —— 统计页建了但搜索引擎找不到
+- **QR 码：格式信息位序** —— 位序反了，扫出来是错地址
+- **QR 码：RS 分块排序（短块在前）** —— v1–v4 块等长怎么排都对，
+  **从 v5-Q 开始块长不等**，顺序决定每个字节落到哪一格；超长必须显式报错，
+  因为「截断的二维码扫出来是一个错的地址，比没有更糟」
+- **外链样式表 404** —— 主题超过 24KB 时样式表无人落盘，页面裸奔但构建报成功
+- **变量遮蔽函数名 → 同步静默失效** —— `let fingerprint = fingerprint(…)` 让同步退化成 noop
+- **客户端连错通道 → 静默失效** —— dev 的 `/__emeeek/reload` 与 studio 的 `/__studio/sync` 接错
+- **插件钩子未声明 `capabilities` 时静默跳过** —— 改为 `doctor` 报出原因
 
-维持「严格但不阻断」的中间态，不退成「告警但放行」——
-「先跑起来再补声明」是权限系统最常见的失效方式。
+### Security
 
-#### 其他收紧
+- **凭据结构性不可能泄露**：Token/Key 只从环境变量或 0600 文件读取，
+  **不写进代码/配置/日志/产物**；插件加载时即 `stripSecrets`
+- **输出转义与 CSP**：URL 白名单、HTML 白名单（丢 `script/iframe/svg/…`、剥一切 `on*`、
+  删注释与 CDATA）；链接/图片/双向链接共用同一个 `sanitizeUrl`
+- **路径守门收敛到一处**：拒绝 NUL 字节、解析后必须在内容目录内、realpath 也在内（防符号链接越出）
+- **扫描器生产/测试共用一份实现** —— 不存在「测试扫的规则与运行时扫的不一样」
+- **105 条负向验证**：逐条削弱关键防线，确认对应测试**真的会红**，再恢复原状
 
-- 文件 API 的路径守门收敛到**一处**（`resolveProjectFile`）：拒绝 NUL 字节、
-  解析后必须仍在内容目录内、realpath 也要在内（防符号链接越出）
-- 文件监听复用**同一个** `resolveProjectFile`，不写第二份差不多的判断
-- 快捷键声明删掉 HTML 里手写的那一份（两份必然分叉）
-- 触屏没有等价入口的快捷键**如实标注**，不假装可用
-- 草稿保存状态五档锁死；热更新走「提示」不走状态（有测试断言「磁盘」不出现在保存状态里）
+### Engineering Notes（值得铭刻的踩坑）
 
-### 负向验证：测试自己也需要测试
+- **边界条件在版本升级时才暴露**：QR 的 RS 分块排序，块等长时怎么排都对，
+  块长不等才决定字节归属 —— 这类 bug 只在版本跃迁时现身
+- **Node.js 异步模型的经典陷阱**：`spawnSync` 驱动子进程会阻塞事件循环，
+  同进程的静态服务**永远不回请求**，e2e 表现为超时；
+  改为 `spawn` + 异步或多进程
+- **测试写错方向比没有测试更危险**：e2e 杀进程用了新 browser context，
+  `localStorage` 当然是空的，测试报「丢稿」其实什么都没丢
+- **假验证**：`sed` 表达式没匹配上，「削弱后仍通过」其实是**什么都没改**；
+  现在削弱后先 `diff`，没生效就判这条负向验证本身是假的
 
-`negative-check.sh` 逐条削弱关键防线，确认对应测试**真的会红**，然后恢复原状。
-一条防线如果削弱了测试还是绿的，那它只是恰好写在那儿。
-
-从 6 条增长到 **19 条**，期间抓到两类问题：
-
-- **两次假验证**：`sed` 表达式没匹配上，「削弱后仍然通过」其实是**什么都没改**。
-  现在削弱后先 `diff`，没生效就直接判这条负向验证本身是假的。
-- **一次断言绑错目的地**：e2e 那条「隐藏瞬间已落盘」只认 `localStorage`，
-  而给 studio 开了 `projectRoot` 之后落盘目的地变成磁盘 ——
-  **行为是对的，断言绑错了地方**。现在两种模式各一条断言，
-  先问页面自己在哪个模式再去看那一侧。
-
-### 性能基准
-
-预览渲染（复现：`pnpm benchmark:preview`）：
-
-| 场景 | p50 | 目标 | 状态 |
-| --- | --- | --- | --- |
-| 打开 10KB 文档 | 2.9ms | < 500ms | ✅ |
-| 打字后重渲染（10KB） | 2.7ms | < 200ms | ✅ |
-| 预览整篇渲染（10KB） | 2.3ms | < 200ms | ✅ |
-| 大文件整篇渲染（100KB） | 30.6ms | < 500ms | ✅ |
-| 大文件打字后重渲染（100KB） | 26.0ms | < 200ms | ✅ |
-| 内容未变（命中缓存） | 0.2ms | < 1ms | ✅ |
-
-复杂度线性（~0.25 µs/字符）。100KB 文档 26ms 超过 60fps 的 16ms 预算，
-但编辑器有 200ms 防抖，用户感知不到延迟。
-
-站点产物（`examples/minimal`，Chromium headless + Lighthouse 13.5）：
-
-| 页面 | Performance | Accessibility | Best Practices | SEO |
-| --- | --- | --- | --- | --- |
-| 首页 / 文章页 / 语法页 / 性能页 | 100 | 100 | 100 | 100 |
-| 归档 / 标签 / 关于 / 404 | 100 | 100 | 100 | 100 |
-
-移动端模拟（4G + 4x CPU 降速）8 页同样全 100。
-单个 HTML 17–23 KB（含内联 CSS/JS），**零外部网络请求**。
-
-Studio 客户端体积：
-
-| | 数值 |
-| --- | --- |
-| 入口 | 350 KB（门禁 600 KB） |
-| 按需 chunk | 38 个，共 1677 KB |
-| 词表 | 408 KB，**不进首屏**（惰性加载 + `DecompressionStream` 解压） |
-
-语言高亮没有用 `@codemirror/language-data`：`@codemirror/language-data` 注册 143 种语言，
-但它的 `load()` 是 `Promise.resolve().then(() => init_distN())` 的形式，打包器无法拆成异步块，
-**2.9MB 全进首屏**。换成显式清单 + 真动态 `import()` 后入口 276KB → 现 350KB。
-
-### 测试总账
+### 测试总账（v1.0.0）
 
 | 层 | 数量 | 命令 |
 | --- | --- | --- |
-| 单元 / 集成 | **679** | `pnpm test` |
-| e2e · XSS（真浏览器） | 60 | `node scripts/e2e/xss.mjs` |
-| e2e · 草稿安全（真浏览器） | 13 | `node scripts/e2e/draft-mobile.mjs` |
-| e2e · dev 集成（真浏览器 + 真 server） | 7 | `node scripts/e2e/dev-integration.mjs` |
-| e2e · AI 面板（真浏览器） | 16 | `node scripts/e2e/ai-panel.mjs` |
-| **e2e 小计** | **96** | |
-| 负向验证 | 19 条防线 | `bash scripts/e2e/negative-check.sh` |
+| 单元 / 集成 | **1739** | `npm test` |
+| 负向验证 | **105 条防线** | `bash scripts/e2e/negative-check.sh` |
+| e2e · 搜索 | 12 | `node scripts/e2e/search.mjs` |
+| e2e · 搜索页 | 134 | `node scripts/e2e/search-page.mjs` |
+| e2e · Feed | 88 | `node scripts/e2e/feed.mjs` |
+| e2e · 阅读 | 40 | `node scripts/e2e/reading.mjs` |
+| e2e · 评论 | 64 | `node scripts/e2e/comments.mjs` |
+| e2e · 主题 | 28 | `node scripts/e2e/theme.mjs` |
+| e2e · 统计 | 56 | `node scripts/e2e/stats.mjs` |
+| e2e · 分享 | 23 | `node scripts/e2e/share.mjs` |
+| e2e · 内容工作流 | 20 | `node scripts/e2e/workflow.mjs` |
+| e2e · 加速 | 16 | `bash scripts/e2e/acceleration-check.sh` |
+| GitHub 集成 | 全链路 | Issues → 构建 → 产物 → 浏览器 |
+| Lighthouse | 8 页 × 4 主题 × 2 视口 | `node scripts/lighthouse.mjs` |
 
-单测分域：core 320（含 security 组 21 + ai 组 173）/ editor 344 / cli 15。
-
-### 开发过程中的踩坑记录
-
-三条都是「看起来正常但实际是坏的」类型，值得写下来：
-
-1. **变量遮蔽函数名 → 同步静默失效**
-   `let fingerprint = fingerprint(...)` —— 变量名把上面那个函数名遮蔽掉，
-   `fingerprint(...)` 变成「调用 null」，异常被 `catch` 吞掉，
-   推送出去的指纹永远是 `null`，同步一路退化成 noop，**而日志里一切正常**。
-
-2. **客户端连错通道 → 同样静默失效**
-   `connectReloadStream` 的默认 URL 是 dev 的 `/__emeeek/reload`（只推「变了」），
-   而 studio 的是 `/__studio/sync`（带指纹）。接错之后连了通道但通道不对，
-   **日志全正常**，功能是坏的。
-
-3. **e2e 杀进程用了新 context → 等于换了台机器**
-   第一次写「杀进程恢复」时用了新的 browser context，`localStorage` 当然是空的，
-   测试报「丢稿」，其实什么都没丢。**测试写错方向比没有测试更危险** ——
-   它会让你以为防线坏了。
-
-### 不做的事（明确立场）
-
-- **不引入 DOMPurify 之类的运行时依赖** —— 需求窄到可以自己写准，
-  引入一个解析器反而要面对它自己的配置面
-- **不做「记住 Key」的加密存储** —— `localStorage` 上没有真正的密钥保护，
-  写一层混淆只会让人误以为它安全
-- **不做插件沙箱**（VM/worker 隔离是另一个量级的工作）
-- **不做冲突自动合并，也不做「一键以磁盘为准」** —— 后者是自动合并的
-  另一种形式，只是把选择挪到了更容易误点的位置
-- **不做草稿云同步 / 多端同步**
-- **不做分块增量渲染** —— 试过三种切分策略全在真实样例上翻车，
-  根因是渲染器带跨块状态（标题锚点去重、脚注 id 指纹、相邻列表项合并）。
-  正确路径是给 core 渲染器加可传入/可导出的 `state`，而不是在块边界上猜
-- **不做 `ftp:` 等冷门协议** —— ftp 在浏览器里早已不可用，
-  而放行一个协议等于放行一类绕过。用户真需要就纯文本显示
-
-### 遗留事项（如实标注）
+### 已知限制（如实标注）
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| CLI `--port 0` 时日志打 `localhost:0` | 未修 | e2e 里绕开了（传明确高位端口），留给后续 |
-| 移动端兜底间隔 10s 的写入成本 | 已测无卡顿 | 同步写在超大文档上仍有理论成本，未做定量压测 |
-| 部分语法包缺失 | 如实标注 | Svelte / GraphQL / Elixir / Vue SFC 在 `@codemirror` 生态无对应包，按纯文本渲染并告知 |
-| AI 生成类仅诚实报错 | 设计如此 | 需 API Key；不返回任何猜测的续写 |
-| 内容级 CSP | 未做 | 属部署层，计划 Phase 4 |
-| AI 流式输出 | 未做 | 本期不做优化 |
-| Provider 自动探测连通性 | 未做 | 每次启动多打一次网络，收益不抵 |
+| 移动端兜底 10s 写入成本 | 已测无卡顿 | 未做定量压测 |
+| 部分语法包缺失 | 如实标注 | Svelte / GraphQL / Elixir / Vue SFC 在 CodeMirror 生态无对应包，按纯文本渲染并告知 |
+| AI 生成类需 API Key | 设计如此 | 无 Key 时诚实报错，不返回猜测结果 |
+| 内容级 CSP | 未做 | 属部署层，后续迭代 |
+| WYSIWYG 模式 | 未做 | 后续迭代 |
+| 插件沙箱（VM/Worker) | 未做 | 是另一量级的工作 |
+| 草稿云同步 | 不做 | 与「内容即 Issue」的定位冲突 |
+
+### [Unreleased]
+
+#### Emeek Studio 的后续计划（S3）
+
+- 图片管理
+- AI 写作辅助（续写/改写，需 API Key）
+
+### 不做的事（明确立场）
+
+- **不引入 DOMPurify 之类的运行时依赖** —— 需求窄到可以自己写准
+- **不做「记住 Key」的加密存储** —— `localStorage` 上没有真正的密钥保护
+- **不做插件沙箱**
+- **不做冲突自动合并，也不做「一键以磁盘为准」** —— 后者是自动合并的另一种形式
+- **不做草稿云同步 / 多端同步**
+- **不做分块增量渲染** —— 渲染器带跨块状态，正确路径是给 core 渲染器加可注入 `state`
+- **不做 `ftp:` 等冷门协议** —— 放行一个协议等于放行一类绕过
+
+---
+
+## 版本沿革
+
+| 版本 | 里程碑 |
+| --- | --- |
+| 1.0.0 | 正式版：内容管线 + Studio 编辑器 + 搜索/Feed/评论 + SEO/PWA/加速 + 部署/CI/CD + 分析/分享/工作流 |
+| 0.2.x | P3 系列：主题 / 搜索 / SEO / 性能与 PWA / 评论与阅读 / 部署 / 加速 / 分析 / 分享 / 工作流 |
+| 0.1.x | Phase 1–2：核心引擎 + AI 内容引擎 + Emeek Studio |

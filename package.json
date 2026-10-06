@@ -1,6 +1,6 @@
 {
   "name": "emeeek-monorepo",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Emeek — 基于 GitHub Issues 的下一代个人知识宇宙引擎",

@@ -1,0 +1,63 @@
+# Emeek 发布流程模板 —— 由 git tag 触发，发布到 npm。
+#
+# ⚠️ 这是一份**模板**：它不会自己跑起来。启用步骤见 docs/publishing.md。
+#    核心前提是配置 NPM_TOKEN —— 本仓库的提示词与代码里从不传凭据。
+#
+# 为什么用 NPM_TOKEN 而不是 OIDC Trusted Publishing：
+#   npm 的 Trusted Publishing 需要先在 npmjs.com 上绑定仓库，
+#   而绑定本身要在网页完成。这里给出 token 版本，因为它对任何 npm 账号都成立。
+#   想用 OIDC 的话，删掉 NODE_AUTH_TOKEN 一行、加 id-token: write 权限即可。
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # v1.0.0 / v1.2.3-rc.1 都会触发
+
+permissions:
+  contents: write     # 创建 GitHub Release 需要
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 发布前先跑测试 —— 让「测试没绿也照样发出去」这件事不可能发生。
+      - name: 全量测试
+        run: pnpm test
+
+      - name: 负向验证
+        run: bash scripts/e2e/negative-check.sh
+
+      - name: 构建示例站（确认构建链路没断）
+        run: pnpm build
+
+      # pnpm publish 会把 workspace:* 依赖改写成真实版本号后再上传。
+      # 直接用 npm publish 会因为 workspace:* 不是合法 semver 而失败。
+      - name: 发布到 npm
+        run: pnpm -r --filter emeeek --filter @emeeek/core --filter @emeeek/editor publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

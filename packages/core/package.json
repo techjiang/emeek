@@ -1,6 +1,6 @@
 {
   "name": "@emeeek/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Emeek 核心引擎：内容管线、模板渲染、主题加载、插件系统",
   "type": "module",
   "main": "./src/index.js",
@@ -14,7 +14,8 @@
     "./ai": "./src/ai/index.js",
     "./search": "./src/search/browser.js",
     "./search/browser": "./src/search/browser.js",
-    "./search/build": "./src/search/build.js"
+    "./search/build": "./src/search/build.js",
+    "./version": "./src/version.js"
   },
   "engines": {
     "node": ">=18"
@@ -22,5 +23,13 @@
   "license": "MIT",
   "files": [
     "src"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/techjiang/emeek.git",
+    "directory": "packages/core"
+  }
 }
