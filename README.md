@@ -113,6 +113,47 @@ analytics: {
 
 详见 [docs/analytics.md](docs/analytics.md)。
 
+## 社交分享与内容工作流
+
+**分享按钮全是 `<a>` 标签。零第三方 JS、零 SDK。**
+加载 Twitter widgets.js 就等于给 Twitter 一个追踪读者的机会 —— 这不是 Emeek 的方式。
+
+```js
+share: {
+  enabled: true,
+  platforms: ['twitter', 'weibo', 'wechat', 'copy'],
+  position: 'bottom',       // bottom | sidebar | both
+}
+```
+
+微信没有 web 分享端点，只能扫码 —— 二维码编码器自己写（不引 QR 库），
+构建期选版本与掩码，浏览器端点开时才用 canvas 画。两端矩阵由测试保证逐格一致，
+**真实可扫性由 e2e 用 OpenCV 解码器在真 Chromium 里验证**。
+
+**草稿与定时绝不进生产。** 两条路各自独立：
+
+```js
+workflow: {
+  validate: 'warn',                        // off | warn | error
+  schedule: { enabled: true, graceHours: 0 },
+}
+```
+
+- `draft: true` → 不进产物，改回 `false` 才发
+- `date` 在未来 → 不进产物，到点重建自动出现（`graceHours` 是**推迟**小时数）
+
+判定只有一处（`partitionPosts`），构建 / `emeek drafts` / 校验读同一份 ——
+「命令说已发布」与「产物里有它」结构上不可能分叉。e2e 用**全产物扫描**钉住：
+草稿的标题与 slug 不得出现在 `dist/` 下任何文件（含 feed / 搜索索引 / sitemap）。
+
+**构建期内容校验**：空标题、坏日期、未闭合代码块、逗号分隔的标签、
+不存在的图片、指向 404 的站内链接 —— 每条都带「怎么修」。默认 `warn` 不阻塞发文。
+
+**阅读统计**：阅读时间 / 日期 / 评论数徽章。评论数只在有数据源时出现
+（local 源没有 → 不显示，而不是显示 0）。
+
+详见 [docs/share.md](docs/share.md) 与 [docs/workflow.md](docs/workflow.md)。
+
 ## 用 GitHub Issues 当 CMS
 
 改一行配置，文章就来自 Issue 了：
@@ -367,7 +408,7 @@ SEO 分析             13.0ms   目标 < 30ms
 ```bash
 pnpm install
 
-pnpm test              # 1281 个测试
+pnpm test              # 1735 个测试
 pnpm coverage          # 测试 + 覆盖率报告
 pnpm benchmark         # 本地 AI + 预览渲染基准
 
@@ -377,12 +418,14 @@ pnpm lighthouse:themes # 4 套主题 × 桌面/移动
 pnpm check:seo         # SEO 自检（4 套主题逐页）
 pnpm check:perf:all    # 性能自检（基线站 / 带图站 / PWA 站）
 pnpm check:shortcuts   # 快捷键声明审计
-bash scripts/e2e/negative-check.sh   # 63 条防线逐条削弱，必须变红
+bash scripts/e2e/negative-check.sh   # 105 条防线逐条削弱，必须变红
 
 # 真浏览器 e2e
 pnpm e2e:comments      # 评论（含 XSS 防线）· 4 主题 × 16 项
 pnpm e2e:reading       # 长文导航 · 4 主题 × 10 项
 pnpm e2e:pwa           # PWA 注册 / 离线回落 / network-first
+pnpm e2e:share         # 分享链接 / 微信二维码真解码 / 剪贴板 · 真 Chromium
+pnpm e2e:workflow      # 草稿绝不进生产（全产物扫描）/ 定时 / 校验
 
 pnpm build             # 构建 examples/minimal
 pnpm dev               # 本地预览示例站
@@ -396,7 +439,7 @@ pnpm doctor            # 诊断示例站配置
 node packages/cli/bin/emeeek.js build --cwd <项目目录>
 ```
 
-当前状态：1281 个测试全绿，Lighthouse 四类全 100（8 种页面 × 桌面/移动，404 页 SEO 见下）。
+当前状态：1735 个测试全绿，Lighthouse 四类全 100（8 种页面 × 桌面/移动，404 页 SEO 见下）。
 
 ## Phase 现状
 

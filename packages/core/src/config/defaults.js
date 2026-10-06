@@ -161,6 +161,66 @@ export function defaultConfig() {
     },
     plugins: [],
     /**
+     * 社交分享（P3-4b-rest C）。**默认关闭。**
+     *
+     * 与 analytics 同一哲学：分享按钮会在页面上占一块，
+     * 而「要不要让别人分享我的文章」是作者的偏好，不是引擎该替他决定的。
+     *
+     * platforms  要出现哪些平台。可选：twitter / weibo / telegram / reddit /
+     *            hackernews / email / wechat / copy。未知名字会被忽略并告警
+     *            （不静默 —— 「我配了但没出现」会把人引去改主题）。
+     *                wechat 与 copy 不需要跳转：前者在本地画二维码，后者用剪贴板。
+     * position   bottom（文章底部）| sidebar（侧栏浮动）| both。
+     *            默认 bottom：侧栏浮动在手机上会遮内容，不该是默认。
+     * utm_*      拼进分享地址的 UTM 参数，让站点分析能区分「社交来的」与「直接访问」。
+     *            设成 null 则不拼该参数。注意这只影响**分享出去的**地址，
+     *            站内自己的 URL 不带 UTM。
+     */
+    share: {
+      enabled: false,
+      platforms: ['twitter', 'weibo', 'copy'],
+      position: 'bottom',
+      utm_source: 'emeek',
+      utm_medium: 'social',
+      utm_campaign: null,
+      label: '分享',
+    },
+    /**
+     * 阅读统计显示（P3-4b-rest D1）。
+     *
+     * showTime     阅读时间徽章（字数 / wordsPerMinute）
+     * showDate     发布日期（以及有 updated 时的更新日期）
+     * showComments 评论数徽章。**只在有数据源时显示**：local 源没有评论数，
+     *              此时不显示而不是显示 0（0 会被读成「没人评论」）。
+     * wordsPerMinute 中文按 400 字/分钟（与 AI 模块的阅读时长估算同一口径）。
+     */
+    reading: {
+      showTime: true,
+      showDate: true,
+      showComments: true,
+      wordsPerMinute: 400,
+    },
+    /**
+     * 内容工作流（P3-4b-rest D2）。
+     *
+     * validate   构建时内容校验。warn（默认）只告警不阻塞；error 让构建失败；
+     *            off 关闭。默认 warn 的理由：校验是新加的一道关，
+     *            在用户还没调好内容前让它阻塞构建是越界 —— 但问题必须被说出来。
+     * checks     要跑哪些检查。空数组 = 全部。
+     *            title / date / links / markdown / taxonomy / internal-links
+     * schedule   定时发布。enabled 时，date 在未来的文章不进产物（构建期过滤），
+     *            CI 定时重建后自动出现。这与「草稿」是两条路：
+     *            草稿要手动改，定时发布到点自动上。
+     *            graceHours 是**推迟**小时数：date + graceHours 才算到点。
+     *            默认 0。设 1~2 可以躲开时钟偏差与 CI 调度的抖动
+     *            （定时任务每小时跑时，整点那几秒的偏差会让文章白等一小时）。
+     */
+    workflow: {
+      validate: 'warn',
+      checks: [],
+      schedule: { enabled: true, graceHours: 0 },
+    },
+    /**
      * 部署配置。
      *
      * 默认 target 是 github-pages —— 它与 Gmeek 的「Issues 即 CMS」一脉相承：

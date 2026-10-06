@@ -26,7 +26,8 @@
     "search",
     "search-index",
     "reading-progress",
-    "related-posts"
+    "related-posts",
+    "share-buttons"
   ],
   "compatible": ">=1.0.0",
   "config": {

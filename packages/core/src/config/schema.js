@@ -108,6 +108,42 @@ const RULES = [
   },
   { path: 'analytics.statsPage.nav', type: 'boolean' },
   { path: 'analytics.statsPage.sections', type: 'array' },
+  // ── 社交分享（P3-4b-rest C）─────────────────────────────────
+  //
+  // platform 名字不做枚举校验：未知名字由 core/share 收集并在构建期告警，
+  // 在这里报错会让整个构建失败 —— 而一个写错的分享平台名不该阻止发文。
+  { path: 'share.enabled', type: 'boolean' },
+  { path: 'share.platforms', type: 'array' },
+  {
+    path: 'share.position',
+    type: 'string',
+    check: (v) => ['bottom', 'sidebar', 'both'].includes(v) || '只能是 bottom / sidebar / both',
+  },
+  { path: 'share.utm_source', check: (v) => v === null || typeof v === 'string' || '只能是字符串或 null' },
+  { path: 'share.utm_medium', check: (v) => v === null || typeof v === 'string' || '只能是字符串或 null' },
+  { path: 'share.utm_campaign', check: (v) => v === null || typeof v === 'string' || '只能是字符串或 null' },
+  // ── 阅读统计显示（P3-4b-rest D1）─────────────────────────────
+  { path: 'reading.showTime', type: 'boolean' },
+  { path: 'reading.showDate', type: 'boolean' },
+  { path: 'reading.showComments', type: 'boolean' },
+  {
+    path: 'reading.wordsPerMinute',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v > 0) || '必须是正整数（字/分钟）',
+  },
+  // ── 内容工作流（P3-4b-rest D2）───────────────────────────────
+  {
+    path: 'workflow.validate',
+    type: 'string',
+    check: (v) => ['off', 'warn', 'error'].includes(v) || '只能是 off / warn / error',
+  },
+  { path: 'workflow.checks', type: 'array' },
+  { path: 'workflow.schedule.enabled', type: 'boolean' },
+  {
+    path: 'workflow.schedule.graceHours',
+    type: 'number',
+    check: (v) => (Number.isInteger(v) && v >= 0) || '必须是非负整数（小时）',
+  },
 ];
 
 export function validateConfig(config) {

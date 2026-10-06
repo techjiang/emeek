@@ -21,6 +21,30 @@ test('if / else if / else', () => {
   assert.equal(render('{% if a %}A{% else if b %}B{% else %}C{% endif %}', {}), 'C');
 });
 
+// `elsif` 是 Liquid/Jekyll 的写法，主题作者（从 Gmeek/Jekyll 过来的人）会用它。
+// 不被识别时**不报错** —— 那个 if 分支不被闭合，两个分支同时渲染。
+// 症状是「按钮/条目莫名出现两份」，而模板源码看起来完全正常。
+// 我的 share partial 就是这么踩出来的。
+test('elsif 与 else if 等价', () => {
+  assert.equal(render('{% if a %}A{% elsif b %}B{% else %}C{% endif %}', { a: 1 }), 'A');
+  assert.equal(render('{% if a %}A{% elsif b %}B{% else %}C{% endif %}', { b: 1 }), 'B',
+    'elsif 命中时只能渲染 elsif 分支 —— 渲染出 C 说明它没被识别');
+  assert.equal(render('{% if a %}A{% elsif b %}B{% else %}C{% endif %}', {}), 'C');
+});
+
+test('elsif 链式（多级）', () => {
+  const tpl = '{% if a %}A{% elsif b %}B{% elsif c %}C{% else %}D{% endif %}';
+  assert.equal(render(tpl, { a: 1 }), 'A');
+  assert.equal(render(tpl, { b: 1 }), 'B');
+  assert.equal(render(tpl, { c: 1 }), 'C');
+  assert.equal(render(tpl, {}), 'D');
+});
+
+test('elsif 在循环里的分支互斥（不允许两个分支都渲染）', () => {
+  const tpl = '{% for item in items %}{% if item.kind == "x" %}X{% elsif item.kind == "y" %}Y{% else %}Z{% endif %}{% endfor %}';
+  assert.equal(render(tpl, { items: [{ kind: 'x' }, { kind: 'y' }, { kind: 'z' }] }), 'XYZ');
+});
+
 test('遍历数组暴露 loop 元信息', () => {
   const out = render('{% for x in xs %}{{ loop.index }}{{ loop.first ? "F" : "" }}{{ loop.last ? "L" : "" }}{% endfor %}', { xs: ['a', 'b'] });
   assert.equal(out, '1F2L');

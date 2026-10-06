@@ -1,0 +1,30 @@
+{# 社交分享（P3-4b-rest C）。
+
+   全部按钮都是构建期算好的 <a href> —— 零第三方 JS、零第三方 SDK。
+   只有「微信二维码」（本地 Canvas 绘制）与「复制链接」（Clipboard API）
+   需要浏览器端，而那段脚本只在真的配了这两个平台时才内联。
+   理由见 core/share/index.js。
+
+   shareView 为 null 时整块不渲染（不是渲染一排空链接）。 #}
+{% if shareView && shareView.bottom %}
+<div class="share" data-share data-share-url="{{ shareView.url }}" data-share-title="{{ shareView.title }}">
+  <span class="share-label">{{ shareView.label }}</span>
+  <button class="share-toggle" type="button" data-share-toggle aria-expanded="false" aria-label="展开分享按钮">分享</button>
+  <div class="share-buttons">
+    {% for item in shareView.items %}
+      {% if item.wechat %}
+      <button class="share-btn share-wechat" type="button" data-share-wechat aria-expanded="false" aria-label="微信扫码分享">微信</button>
+      {% elsif item.copy %}
+      <button class="share-btn share-copy" type="button" data-share-copy aria-label="复制链接">复制链接</button>
+      {% else %}
+      <a class="share-btn share-{{ item.id }}" href="{{ item.href }}"{% if item.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.label }}</a>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="share-qr" data-share-qr>
+    <canvas class="share-qr-canvas" width="200" height="200" role="img" aria-label="当前文章地址的二维码"></canvas>
+    <p class="share-qr-hint">用微信扫码打开这篇文章</p>
+  </div>
+  {% if shareScript %}<script>{{{ shareScript }}}</script>{% endif %}
+</div>
+{% endif %}
